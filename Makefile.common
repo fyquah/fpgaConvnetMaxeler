@@ -124,11 +124,11 @@ include $(WHEREISROOT)/Makefile.resource.benchmark
 
 # ---- Simulation ----
 
-resource_bench_sim.o: $(RESOURCE_BENCH_MAXFILES)
+resource_bench_sim.o: $(RESOURCE_BENCH_SIM_MAXFILES)
 	$(SLICCOMPILE) $< $@
 
 resource_bench_simc.o: $(CPUFILES)
-	$(CPUCOMPILER) $< $(ALL_FLAGS) $(RESOURCE_BENCH_INCLUDE_FLAGS) -I$(MAXCOMPILER_BUILD_DIR) -I$(SIMMAXDIR) -D__SIM__ -DDESIGN_NAME=$(PRJ) -c -o $@
+	$(CPUCOMPILER) $< $(ALL_FLAGS) $(RESOURCE_BENCH_SIM_INCLUDE_FLAGS) -I$(MAXCOMPILER_BUILD_DIR) -I$(SIMMAXDIR) -D__SIM__ -DDESIGN_NAME=$(PRJ) -c -o $@
 
 resource_bench_sim: resource_bench_sim.o resource_bench_simc.o
 	$(CPUCOMPILER) $(ALL_FLAGS) -o $@ $^ $(LFLAGS)
@@ -147,24 +147,17 @@ gdbsim:
 
 # ---- DFE ----
 
-$(DFEMAXDIR)/$(PRJ).max: $(ENGINEFILES)
-	$(MAXJC) $(JFLAGS) $(ENGINEFILES)
-	MAXAPPJCP='.:$(CP)' MAXSOURCEDIRS='../src' $(MAXJAVARUN) -v -m 8192 $(MANAGER) DFEModel=$(DFEModel) maxFileName=$(PRJ) target='DFE' enableMPCX=$(MPCX)
-	cp $(DFEMAXDIR)/$(PRJ).h $(DFEMAXDIR)/Maxfiles.h
-
-$(PRJ)_dfe.o: $(DFEMAXDIR)/$(PRJ).max
+resource_bench_dfe.o: $(RESOURCE_BENCH_MAXFILES)
 	$(SLICCOMPILE) $< $@
 
-$(PRJ)_dfec.o: $(CPUFILES)
-	$(CPUCOMPILER) $< $(ALL_FLAGS) -I$(DFEMAXDIR) -DDESIGN_NAME=$(PRJ) -c -o $@
+resource_bench_dfec.o: $(CPUFILES)
+	$(CPUCOMPILER) $< $(ALL_FLAGS) $(RESOURCE_BENCH_INCLUDE_FLAGS) -DDESIGN_NAME=$(PRJ) -c -o $@
 
-$(PRJ)_dfe: $(PRJ)_dfe.o $(PRJ)_dfec.o
+resource_bench_dfe: resource_bench_dfe.o resource_bench_dfec.o
 	$(CPUCOMPILER) $(ALL_FLAGS) -o $@ $^ $(LFLAGS)
 
-build: $(PRJ)_dfe
-
-run:
-	SLIC_CONF=$(SLIC_CONF) LD_PRELOAD=$(MAXOS_HW) ./${PRJ}_dfe
+run_resource_bench: resource_bench_dfe
+	SLIC_CONF=$(SLIC_CONF) LD_PRELOAD=$(MAXOS_HW) ./resource_bench_dfe
 
 gdbdfe:
 	DEBUG_FLAGS="-O0 -g" make build
@@ -178,7 +171,9 @@ cleansim:
 cleandfe:
 	rm -f $(PRJ)_dfe $(TRASH)
 
-clean: cleansim cleandfe
+clean:
+	# deleting everything except the Makefile in the build/ directory
+	find . ! -name 'Makefile' -type f -exec rm -f {} + 
 
 distcleansim: cleansim
 	rm -rf $(DIST_TRASH) $(PRJ)_$(DFEModel)_DFE_SIM
