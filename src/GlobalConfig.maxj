@@ -5,6 +5,6 @@ import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEFix.SignMode;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEType;
 
 public class GlobalConfig {
-    public static final DFEType dataType = Kernel.dfeFix(8, 8, SignMode.TWOSCOMPLEMENT);
+    public static final DFEType dataType = Kernel.dfeFix(6, 12, SignMode.TWOSCOMPLEMENT);
     public static final DFEType cpuType = Kernel.dfeFloat(8, 24);
 }
