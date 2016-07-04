@@ -6,6 +6,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.Properties;
 
+import com.maxeler.maxcompiler.v2.managers.BuildConfig;
 import com.maxeler.maxcompiler.v2.managers.engine_interfaces.CPUTypes;
 import com.maxeler.maxcompiler.v2.managers.engine_interfaces.EngineInterface;
 import com.maxeler.maxcompiler.v2.managers.engine_interfaces.InterfaceParam;
@@ -21,6 +22,12 @@ public class fpgaConvNetMaxelerManager {
             params.getConvFoldingFactor(),
             params.getKernelFoldingFactor()
         );
+        BuildConfig buildConfig = manager.getBuildConfig();
+        buildConfig.setBuildEffort(BuildConfig.Effort.VERY_HIGH);
+
+        buildConfig.setMPPRCostTableSearchRange(params.getMPPRStartCT(), params.getMPPREndCT());
+        buildConfig.setMPPRParallelism(params.getMPPRThreads());
+        buildConfig.setMPPRRetryNearMissesThreshold(params.getMPPRRetryThreshold());
         manager.createSLiCinterface(manager.interfaceDefault());
         manager.build();
     }
