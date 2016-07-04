@@ -147,6 +147,8 @@ void resource_benchmark(max_file_t* max_file, void (*run_fnc)(max_engine_t*, act
 
     for (int t = 0 ; t < test_cases ; t++) {
         bool correct = true;
+        int num_correct = 0;
+        int total = output_height * output_width * output_channels;
         cerr << "Test case " << t << " ";
         ifstream fin (make_output_file_name(t).c_str());
 
@@ -162,7 +164,8 @@ void resource_benchmark(max_file_t* max_file, void (*run_fnc)(max_engine_t*, act
                     fin >> v;
                     if (!is_similar(v, y[idx])) {
                         correct = false;
-                        goto done;
+                    } else {
+                        num_correct += 1;
                     }
                 }
             }
@@ -175,6 +178,7 @@ done:
         } else {
             cerr << "WRONG!" << endl;
         }
+        cerr << "Correct percentage = %.5f" << ((float) num_correct / (float) total) << endl;
     }
 }
 
