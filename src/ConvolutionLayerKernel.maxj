@@ -214,7 +214,19 @@ public class ConvolutionLayerKernel extends Kernel {
             DFEVar[][] kernel = toMuxedKernel(iter, indices);
             DFEVar inputChannel = toMuxedInput(iter, indices);
             ArrayList<ChannelFrequency> freqs = getChannelFrequency(indices);
-            int[] counts = new int[freqs.size()];
+            int totalCount = 0;
+            int[] counts;
+
+            for (int i = 0 ; i < freqs.size() ; i++) {
+                totalCount += freqs.size();
+            }
+           
+            if (totalCount < loopIterations) {
+                counts = new int[freqs.size() + 1];
+                counts[freqs.size()] = loopIterations - totalCount;
+            } else {
+                counts = new int[freqs.size()];
+            }
 
             for (int i = 0 ; i < freqs.size() ; i++) {
                 counts[i] = freqs[i].frequency;
@@ -242,7 +254,7 @@ public class ConvolutionLayerKernel extends Kernel {
         }
 
         for (int i = 0 ; i < outputDimension.channels() ; i++) {
-            outputChannelAccumulator[i].generate();
+            outputChannelAccumulator[i].generate(0.0);
             output[i] <== outputChannelAccumulator[i].output();
         }
 

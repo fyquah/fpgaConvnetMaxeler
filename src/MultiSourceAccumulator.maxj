@@ -42,8 +42,9 @@ public class MultiSourceAccumulator extends KernelLib {
         sources.add(x);
     }
 
-    public void generate() {
+    public void generate(double pipeliningFactor) {
         // Compute previous (either 0 or output[-1])
+        optimization.pushPipeliningFactor(pipeliningFactor);
         DFEVar prev = iter.eq(0) ? constant.var(GlobalConfig.dataType, 0) :
             stream.offset(out, -cycleLength);
 
@@ -60,6 +61,7 @@ public class MultiSourceAccumulator extends KernelLib {
 
         // set the flag
         generated = true;
+        optimization.popPipeliningFactor();
     }
 
     public DFEVar output() {

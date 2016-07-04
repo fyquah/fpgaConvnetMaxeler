@@ -122,16 +122,20 @@ all: runsim build
 # Use various targets for resource benchmarking
 include $(WHEREISROOT)/Makefile.resource.benchmark
 
+# ---- shared ----
+
+RESOURCE_BENCH_HELPERS=resource_bench_helper.cpp resource_bench_helper.h
+$(RESOURCE_BENCH_HELPERS):
+	python ../scripts/generate_resource_benchmarks.py
+
 # ---- Simulation ----
 
-resource_bench_sim.o: $(RESOURCE_BENCH_SIM_MAXFILES)
-	$(SLICCOMPILE) $< $@
-
-resource_bench_simc.o: $(CPUFILES)
+resource_bench_simc.o: $(CPUFILES) $(RESOURCE_BENCH_HELPERS) $(RESOURCE_BENCH_SIM_MAXFILES)
+	$(CPUCOMPILER) resource_bench_helper.cpp $(ALL_FLAGS) $(RESOURCE_BENCH_SIM_INCLUDE_FLAGS) -I$(MAXCOMPILER_BUILD_DIR) -I$(SIMMAXDIR) -D__SIM__ -DDESIGN_NAME=$(PRJ) -c -o resource_bench_helper.o
 	$(CPUCOMPILER) $< $(ALL_FLAGS) $(RESOURCE_BENCH_SIM_INCLUDE_FLAGS) -I$(MAXCOMPILER_BUILD_DIR) -I$(SIMMAXDIR) -D__SIM__ -DDESIGN_NAME=$(PRJ) -c -o $@
 
-resource_bench_sim: resource_bench_sim.o resource_bench_simc.o
-	$(CPUCOMPILER) $(ALL_FLAGS) -o $@ $^ $(LFLAGS)
+resource_bench_sim: resource_bench_simc.o $(RESOURCE_BENCH_SIM_SLIC_OBJECT_FILES)
+	$(CPUCOMPILER) $(ALL_FLAGS) -o $@ $^ resource_bench_helper.o $(LFLAGS)
 
 run_resource_bench_sim: resource_bench_sim
 	$(MAXCOMPILERSIM) -n $(USER)a -c$(DEVICENUM) -d$(NUMDEVICES) restart
@@ -147,13 +151,10 @@ gdbsim:
 
 # ---- DFE ----
 
-resource_bench_dfe.o: $(RESOURCE_BENCH_MAXFILES)
-	$(SLICCOMPILE) $< $@
-
 resource_bench_dfec.o: $(CPUFILES)
 	$(CPUCOMPILER) $< $(ALL_FLAGS) $(RESOURCE_BENCH_INCLUDE_FLAGS) -I$(MAXCOMPILER_BUILD_DIR) -DDESIGN_NAME=$(PRJ) -c -o $@
 
-resource_bench_dfe: resource_bench_dfe.o resource_bench_dfec.o
+resource_bench_dfe: resource_bench_dfec.o $(RESOURCE_BENCH_SLIC_OBJECT_FILES)
 	$(CPUCOMPILER) $(ALL_FLAGS) -o $@ $^ $(LFLAGS)
 
 run_resource_bench: resource_bench_dfe
@@ -166,6 +167,7 @@ gdbdfe:
 # ---- Clean ----
 
 cleansim:
+	rm resource_helper.cpp resource_helper.h
 	rm -f $(PRJ)_sim $(TRASH)
 
 cleandfe:

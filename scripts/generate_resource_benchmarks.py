@@ -1,100 +1,59 @@
 #!/usr/bin/env python
+import os
+import factors
 
-def make_max_name(a, b):
-    return "resource_bench_%d_%d" % (a,b)
+my_dir = os.path.dirname(os.path.realpath(__file__))
 
-def make_sim_path(max_file_name):
-    return "%s_$(DFEModel)_DFE_SIM/results/%s.max" % (max_file_name, max_file_name)
+max_names = map(lambda (a, b) : factors.make_max_name(a, b), factors.factors)
+sim_max_names = map(lambda (a, b) : factors.make_max_name(a, b), factors.sim_factors)
 
-def make_sim_header(max_file_name):
-    return "%s_$(DFEModel)_DFE_SIM/results/%s.h" % (max_file_name, max_file_name)
+header = open(os.path.join(my_dir, "../build/resource_bench_helper.h"), "w")
 
-def make_sim_include_flag(max_file_name):
-    return "-I%s_$(DFEModel)_DFE_SIM/results" % (max_file_name)
-
-def make_path(max_file_name):
-    return "%s_$(DFEModel)_DFE/results/%s.max" % (max_file_name, max_file_name)
-
-def make_header(max_file_name):
-    return "%s_$(DFEModel)_DFE/results/%s.h" % (max_file_name, max_file_name)
-
-def make_include_flag(max_file_name):
-    return "-I%s_$(DFEModel)_DFE/results" % (max_file_name)
-
-# [(int, int)], fst is foldingFactor, snd is kernelFoldingFactor
-factors = [
-    (1,3),
-    (5,6),
-    (1,13),
-    (10,1),
-    (4,9),
-    (1,6),
-    (7,2),
-    (5,7),
-    (2,6),
-    (1,20),
-    (2,9),
-    (4,8)
-]
-# factors = [(1,3), (2,4)]
-
-makefile = open("Makefile.resource.benchmark", "w")
-max_names = map(lambda (a, b): make_max_name(a, b), factors)
-
-print >>makefile, "# === resource benchmark simulation ===\n"
-
-for (a, b) in factors:
-    max_name = make_max_name(a, b)
-    s = """%s: $(ENGINEFILES)
-\t$(MAXJC) $(JFLAGS) $(ENGINEFILES)
-\tMAXAPPJCP='.:$(CP)' MAXSOURCEDIRS='../src' $(MAXJAVARUN) -v -m 8192 $(MANAGER) DFEModel=$(DFEModel) maxFileName=%s target='DFE_SIM' enableMPCX=$(MPCX) convFoldingFactor=%d kernelFoldingFactor=%d
-""" % (make_sim_path(max_name), max_name, a, b)
-    print >>makefile, s
-
-
-print >>makefile, "RESOURCE_BENCH_SIM_MAXFILES=" + " ".join(map(make_sim_path, max_names))
-print >>makefile, "\n"
-print >>makefile, "RESOURCE_BENCH_SIM_INCLUDE_FLAGS=" + " ".join(map(make_sim_include_flag, max_names))
-print >>makefile, "\n"
-print >>makefile, "# === END === "
-print >>makefile, "\n"
-
-
-print >>makefile, "# === resource benchmark DFE ===\n"
-
-for (a, b) in factors:
-    max_name = make_max_name(a, b)
-    s = """%s: $(ENGINEFILES)
-\t$(MAXJC) $(JFLAGS) $(ENGINEFILES)
-\tMAXAPPJCP='.:$(CP)' MAXSOURCEDIRS='../src' $(MAXJAVARUN) -v -m 8192 $(MANAGER) DFEModel=$(DFEModel) maxFileName=%s target='DFE' enableMPCX=$(MPCX) convFoldingFactor=%d kernelFoldingFactor=%d
-""" % (make_path(max_name), max_name, a, b)
-    print >>makefile, s
-
-print >>makefile, "RESOURCE_BENCH_MAXFILES=" + " ".join(map(make_path, max_names))
-print >>makefile, "\n"
-print >>makefile, "RESOURCE_BENCH_INCLUDE_FLAGS=" + " ".join(map(make_include_flag, max_names))
-print >>makefile, "\n"
-print >>makefile, "# === END === "
-print >>makefile, "\n"
-
-makefile.close()
-
-header = open("build/resource_benchmark.h", "w")
+print >>header, "#ifndef RESOURCE_BENCH_HELPER_H"
+print >>header, "#define RESOURCE_BENCH_HELPER_H"
+print >>header, "#ifdef __SIM__"
+for name in sim_max_names:
+    print >>header, "#include \"%s.h\"" % name
+print >>header, "#else"
 for name in max_names:
     print >>header, "#include \"%s.h\"" % name
+print >>header, "#endif"
+
+print >>header, "\n"
+print >>header, "#include \"../src/resource_bench.h\"\n"
+print >>header, "void run_resource_bench();"
+print >>header, "template <typename action_t>"
+print >>header, "void resource_benchmark(max_file_t* max_file, void (*run_fnc)(max_engine_t*, action_t*), std::string out_file_name);"
+print >>header, "#endif"
 header.close()
 
-print "#include \"resource_bench.cpp\""
-print "\n\n"
-print "int main () {"
+src = open(os.path.join(my_dir, "../build/resource_bench_helper.cpp"), "w")
 
-for (a, b) in factors:
-    print """
+print >>src, "#include \"resource_bench_helper.h\""
+print >>src, "\n\n"
+print >>src, "#ifndef __SIM__"
+print >>src, "void run_resource_bench () {"
+
+for (a, b) in factors.factors:
+    print >>src, """
     max_file_t* max_file_%d_%d = resource_bench_%d_%d_init();
     resource_benchmark<resource_bench_%d_%d_actions_t>(max_file_%d_%d, resource_bench_%d_%d_run, "%d_%d.out");
     resource_bench_%d_%d_free();
     """ % (a,b,a,b,a,b,a,b,a,b,a,b,a,b)
 
-print "}"
+print >>src, "}\n"
+print >>src, "#else\n"
 
+print >>src, "void run_resource_bench () {"
+
+
+for (a, b) in factors.sim_factors:
+    print >>src, """
+    max_file_t* max_file_%d_%d = resource_bench_%d_%d_init();
+    resource_benchmark<resource_bench_%d_%d_actions_t>(max_file_%d_%d, resource_bench_%d_%d_run, "%d_%d.out");
+    resource_bench_%d_%d_free();
+    """ % (a,b,a,b,a,b,a,b,a,b,a,b,a,b)
+
+print >>src, "}"
+print >>src, "#endif"
 
