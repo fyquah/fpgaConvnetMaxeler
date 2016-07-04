@@ -22,23 +22,23 @@ def make_include_flag(max_file_name):
     return "-I%s_$(DFEModel)_DFE/results" % (max_file_name)
 
 # [(int, int)], fst is foldingFactor, snd is kernelFoldingFactor
-# factors = [
-#     (1,3),
-#     (5,6),
-#     (1,13),
-#     (10,1),
-#     (4,9),
-#     (1,6),
-#     (7,2),
-#     (5,7),
-#     (2,6),
-#     (1,20),
-#     (2,9),
-#     (4,8)
-# ]
+factors = [
+    (1,3),
+    (5,6),
+    (1,13),
+    (10,1),
+    (4,9),
+    (1,6),
+    (7,2),
+    (5,7),
+    (2,6),
+    (1,20),
+    (2,9),
+    (4,8)
+]
+# factors = [(1,3), (2,4)]
 
 makefile = open("Makefile.resource.benchmark", "w")
-factors = [(1,3), (2,4)]
 max_names = map(lambda (a, b): make_max_name(a, b), factors)
 
 print >>makefile, "# === resource benchmark simulation ===\n"
@@ -56,7 +56,7 @@ print >>makefile, "RESOURCE_BENCH_SIM_MAXFILES=" + " ".join(map(make_sim_path, m
 print >>makefile, "\n"
 print >>makefile, "RESOURCE_BENCH_SIM_INCLUDE_FLAGS=" + " ".join(map(make_sim_include_flag, max_names))
 print >>makefile, "\n"
-print >>makefile, " === END === "
+print >>makefile, "# === END === "
 print >>makefile, "\n"
 
 
@@ -74,7 +74,7 @@ print >>makefile, "RESOURCE_BENCH_MAXFILES=" + " ".join(map(make_path, max_names
 print >>makefile, "\n"
 print >>makefile, "RESOURCE_BENCH_INCLUDE_FLAGS=" + " ".join(map(make_include_flag, max_names))
 print >>makefile, "\n"
-print >>makefile, " === END === "
+print >>makefile, "# === END === "
 print >>makefile, "\n"
 
 makefile.close()
@@ -83,4 +83,18 @@ header = open("build/resource_benchmark.h", "w")
 for name in max_names:
     print >>header, "#include \"%s.h\"" % name
 header.close()
+
+print "#include \"resource_bench.cpp\""
+print "\n\n"
+print "int main () {"
+
+for (a, b) in factors:
+    print """
+    max_file_t* max_file_%d_%d = resource_bench_%d_%d_init();
+    resource_benchmark<resource_bench_%d_%d_actions_t>(max_file_%d_%d, resource_bench_%d_%d_run, "%d_%d.out");
+    resource_bench_%d_%d_free();
+    """ % (a,b,a,b,a,b,a,b,a,b,a,b,a,b)
+
+print "}"
+
 

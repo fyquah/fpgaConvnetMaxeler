@@ -70,7 +70,7 @@ map<string, string> load_config_file(string directory) {
 }
 
 template <typename action_t>
-void resource_benchmark(max_file_t* max_file, void (*run_fnc)(max_engine_t*, action_t*)) {
+void resource_benchmark(max_file_t* max_file, void (*run_fnc)(max_engine_t*, action_t*), string out_file_name) {
 
     map<string, string> m = load_config_file("../resource_benchmark/config.properties");
     const int input_channels = atoi(m["inputChannels"].c_str());
@@ -136,10 +136,13 @@ void resource_benchmark(max_file_t* max_file, void (*run_fnc)(max_engine_t*, act
     double end = t_end.tv_sec * 1000000 + t_end.tv_usec;
     double delta = end - begin;
 
+    ofstream fout(out_file_name.c_str());
+
     cerr << std::fixed;
-    cerr << std::setprecision(2);
+    cerr << std::setprecision(7);
     cerr << "It took " << delta << "micro seconds" << endl;
-    cout << delta << endl;
+    fout << delta << endl;
+    fout.close();
     cerr << "DONE!" << endl;
 
     for (int t = 0 ; t < test_cases ; t++) {
@@ -175,8 +178,65 @@ done:
     }
 }
 
-int main(void) {
-    max_file_t* max_file = resource_bench_1_3_init();
-    resource_benchmark<resource_bench_1_3_actions_t>(max_file, resource_bench_1_3_run);
+int main () {
+
+    max_file_t* max_file_1_3 = resource_bench_1_3_init();
+    resource_benchmark<resource_bench_1_3_actions_t>(max_file_1_3, resource_bench_1_3_run, "1_3.out");
     resource_bench_1_3_free();
+    
+
+    max_file_t* max_file_5_6 = resource_bench_5_6_init();
+    resource_benchmark<resource_bench_5_6_actions_t>(max_file_5_6, resource_bench_5_6_run, "5_6.out");
+    resource_bench_5_6_free();
+    
+
+    max_file_t* max_file_1_13 = resource_bench_1_13_init();
+    resource_benchmark<resource_bench_1_13_actions_t>(max_file_1_13, resource_bench_1_13_run, "1_13.out");
+    resource_bench_1_13_free();
+    
+
+    max_file_t* max_file_10_1 = resource_bench_10_1_init();
+    resource_benchmark<resource_bench_10_1_actions_t>(max_file_10_1, resource_bench_10_1_run, "10_1.out");
+    resource_bench_10_1_free();
+    
+
+    max_file_t* max_file_4_9 = resource_bench_4_9_init();
+    resource_benchmark<resource_bench_4_9_actions_t>(max_file_4_9, resource_bench_4_9_run, "4_9.out");
+    resource_bench_4_9_free();
+    
+
+    max_file_t* max_file_1_6 = resource_bench_1_6_init();
+    resource_benchmark<resource_bench_1_6_actions_t>(max_file_1_6, resource_bench_1_6_run, "1_6.out");
+    resource_bench_1_6_free();
+    
+
+    max_file_t* max_file_7_2 = resource_bench_7_2_init();
+    resource_benchmark<resource_bench_7_2_actions_t>(max_file_7_2, resource_bench_7_2_run, "7_2.out");
+    resource_bench_7_2_free();
+    
+
+    max_file_t* max_file_5_7 = resource_bench_5_7_init();
+    resource_benchmark<resource_bench_5_7_actions_t>(max_file_5_7, resource_bench_5_7_run, "5_7.out");
+    resource_bench_5_7_free();
+    
+
+    max_file_t* max_file_2_6 = resource_bench_2_6_init();
+    resource_benchmark<resource_bench_2_6_actions_t>(max_file_2_6, resource_bench_2_6_run, "2_6.out");
+    resource_bench_2_6_free();
+    
+
+    max_file_t* max_file_1_20 = resource_bench_1_20_init();
+    resource_benchmark<resource_bench_1_20_actions_t>(max_file_1_20, resource_bench_1_20_run, "1_20.out");
+    resource_bench_1_20_free();
+    
+
+    max_file_t* max_file_2_9 = resource_bench_2_9_init();
+    resource_benchmark<resource_bench_2_9_actions_t>(max_file_2_9, resource_bench_2_9_run, "2_9.out");
+    resource_bench_2_9_free();
+    
+
+    max_file_t* max_file_4_8 = resource_bench_4_8_init();
+    resource_benchmark<resource_bench_4_8_actions_t>(max_file_4_8, resource_bench_4_8_run, "4_8.out");
+    resource_bench_4_8_free();
+    
 }
