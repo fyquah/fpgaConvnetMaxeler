@@ -151,7 +151,7 @@ resource_bench_dfe.o: $(RESOURCE_BENCH_MAXFILES)
 	$(SLICCOMPILE) $< $@
 
 resource_bench_dfec.o: $(CPUFILES)
-	$(CPUCOMPILER) $< $(ALL_FLAGS) $(RESOURCE_BENCH_INCLUDE_FLAGS) -DDESIGN_NAME=$(PRJ) -c -o $@
+	$(CPUCOMPILER) $< $(ALL_FLAGS) $(RESOURCE_BENCH_INCLUDE_FLAGS) -I$(MAXCOMPILER_BUILD_DIR) -DDESIGN_NAME=$(PRJ) -c -o $@
 
 resource_bench_dfe: resource_bench_dfe.o resource_bench_dfec.o
 	$(CPUCOMPILER) $(ALL_FLAGS) -o $@ $^ $(LFLAGS)

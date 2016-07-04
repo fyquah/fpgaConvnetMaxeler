@@ -122,7 +122,7 @@ void resource_benchmark(max_file_t* max_file, void (*run_fnc)(max_engine_t*, act
     cerr << "Starting job:!" << endl;
 
     timeval t_begin, t_end;
-    max_engine_t *engine = max_load(max_file, "local");
+    max_engine_t *engine = max_load(max_file, "*");
     action_t actions;
     actions.param_N = test_cases;
     actions.instream_x = x;
