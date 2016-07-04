@@ -151,11 +151,13 @@ gdbsim:
 
 # ---- DFE ----
 
-resource_bench_dfec.o: $(CPUFILES)
+resource_bench_dfec.o: $(CPUFILES) $(RESOURCE_BENCH_HELPERS) $(RESOURCE_BENCH_MAXFILES)
+	$(CPUCOMPILER) resource_bench_helper.cpp $(ALL_FLAGS) $(RESOURCE_BENCH_SIM_INCLUDE_FLAGS) \
+	    -I$(MAXCOMPILER_BUILD_DIR) -DDESIGN_NAME=$(PRJ) -c -o resource_bench_helper.o
 	$(CPUCOMPILER) $< $(ALL_FLAGS) $(RESOURCE_BENCH_INCLUDE_FLAGS) -I$(MAXCOMPILER_BUILD_DIR) -DDESIGN_NAME=$(PRJ) -c -o $@
 
 resource_bench_dfe: resource_bench_dfec.o $(RESOURCE_BENCH_SLIC_OBJECT_FILES)
-	$(CPUCOMPILER) $(ALL_FLAGS) -o $@ $^ $(LFLAGS)
+	$(CPUCOMPILER) $(ALL_FLAGS) -o $@ $^ resource_bench_helper.o $(LFLAGS)
 
 run_resource_bench: resource_bench_dfe
 	SLIC_CONF=$(SLIC_CONF) LD_PRELOAD=$(MAXOS_HW) ./resource_bench_dfe
