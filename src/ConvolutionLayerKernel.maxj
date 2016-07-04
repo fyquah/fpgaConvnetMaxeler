@@ -1,0 +1,387 @@
+// package nothing;
+
+import java.util.ArrayList;
+
+import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
+import com.maxeler.maxcompiler.v2.kernelcompiler.KernelParameters;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.CounterChain;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVector;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVectorType;
+
+public class ConvolutionLayerKernel extends Kernel {
+    private final DFEVectorType<DFEVar> outputType;
+    private final DFEVectorType<DFEVar> inputType;
+    public ArrayList<ArrayList<float[][]>> convolutionKernels;
+    public ArrayList<ConvolutionUnit> convolutionUnits;
+    public ArrayList<OneHotDemux> demuxUnits;
+    public final Dimension inputDimension;
+    public final Dimension outputDimension;
+    private final int kernelDim, stride, nOutput, loopIterations, cyclesRequired;
+    private final int foldingFactor, convCyclesRequired;
+    private final DFEVector<DFEVar> input, output;
+    // number of convolutionalUnits, between 1 <= ff <= inputChannels * outputChannels
+    // defines how many convolutionUnits are available to perform all the convolutions
+    private final int kernelFoldingFactor; // number of multipliers in every convolutionalUnit, between 1 <= kff <= kernelDim * kernelDim
+    private final ArrayList<ConvChannelIndex> convChannelIndices;
+    private final ArrayList<MultiSourceAccumulator> outputChannelAccumulator;
+
+    public static int calcLoopIterations(int totalConvolutions, int foldingFactor) {
+        return Utils.divCeil(totalConvolutions, foldingFactor);
+    }
+
+    protected class ChannelFrequency {
+        public final int channel;
+        public final int frequency;
+
+        public ChannelFrequency(int argChannel, int argFrequency) {
+            channel = argChannel;
+            frequency = argFrequency;
+        }
+    }
+
+    protected class ConvChannelIndex {
+        public final int in;
+        public final int out;
+
+        public ConvChannelIndex(int o, int i) {
+            in = i;
+            out = o;
+        }
+    }
+
+    public ArrayList<ConvChannelIndex> getConvUnitChannelIndices(int convUnitId) {
+        ArrayList<ConvChannelIndex> ret = new ArrayList<ConvChannelIndex>();
+
+        for (int i = convUnitId * loopIterations ;
+                i < (convUnitId + 1) * loopIterations && i < convChannelIndices.size();
+                i++) {
+            ret.add(convChannelIndices[i]);
+        }
+
+        return ret;
+    }
+
+    protected DFEVar[][] toDfeVarKernel(float[][] a) {
+        DFEVar[][] ret = new DFEVar[a.length][a[0].length];
+
+        for (int i = 0 ; i < a.length ; i++) {
+            for (int j = 0 ; j < a[i].length ; j++) {
+                ret[i][j] = constant.var(GlobalConfig.dataType, a[i][j]);
+            }
+        }
+
+        return ret;
+    }
+
+    protected DFEVar toMuxedInput(DFEVar iter, ArrayList<ConvChannelIndex> indices) {
+        if (loopIterations == 1) {
+            return input[indices[0].in];
+        }
+
+        ArrayList<DFEVar> arr = new ArrayList<DFEVar>();
+
+        for (int i = 0 ; i < indices.size() ; i++) {
+            arr.add(input[indices[i].in]);
+        }
+
+
+        while (arr.size() < loopIterations) {
+            arr.add(constant.var(GlobalConfig.dataType, 0));
+        }
+
+        return control.mux(iter, arr.toArray(new DFEVar[arr.size()]));
+    }
+
+    protected DFEVar[][] toMuxedKernel(DFEVar iter, ArrayList<ConvChannelIndex> indices) {
+        if (indices.size() == 1) {
+            return toDfeVarKernel(convolutionKernels
+                    .get(indices[0].out)
+                    .get(indices[0].in));
+        }
+
+        DFEVar[][] ret = new DFEVar[kernelDim][kernelDim];
+
+        for (int r = 0 ; r < kernelDim ; r++) {
+            for (int c = 0 ; c < kernelDim ; c++) {
+                ArrayList<DFEVar> arr = new ArrayList<DFEVar>();
+
+                for (int i = 0 ; i < indices.size() ; i++) {
+                    int out = indices[i].out;
+                    int in = indices[i].in;
+
+                    arr.add(
+                        constant.var(GlobalConfig.dataType,
+                            convolutionKernels
+                            .get(out)
+                            .get(in)[r][c])
+                    );
+                }
+
+                // unnecessary, but for completeness
+                while (arr.size() < loopIterations) {
+                    arr.add(constant.var(GlobalConfig.dataType, 0));
+                }
+
+                ret[r][c] = control.mux(iter, arr.toArray(new DFEVar[arr.size()]));
+            }
+        }
+
+        return ret;
+    }
+
+    protected ArrayList<ChannelFrequency> getChannelFrequency(ArrayList<ConvChannelIndex> l) {
+        ArrayList<ChannelFrequency> ret = new ArrayList<ChannelFrequency>();
+
+        if (l.size() == 0) {
+            return ret;
+        }
+
+        ret.add(new ChannelFrequency(l[0].out, 1));
+
+        for (int i = 1 ; i < l.size() ; i++) {
+            int tail = ret.size() - 1;
+            if (ret[tail].channel != l[i].out) {
+                ret.add(new ChannelFrequency(l[i].out, 1));
+            } else {
+                ret.set(tail, new ChannelFrequency(ret[tail].channel, ret[tail].frequency + 1));
+            }
+        }
+
+        return ret;
+    }
+
+    protected ArrayList<MultiSourceAccumulator> makeOutputChannelAccumulator() {
+        ArrayList<MultiSourceAccumulator> ret = new ArrayList<MultiSourceAccumulator>();
+        for (int i = 0 ; i < outputDimension.channels() ; i++) {
+            ret.add(new MultiSourceAccumulator(this,
+                    loopIterations, loopIterations, convCyclesRequired));
+        }
+        return ret;
+    }
+
+    protected ConvolutionLayerKernel(KernelParameters parameters, ConvolutionParameters cp) {
+        super(parameters);
+
+        convolutionKernels = new ArrayList<ArrayList<float[][]>>();
+        convChannelIndices = new ArrayList<ConvChannelIndex>();
+        demuxUnits = new ArrayList<OneHotDemux>();
+
+        // Read definitions from ConvolutionParameters
+
+        inputDimension = cp.inputDim;
+        kernelDim = cp.kernelDim;
+        nOutput = cp.outputChannels;
+        stride = cp.stride;
+        foldingFactor = cp.foldingFactor;
+        kernelFoldingFactor = cp.kernelFoldingFactor;
+        convolutionKernels = cp.getKernels();
+        //    End parameter extraction
+
+        // derived variables
+        outputDimension = new Dimension(
+            inputDimension.height() - (kernelDim - 1),
+            inputDimension.width() - (kernelDim - 1),
+            nOutput
+        );
+        inputType = new DFEVectorType<DFEVar>(GlobalConfig.dataType, inputDimension.channels());
+        outputType = new DFEVectorType<DFEVar>(GlobalConfig.dataType, nOutput);
+        convolutionUnits = new ArrayList<ConvolutionUnit>();
+        loopIterations = calcLoopIterations(inputDimension.channels() * outputDimension.channels(), foldingFactor);
+        convCyclesRequired = ConvolutionUnit.calcCyclesRequired(kernelDim, kernelFoldingFactor);
+        cyclesRequired = loopIterations * convCyclesRequired;
+
+        for (int o = 0 ; o < outputDimension.channels() ; o++) {
+            for (int i = 0 ; i < inputDimension.channels() ; i++) {
+                convChannelIndices.add(new ConvChannelIndex(o, i));
+            }
+        }
+
+        outputChannelAccumulator = makeOutputChannelAccumulator();
+        // end of derived variables
+
+        // doing the actual maxeler kernel stuff here
+        input = inputType.newInstance(this);
+        output = outputType.newInstance(this);
+        CounterChain chain = control.count.makeCounterChain();
+        DFEVar iter = loopIterations == 1 ? constant.var(dfeUInt(1), 0)
+                        : chain.addCounter(loopIterations, 1);
+        DFEVar convIter = convCyclesRequired == 1 ? constant.var(dfeUInt(1), 0)
+                        : chain.addCounter(convCyclesRequired, 1);
+
+        for (int k = 0 ; k < foldingFactor ; k++) {
+            ArrayList<ConvChannelIndex> indices = getConvUnitChannelIndices(k);
+            DFEVar[][] kernel = toMuxedKernel(iter, indices);
+            DFEVar inputChannel = toMuxedInput(iter, indices);
+            ArrayList<ChannelFrequency> freqs = getChannelFrequency(indices);
+            int[] counts = new int[freqs.size()];
+
+            for (int i = 0 ; i < freqs.size() ; i++) {
+                counts[i] = freqs[i].frequency;
+            }
+
+            ConvolutionUnit c = new ConvolutionUnit(
+                this,
+                inputDimension.height(),
+                inputDimension.width(),
+                kernel,
+                kernelFoldingFactor,
+                loopIterations
+            );
+
+            PartitionedDemux demux = new PartitionedDemux(this, counts, convCyclesRequired);
+
+            c.setInput(inputChannel);
+            convolutionUnits.add(c);
+            demuxUnits.add(demux);
+            demux.input <== c.output();
+
+            for (int i = 0 ; i < freqs.size() ; i++) {
+                outputChannelAccumulator[freqs[i].channel].addSource(demux.outputs[i]);
+            }
+        }
+
+        for (int i = 0 ; i < outputDimension.channels() ; i++) {
+            outputChannelAccumulator[i].generate();
+            output[i] <== outputChannelAccumulator[i].output();
+        }
+
+        input <== io.input("x", inputType, iter.eq(0) & convIter.eq(0));
+        io.output("y", output, outputType,
+                iter.eq(loopIterations - 1) &
+                convIter.eq(convCyclesRequired - 1) &
+                ~convolutionUnits.get(0).isBorder());
+    }
+}
+
+/*
+DFEVar ticksCtr = control.count.simpleCounter(32);
+CounterChain chain2 = control.count.makeCounterChain();
+DFEVar e = chain2.addCounter(10000, 1);
+chain2.addCounter(inputDimension.height(), 1);
+chain2.addCounter(inputDimension.width(), 1);
+
+if (loopIterations > 1) {
+    chain2.addCounter(loopIterations, 1);
+}
+
+if (convCyclesRequired > 1) {
+    chain2.addCounter(convCyclesRequired, 1);
+}
+debug.simPrintf("tick = %d e = %d r = %d , c = %d f = %d\n",
+        ticksCtr, e,
+        convolutionUnits.get(0).get(0).row,
+        convolutionUnits.get(0).get(0).col,
+        iter.eq(loopIterations - 1) &
+        convIter.eq(convCyclesRequired - 1) &
+        ~convolutionUnits.get(0).get(0).isBorder());
+debug.simPrintf("output = ");
+for (int i = 0 ; i < output.getSize() ; i++) {
+    debug.simPrintf("%.3f ", output[i]);
+}
+debug.simPrintf("\n");
+
+*/
+
+// assume all the convolutionUnits _should_ have the same cyclesRequired!
+
+/*
+
+        for (int i = 0 ; i < nOutput ; i++) {
+            ArrayList<ConvolutionUnit> units = new ArrayList<ConvolutionUnit>();
+            ArrayList<DFEVar> convolutionOutputs = new ArrayList<DFEVar>();
+
+            for (int j = 0 ; j < foldingFactor ; j++) {
+                DFEVar[][] kernel = toMuxedKernel(iter, i, j);
+                DFEVar inputChannel = toMuxedInput(iter, j);
+
+                ConvolutionUnit c = new ConvolutionUnit(
+                    this,
+                    inputDimension.height(),
+                    inputDimension.width(),
+                    kernel,
+                    kernelFoldingFactor,
+                    loopIterations
+                );
+
+                units.add(c);
+                c.setInput(inputChannel);
+                convolutionOutputs.add(c.output());
+
+
+                // we are not going to explicitly deal with the convolution output
+                // Presumebly, convolving a zero matrix with anything should yield a zero result
+                // so we'd just presume everything would work and sum them up in the end of the calculations
+            }
+
+            // append all in c to global convolutionUnit outputs
+            convolutionUnits.add(units);
+
+            if (loopIterations == 1) {
+                output[i] <== Utils.logarithmAdderTree(convolutionOutputs);
+
+            } else {
+                optimization.pushPipeliningFactor(0.0);
+                DFEVar accumulatedOutput = stream.offset(output[i], -convCyclesRequired);
+
+                DFEVar prev;
+                if (loopIterations == 1) {
+                    prev = constant.var(GlobalConfig.dataType, 0);
+                } else {
+                    prev = iter.eq(0) ? constant.var(GlobalConfig.dataType, 0) : accumulatedOutput;
+                }
+
+                convolutionOutputs.add(prev);
+
+                if (convCyclesRequired == 1) {
+                    output[i] <== Utils.logarithmAdderTree(convolutionOutputs);
+                } else {
+                    output[i] <== convIter.eq(convCyclesRequired - 1) ?
+                            Utils.logarithmAdderTree(convolutionOutputs) : prev;
+                }
+
+                optimization.popPipeliningFactor();
+            }
+
+
+        }
+
+
+ */
+
+/*
+if (i == 0) {
+    CounterChain chain2 = control.count.makeCounterChain();
+    DFEVar r = chain2.addCounter(inputDimension.height(), 1);
+    DFEVar c = chain2.addCounter(inputDimension.width(), 1);
+
+    if (loopIterations > 1) {
+        chain2.addCounter(loopIterations, 1);
+    }
+
+    if (convCyclesRequired > 1) {
+        chain2.addCounter(convCyclesRequired, 1);
+    }
+
+    debug.simPrintf(
+        "r = %d c = %d iter = %d convIter = %d output[0] = %.5f\n",
+        r, c, iter, convIter, output[0]
+    );
+
+}
+*/
+/*
+if (i == 0 && j == 0) {
+    debug.simPrintf("--------------------\n");
+    c.debugPrint();
+    debug.simPrintf("Kernel = ");
+    for (int r = 0 ; r < kernelDim ; r++) {
+        for (int c2 = 0 ; c2 < kernelDim ; c2++) {
+            debug.simPrintf("%.5f ", kernel[r][c2]);
+        }
+        debug.simPrintf("\n");
+    }
+    debug.simPrintf("\n");
+    debug.simPrintf("c.output() = %.5f\n", c.output());
+}
+*/

@@ -1,0 +1,39 @@
+// package nothing;
+
+import java.util.ArrayList;
+
+
+public class ConvolutionParameters {
+
+    public Dimension inputDim;
+    public ArrayList<ArrayList<float[][]>> kernels;
+    public int stride, foldingFactor, kernelFoldingFactor, kernelDim, outputChannels;
+
+    ConvolutionParameters(Dimension argInputDims, int fanOut, ArrayList<ArrayList<float[][]>> argKernels) {
+        inputDim = argInputDims;
+        outputChannels = fanOut;
+        stride = 1;
+        foldingFactor = argInputDims.channels();
+        kernelDim = argKernels.get(0).get(0).length;
+        kernelFoldingFactor = kernelDim * kernelDim;
+        kernels = dupKernelList(argKernels);
+    }
+
+    public ArrayList<ArrayList<float[][]>> getKernels() {
+        return dupKernelList(kernels);
+    }
+
+    protected static ArrayList<ArrayList<float[][]>> dupKernelList(ArrayList<ArrayList<float[][]>> l) {
+        ArrayList<ArrayList<float[][]>> ret = new ArrayList<ArrayList<float[][]>>();
+
+        for (int i = 0 ; i < l.size() ; i++) {
+            ret.add(new ArrayList<float[][]>());
+            for (int j = 0 ; j < l.get(0).size() ; j++) {
+                ret.get(i).add(Utils.dupMatrix(l.get(i).get(j)));
+            }
+        }
+
+        return ret;
+    }
+
+}

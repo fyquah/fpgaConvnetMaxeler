@@ -1,0 +1,18 @@
+// package nothing;
+
+public class PoolingParameters {
+    public Dimension inputDimension, outputDimension;
+    public int poolingDim;
+    public PoolingUnit.Type poolingType;
+
+    public PoolingParameters(Dimension argInputDim, int argPoolingDim, PoolingUnit.Type argType) {
+        inputDimension = argInputDim;
+        poolingDim = argPoolingDim;
+        outputDimension = new Dimension(
+            inputDimension.height() / poolingDim,
+            inputDimension.width() / poolingDim,
+            inputDimension.channels()
+        );
+        poolingType = argType;
+    }
+}

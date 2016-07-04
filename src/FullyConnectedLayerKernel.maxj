@@ -1,0 +1,128 @@
+// package nothing;
+
+import java.util.ArrayList;
+
+import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
+import com.maxeler.maxcompiler.v2.kernelcompiler.KernelLib;
+import com.maxeler.maxcompiler.v2.kernelcompiler.KernelParameters;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVector;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVectorType;
+
+public class FullyConnectedLayerKernel extends Kernel {
+    public int nIn, nOut, foldingFactor, loopIterations;
+    public DFEVectorType<DFEVar> inputType, outputType;
+    public DFEVector<DFEVar> input, output;
+    public DFEVar iter;
+    // foldingFactor = [1, nIn] (number of multipliers per output neuron]
+    public float[][] mat; // assumed it is in the form of mat[n_in][n_out]
+    private final DotProductUnit[] dotProductUnits;
+
+    public FullyConnectedLayerKernel(KernelParameters kp) {
+        super(kp);
+
+        // HARD CODED ARGUMENTS
+        nIn = 16;
+        nOut = 16;
+        foldingFactor = nIn;
+        mat = new float[nIn][nOut];
+
+
+        for (int i = 0 ; i < nIn ; i++) {
+            for (int j = 0 ; j < nOut ; j++) {
+                mat[i][j] = (float) (0.001 * (i * nOut + j - nIn * nOut / 2));
+            }
+        }
+        // TO BE CORRECTED LATER ON
+
+        // derived properties
+        inputType = new DFEVectorType<DFEVar>(GlobalConfig.dataType, nIn);
+        outputType = new DFEVectorType<DFEVar>(GlobalConfig.dataType, nOut);
+        input = inputType.newInstance(this);
+        output = outputType.newInstance(this);
+        dotProductUnits = new DotProductUnit[nOut];
+        loopIterations = Utils.divCeil(nIn, foldingFactor);
+
+        if (loopIterations == 1) {
+            iter = constant.var(dfeUInt(1), 0);
+        } else {
+            iter = control.count.simpleCounter(Utils.ceilLog2(loopIterations), loopIterations);
+        }
+
+        ArrayList<DFEVar> dotProductOutputs = new ArrayList<DFEVar>();
+        float[][] matPrime = Utils.transpose(mat);
+        // end of dervied properties
+
+        for (int o = 0 ; o < nOut ; o++) {
+            dotProductUnits[o] = new DotProductUnit(this, matPrime[o]);
+            dotProductUnits[o].setInput(input);
+            output[o] <== dotProductUnits[o].output;
+        }
+
+        input <== io.input("x", inputType, iter.eq(0));
+        io.output("y", output, outputType, iter.eq(loopIterations - 1));
+    }
+
+    private class DotProductUnit extends KernelLib {
+        public DFEVar output;
+        public DFEVector<DFEVar> input;
+        public float[] otherVector;
+
+        DotProductUnit(Kernel kernel, float [] v) {
+            super(kernel);
+
+            input = inputType.newInstance(this);
+            otherVector = v;
+            output = GlobalConfig.dataType.newInstance(this);
+
+            DFEVar prev = stream.offset(output, -1);
+            ArrayList<DFEVar> adderOutputs = new ArrayList<DFEVar>();
+
+            for (int m = 0 ; m < foldingFactor ; m++) {
+                adderOutputs.add(getMuxedInput(m) * getMuxedParam(m));
+            }
+
+            optimization.pushPipeliningFactor(0.0);
+            DFEVar additionResult = Utils.logarithmAdderTree(adderOutputs.toArray(new DFEVar[adderOutputs.size()]));
+            output <== iter.eq(0) ? prev + additionResult : additionResult;
+            optimization.popPipeliningFactor();
+        }
+
+        protected DFEVar getMuxedInput(int multiplierId) {
+            if (loopIterations == 1) {
+                return input[multiplierId];
+            }
+
+            ArrayList<DFEVar> arr = new ArrayList<DFEVar>();
+
+            for (int i = 0 ; i < loopIterations ; i++) {
+                arr.add(input[multiplierId * loopIterations + i]);
+            }
+
+            return control.mux(iter, arr);
+        }
+
+        protected DFEVar getMuxedParam(int multiplierId) {
+            if (loopIterations == 1) {
+                return constant.var(GlobalConfig.dataType,
+                    otherVector[multiplierId]);
+            }
+
+            ArrayList<DFEVar> arr = new ArrayList<DFEVar>();
+
+            for (int i = 0 ; i < loopIterations ; i++) {
+                arr.add(constant.var(GlobalConfig.dataType, otherVector[multiplierId * loopIterations + i]));
+            }
+
+            return control.mux(iter, arr);
+        }
+
+        public void setInput(DFEVector<DFEVar> x) {
+            input <== x;
+        }
+
+        public DFEVar isReady() {
+            return iter.eq(loopIterations - 1);
+        }
+    }
+}

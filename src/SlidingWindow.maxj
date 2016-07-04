@@ -1,0 +1,46 @@
+// package nothing;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVector;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVectorType;
+
+public class SlidingWindow  {
+    DFEVector<DFEVar> output_;
+
+    // slides a 2d convolution window
+    // around a input stream
+    SlidingWindow(
+        Kernel argKernel,
+        DFEVar input,
+        int inputHeight,
+        int inputWidth,
+        int kernelDim,
+        int cyclesToHoldWindow
+    ) {
+         DFEVectorType<DFEVar> vectorType = new DFEVectorType<DFEVar>(input.getType(), kernelDim * kernelDim);
+         output_ = vectorType.newInstance(argKernel);
+
+        for (int i = 0 ; i < kernelDim ; i++) {
+            for (int j = 0 ; j < kernelDim ; j++) {
+                int offset = cyclesToHoldWindow * ((i - kernelDim / 2) * inputWidth + (j - kernelDim / 2));
+                output_[i * kernelDim + j] <== argKernel.stream.offset(input, offset);
+            }
+        }
+    }
+
+    public DFEVector<DFEVar> output() {
+        return output_;
+    }
+
+    public List<DFEVar> asList() {
+        List<DFEVar> l = new ArrayList<DFEVar>();
+        for (int i = 0 ; i < output_.getSize() ; i++) {
+            l.add(output_[i]);
+        }
+        return l;
+    }
+}

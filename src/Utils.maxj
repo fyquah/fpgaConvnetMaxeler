@@ -1,0 +1,207 @@
+// package nothing;
+
+import java.util.ArrayList;
+
+import maxpower.ops.AssociativeOp;
+import maxpower.utils.TreeReduce;
+
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
+
+
+public class Utils {
+    public static int divCeil(int a, int b) {
+        if (a % b == 0) {
+            return a / b;
+        } else {
+            return a / b + 1;
+        }
+    }
+
+    public static double[] toDoubleArray(float [] a) {
+        double [] ret = new double[a.length];
+        for (int i = 0 ; i < a.length ; i++) {
+            ret[i] = a[i];
+        }
+        return ret;
+    }
+
+    public static double[][] toDoubleArray(float [][] a) {
+        double [][] ret = new double[a.length][];
+        for (int i = 0 ; i < a.length ; i++) {
+            ret[i] = new double[a[i].length];
+            for (int j = 0 ; j  < a[i].length ; j++) {
+                ret[i][j] = a[i][j];
+            }
+        }
+        return ret;
+    }
+
+    public static DFEVar[] unrollArray(DFEVar[][] a) {
+        int totalElements = 0;
+        int ctr = 0;
+
+        for (int i = 0 ; i < a.length ; i++) {
+            for (int j= 0 ; j < a[i].length ; j++) {
+                totalElements++;
+            }
+        }
+
+        DFEVar[] ret = new DFEVar[totalElements];
+
+        for (int i = 0 ; i < a.length ; i++) {
+            for (int j = 0 ; j < a[i].length ; j++) {
+                ret[ctr] = a[i][j];
+                ctr++;
+            }
+        }
+
+        return ret;
+    }
+
+    public static float[] unrollArray(float [][] a) {
+        int totalElements = 0;
+        int ctr = 0;
+
+        for (int i = 0 ; i < a.length ; i++) {
+            for (int j= 0 ; j < a[i].length ; j++) {
+                totalElements++;
+            }
+        }
+
+        float[] ret = new float[totalElements];
+
+        for (int i = 0 ; i < a.length ; i++) {
+            for (int j = 0 ; j < a[i].length ; j++) {
+                ret[ctr] = a[i][j];
+                ctr++;
+            }
+        }
+
+        return ret;
+    }
+
+    public static double[] unrollArray(double[][] a) {
+        int totalElements = 0;
+        int ctr = 0;
+
+        for (int i = 0 ; i < a.length ; i++) {
+            for (int j= 0 ; j < a[i].length ; j++) {
+                totalElements++;
+            }
+        }
+
+        double[] ret = new double[totalElements];
+
+        for (int i = 0 ; i < a.length ; i++) {
+            for (int j = 0 ; j < a[i].length ; j++) {
+                ret[ctr] = a[i][j];
+                ctr++;
+            }
+        }
+
+        return ret;
+    }
+
+    public static DFEVar treeReduceAdd(ArrayList<DFEVar> l) {
+        return TreeReduce.reduce(new AssociativeOp<DFEVar>() {
+            @Override
+            public DFEVar op(DFEVar a, DFEVar b) { return a + b; }
+        }, l);
+    }
+
+
+    public static DFEVar logarithmAdderTree(DFEVar[] arr) {
+        if (arr.length == 1) {
+            return arr[0];
+        }
+
+        int mid = arr.length / 2;
+        DFEVar[] left = new DFEVar[mid];
+        DFEVar[] right = new DFEVar[arr.length - mid];
+
+        for (int i = 0 ; i < mid ; i++) {
+            left[i] = arr[i];
+        }
+
+        for (int i = mid ; i < arr.length ; i++) {
+            right[i - mid] = arr[i];
+        }
+
+        return logarithmAdderTree(left) + logarithmAdderTree(right);
+    }
+
+    public static DFEVar logarithmAdderTree(ArrayList<DFEVar> l) {
+        return logarithmAdderTree(l.toArray(new DFEVar[l.size()]));
+    }
+
+    public static int ceilLog2(int a) {
+        int highest = 0;
+        int numSet = 0;
+
+        for (int i = 0 ; i < 32 ; i++) {
+            if (((a >> i) & 1) == 1) {
+                numSet++;
+                highest = i;
+            }
+        }
+
+        if (numSet == 1) {
+            return highest;
+        } else {
+            return highest + 1;
+        }
+    }
+
+    public boolean isPerfectSquare(int x) {
+        int a = (int) Math.sqrt(x);
+        return a * a == x;
+    }
+
+    public static float[][] transpose(float[][] mat) {
+        int r = mat.length;
+        int c = mat[0].length;
+        float[][] ret = new float[c][r];
+
+        for (int i = 0 ; i < r ; i++) {
+            for (int j = 0 ; j < c ; j++) {
+                ret[j][i] = mat[i][j];
+            }
+        }
+
+        return ret;
+    }
+
+    public static float[][] dupMatrix(float[][] mat) {
+        float[][] ret = new float[mat.length][mat[0].length];
+
+        for (int i = 0 ; i < mat.length ; i++) {
+            for (int j= 0 ; j < mat[i].length ;j++) {
+                ret[i][j] = mat[i][j];
+            }
+        }
+
+        return ret;
+    }
+
+    public static <T> ArrayList<T> dupArrayList(ArrayList<T> a, T... b) {
+        ArrayList<T> ret = new ArrayList<T>();
+
+        for (int i = 0; i < a.size() ; i++) {
+            ret.add(a[i]);
+        }
+
+        for (int i = 0; i < b.length ; i++) {
+            ret.add(b[i]);
+        }
+
+        return ret;
+    }
+
+    public static int sum (int [] a) {
+        int s = 0;
+        for (int i = 0 ; i < a.length ; i++) {
+            s = s + a[i];
+        }
+        return s;
+    }
+}

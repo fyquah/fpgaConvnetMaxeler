@@ -1,0 +1,25 @@
+// package nothing;
+
+public class Dimension {
+    private final int height_;
+    private final int width_;
+    private final int channels_;
+
+    public Dimension(int arg_height, int arg_width, int arg_channels) {
+        height_ = arg_height;
+        width_ = arg_width;
+        channels_ = arg_channels;
+    }
+
+    public int height() {
+        return height_;
+    }
+
+    public int width() {
+        return width_;
+    }
+
+    public int channels() {
+        return channels_;
+    }
+}

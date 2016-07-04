@@ -1,0 +1,96 @@
+// package nothing;
+
+import maxpower.ops.AssociativeOp;
+import maxpower.utils.TreeReduce;
+
+import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
+import com.maxeler.maxcompiler.v2.kernelcompiler.KernelLib;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Count;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Count.Counter;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.CounterChain;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
+
+public class PoolingUnit extends KernelLib {
+    public enum Type {
+        Max, Average
+    }
+
+    private final DFEVar output_;
+    private final DFEVar row, col, rowStride, colStride;
+    private final DFEVar input;
+    private final Kernel kernel;
+    private final SlidingWindow slidingWindow;
+    private final int inputHeight, inputWidth, kernelDim;
+    private final AssociativeOp<DFEVar> op;
+    private static final AssociativeOp<DFEVar> dfeMaxOp = new AssociativeOp<DFEVar>(){
+        @Override
+        public DFEVar op(DFEVar a, DFEVar b) { return a > b ? a : b; }
+    };
+    private static final AssociativeOp<DFEVar> dfeSumOp = new AssociativeOp<DFEVar>() {
+        @Override
+        public DFEVar op(DFEVar a, DFEVar b) { return a + b; }
+    };
+
+    public PoolingUnit (Kernel argKernel, Type type, int argInputHeight, int argInputWidth, int argKernelDim) {
+        super(argKernel);
+
+        kernel = argKernel;
+        inputHeight = argInputHeight;
+        inputWidth = argInputWidth;
+        kernelDim = argKernelDim;
+        input = GlobalConfig.dataType.newInstance(this);
+        slidingWindow = new SlidingWindow(
+            kernel,
+            input,
+            inputHeight, inputWidth, kernelDim,
+            1
+        );
+        CounterChain chain = control.count.makeCounterChain();
+        row = chain.addCounter(inputHeight, 1);
+        col = chain.addCounter(inputWidth, 1);
+
+        colStride = control.count.simpleCounter(
+            Utils.ceilLog2(kernelDim), kernelDim);
+        Counter c = control.count.makeCounter(
+            control.count.makeParams(2)
+                .withMax(3)
+                .withInc(1)
+                .withWrapMode(Count.WrapMode.COUNT_LT_MAX_THEN_WRAP)
+                .withEnable(col.eq(inputWidth - 1))
+        );
+        rowStride = c.getCount();
+
+        switch (type) {
+        case Average:
+            op = dfeSumOp;
+            break;
+        case Max:
+        default:
+            op = dfeMaxOp;
+            break;
+        }
+
+        output_ = TreeReduce.reduce(op, slidingWindow.asList());
+    }
+
+    public void setInput(DFEVar x) {
+        input <== x;
+    }
+
+    public DFEVar output() {
+        return output_;
+    }
+
+    private DFEVar isBorder() {
+        return row < kernelDim / 2 | row >= (inputHeight - kernelDim / 2)
+            | col < kernelDim / 2 | col >= (inputWidth - kernelDim / 2);
+    }
+
+    private DFEVar isValidStride() {
+        return rowStride.eq(kernelDim / 2) & colStride.eq(kernelDim / 2);
+    }
+
+    public DFEVar isOutputReady() {
+        return ~isBorder() & isValidStride();
+    }
+}

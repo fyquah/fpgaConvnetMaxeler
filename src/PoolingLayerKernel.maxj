@@ -1,0 +1,57 @@
+// package nothing;
+
+import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
+import com.maxeler.maxcompiler.v2.kernelcompiler.KernelParameters;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVector;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVectorType;
+
+public class PoolingLayerKernel extends Kernel {
+    Dimension inputDimension, outputDimension;
+    int poolingDim;
+    PoolingUnit.Type poolingType;
+    PoolingUnit[] poolingUnits;
+    DFEVectorType<DFEVar> inputType, outputType;
+
+    public PoolingLayerKernel(KernelParameters kp, PoolingParameters pp) {
+        super(kp);
+
+        // Parameters from PoolingParameters
+        inputDimension = pp.inputDimension;
+        poolingDim = pp.poolingDim;
+        outputDimension = pp.outputDimension;
+        poolingType = pp.poolingType;
+        // end of extracted parameters
+
+        // assume that inputHeight % poolingDim == 0
+        // && inputWidth % poolingDim == 0
+
+        // derived properties
+        int nChannels = inputDimension.channels();
+        inputType = new DFEVectorType<DFEVar>(GlobalConfig.dataType, nChannels);
+        outputType = new DFEVectorType<DFEVar>(GlobalConfig.dataType, nChannels);
+
+        DFEVector<DFEVar> input = inputType.newInstance(this);
+        DFEVector<DFEVar> output = outputType.newInstance(this);
+
+        poolingUnits = new PoolingUnit[inputDimension.channels()];
+        for (int i = 0 ; i < inputDimension.channels() ; i++) {
+            poolingUnits[i] = new PoolingUnit(
+                this,
+                poolingType,
+                inputDimension.height(),
+                inputDimension.width(),
+                poolingDim
+            );
+            poolingUnits[i].setInput(input[i]);
+            output[i] <== poolingUnits[i].output();
+        }
+        // end of dervived properties
+
+        // set the kernel I/O interface
+        DFEVector<DFEVar> x = io.input("x", inputType);
+        input <== x;
+        debug.simPrintf("output = %.4f\n", output[0]);
+        io.output("y", output, outputType, poolingUnits[0].isOutputReady());
+    }
+}

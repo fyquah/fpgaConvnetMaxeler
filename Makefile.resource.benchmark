@@ -1,0 +1,14 @@
+resource_bench_1_3_$(DFEModel)_DFE_SIM/results/resource_bench_1_3.max: $(ENGINEFILES)
+	$(MAXJC) $(JFLAGS) $(ENGINEFILES)
+	MAXAPPJCP='.:$(CP)' MAXSOURCEDIRS='../src' $(MAXJAVARUN) -v -m 8192 $(MANAGER) DFEModel=$(DFEModel) maxFileName=resource_bench_1_3 target='DFE_SIM' enableMPCX=$(MPCX) convFoldingFactor=1 kernelFoldingFactor=3
+
+resource_bench_2_4_$(DFEModel)_DFE_SIM/results/resource_bench_2_4.max: $(ENGINEFILES)
+	$(MAXJC) $(JFLAGS) $(ENGINEFILES)
+	MAXAPPJCP='.:$(CP)' MAXSOURCEDIRS='../src' $(MAXJAVARUN) -v -m 8192 $(MANAGER) DFEModel=$(DFEModel) maxFileName=resource_bench_2_4 target='DFE_SIM' enableMPCX=$(MPCX) convFoldingFactor=2 kernelFoldingFactor=4
+
+RESOURCE_BENCH_MAXFILES=resource_bench_1_3_$(DFEModel)_DFE_SIM/results/resource_bench_1_3.max resource_bench_2_4_$(DFEModel)_DFE_SIM/results/resource_bench_2_4.max
+
+
+RESOURCE_BENCH_INCLUDE_FLAGS=-Iresource_bench_1_3_$(DFEModel)_DFE_SIM/results -Iresource_bench_2_4_$(DFEModel)_DFE_SIM/results
+
+
