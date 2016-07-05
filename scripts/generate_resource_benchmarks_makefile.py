@@ -27,7 +27,7 @@ def make_slic_object_file_path(max_name):
     return max_name + "_sim.o"
 
 my_dir = os.path.dirname(os.path.realpath(__file__))
-makefile = open(os.path.join(my_dir, "../Makefile.resource.benchmark"), "w")
+makefile = open(os.path.join(my_dir, "../build/Makefile.resource.benchmark"), "w")
 max_names = map(lambda (a, b): make_max_name(a, b), factors.factors)
 sim_max_names = map (lambda (a, b): make_max_name(a, b), factors.sim_factors)
 
