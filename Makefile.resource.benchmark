@@ -91,13 +91,6 @@ resource_bench_1_20_$(DFEModel)_DFE/results/resource_bench_1_20.max: $(ENGINEFIL
 resource_bench_1_20_dfe.o: resource_bench_1_20_$(DFEModel)_DFE/results/resource_bench_1_20.max
 	$(SLICCOMPILE) $< $@
 
-resource_bench_2_9_$(DFEModel)_DFE/results/resource_bench_2_9.max: $(ENGINEFILES)
-	$(MAXJC) $(JFLAGS) $(ENGINEFILES)
-	MAXAPPJCP='.:$(CP)' MAXSOURCEDIRS='../src' $(MAXJAVARUN) -v -m 8192 $(MANAGER) DFEModel=$(DFEModel) maxFileName=resource_bench_2_9 target='DFE' enableMPCX=$(MPCX) convFoldingFactor=2 kernelFoldingFactor=9
-
-resource_bench_2_9_dfe.o: resource_bench_2_9_$(DFEModel)_DFE/results/resource_bench_2_9.max
-	$(SLICCOMPILE) $< $@
-
 resource_bench_4_6_$(DFEModel)_DFE/results/resource_bench_4_6.max: $(ENGINEFILES)
 	$(MAXJC) $(JFLAGS) $(ENGINEFILES)
 	MAXAPPJCP='.:$(CP)' MAXSOURCEDIRS='../src' $(MAXJAVARUN) -v -m 8192 $(MANAGER) DFEModel=$(DFEModel) maxFileName=resource_bench_4_6 target='DFE' enableMPCX=$(MPCX) convFoldingFactor=4 kernelFoldingFactor=6
@@ -105,13 +98,13 @@ resource_bench_4_6_$(DFEModel)_DFE/results/resource_bench_4_6.max: $(ENGINEFILES
 resource_bench_4_6_dfe.o: resource_bench_4_6_$(DFEModel)_DFE/results/resource_bench_4_6.max
 	$(SLICCOMPILE) $< $@
 
-RESOURCE_BENCH_MAXFILES=resource_bench_7_2_$(DFEModel)_DFE/results/resource_bench_7_2.max resource_bench_1_3_$(DFEModel)_DFE/results/resource_bench_1_3.max resource_bench_5_6_$(DFEModel)_DFE/results/resource_bench_5_6.max resource_bench_1_13_$(DFEModel)_DFE/results/resource_bench_1_13.max resource_bench_10_1_$(DFEModel)_DFE/results/resource_bench_10_1.max resource_bench_4_9_$(DFEModel)_DFE/results/resource_bench_4_9.max resource_bench_1_6_$(DFEModel)_DFE/results/resource_bench_1_6.max resource_bench_2_6_$(DFEModel)_DFE/results/resource_bench_2_6.max resource_bench_1_20_$(DFEModel)_DFE/results/resource_bench_1_20.max resource_bench_2_9_$(DFEModel)_DFE/results/resource_bench_2_9.max resource_bench_4_6_$(DFEModel)_DFE/results/resource_bench_4_6.max
+RESOURCE_BENCH_MAXFILES=resource_bench_7_2_$(DFEModel)_DFE/results/resource_bench_7_2.max resource_bench_1_3_$(DFEModel)_DFE/results/resource_bench_1_3.max resource_bench_5_6_$(DFEModel)_DFE/results/resource_bench_5_6.max resource_bench_1_13_$(DFEModel)_DFE/results/resource_bench_1_13.max resource_bench_10_1_$(DFEModel)_DFE/results/resource_bench_10_1.max resource_bench_4_9_$(DFEModel)_DFE/results/resource_bench_4_9.max resource_bench_1_6_$(DFEModel)_DFE/results/resource_bench_1_6.max resource_bench_2_6_$(DFEModel)_DFE/results/resource_bench_2_6.max resource_bench_1_20_$(DFEModel)_DFE/results/resource_bench_1_20.max resource_bench_4_6_$(DFEModel)_DFE/results/resource_bench_4_6.max
 
 
-RESOURCE_BENCH_INCLUDE_FLAGS=-Iresource_bench_7_2_$(DFEModel)_DFE/results -Iresource_bench_1_3_$(DFEModel)_DFE/results -Iresource_bench_5_6_$(DFEModel)_DFE/results -Iresource_bench_1_13_$(DFEModel)_DFE/results -Iresource_bench_10_1_$(DFEModel)_DFE/results -Iresource_bench_4_9_$(DFEModel)_DFE/results -Iresource_bench_1_6_$(DFEModel)_DFE/results -Iresource_bench_2_6_$(DFEModel)_DFE/results -Iresource_bench_1_20_$(DFEModel)_DFE/results -Iresource_bench_2_9_$(DFEModel)_DFE/results -Iresource_bench_4_6_$(DFEModel)_DFE/results
+RESOURCE_BENCH_INCLUDE_FLAGS=-Iresource_bench_7_2_$(DFEModel)_DFE/results -Iresource_bench_1_3_$(DFEModel)_DFE/results -Iresource_bench_5_6_$(DFEModel)_DFE/results -Iresource_bench_1_13_$(DFEModel)_DFE/results -Iresource_bench_10_1_$(DFEModel)_DFE/results -Iresource_bench_4_9_$(DFEModel)_DFE/results -Iresource_bench_1_6_$(DFEModel)_DFE/results -Iresource_bench_2_6_$(DFEModel)_DFE/results -Iresource_bench_1_20_$(DFEModel)_DFE/results -Iresource_bench_4_6_$(DFEModel)_DFE/results
 
 
-RESOURCE_BENCH_SLIC_OBJECT_FILES=resource_bench_7_2_sim.o resource_bench_1_3_sim.o resource_bench_5_6_sim.o resource_bench_1_13_sim.o resource_bench_10_1_sim.o resource_bench_4_9_sim.o resource_bench_1_6_sim.o resource_bench_2_6_sim.o resource_bench_1_20_sim.o resource_bench_2_9_sim.o resource_bench_4_6_sim.o
+RESOURCE_BENCH_SLIC_OBJECT_FILES=resource_bench_7_2_sim.o resource_bench_1_3_sim.o resource_bench_5_6_sim.o resource_bench_1_13_sim.o resource_bench_10_1_sim.o resource_bench_4_9_sim.o resource_bench_1_6_sim.o resource_bench_2_6_sim.o resource_bench_1_20_sim.o resource_bench_4_6_sim.o
 
 
 # === END === 
