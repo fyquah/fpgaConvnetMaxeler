@@ -24,7 +24,7 @@ public class fpgaConvNetMaxelerManager {
             params.getKernelFoldingFactor()
         );
         BuildConfig buildConfig = manager.getBuildConfig();
-        buildConfig.setBuildEffort(BuildConfig.Effort.HIGH);
+        buildConfig.setBuildEffort(BuildConfig.Effort.VERY_HIGH);
         buildConfig.setMPPRCostTableSearchRange(params.getMPPRStartCT(), params.getMPPREndCT());
         buildConfig.setMPPRParallelism(params.getMPPRThreads());
         buildConfig.setMPPRRetryNearMissesThreshold(params.getMPPRRetryThreshold());

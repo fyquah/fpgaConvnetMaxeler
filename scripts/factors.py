@@ -15,7 +15,7 @@ factors = [
 
 sim_factors = [
     (1,3),
-    (1,13)
+    (5,3)
 ]
 
 def make_max_name(a, b):

@@ -42,7 +42,7 @@ def dump_bias(bias):
     f = open(filename, "w")
     assert len(bias) == outputChannels
     for b in bias:
-        f.write("%.5f\n" % b)
+        f.write("%.5f " % b)
     f.close()
 
 
