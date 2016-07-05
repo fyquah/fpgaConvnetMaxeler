@@ -218,11 +218,11 @@ public class ConvolutionLayerKernel extends Kernel {
             ArrayList<ChannelFrequency> freqs = getChannelFrequency(indices);
             int totalCount = 0;
             int[] counts;
-
+        
             for (int i = 0 ; i < freqs.size() ; i++) {
-                totalCount += freqs.size();
+                totalCount += freqs[i].frequency;
             }
-           
+
             if (totalCount < loopIterations) {
                 counts = new int[freqs.size() + 1];
                 counts[freqs.size()] = loopIterations - totalCount;

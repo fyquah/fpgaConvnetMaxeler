@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 import factors
+import os
 
 def make_max_name(a, b):
     return "resource_bench_%d_%d" % (a,b)
@@ -25,7 +26,8 @@ def make_include_flag(max_file_name):
 def make_slic_object_file_path(max_name):
     return max_name + "_sim.o"
 
-makefile = open("Makefile.resource.benchmark", "w")
+my_dir = os.path.dirname(os.path.realpath(__file__))
+makefile = open(os.path.join(my_dir, "../Makefile.resource.benchmark"), "w")
 max_names = map(lambda (a, b): make_max_name(a, b), factors.factors)
 sim_max_names = map (lambda (a, b): make_max_name(a, b), factors.sim_factors)
 
