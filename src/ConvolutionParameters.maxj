@@ -7,9 +7,10 @@ public class ConvolutionParameters {
 
     public Dimension inputDim;
     public ArrayList<ArrayList<float[][]>> kernels;
+    public ArrayList<Float> bias;
     public int stride, foldingFactor, kernelFoldingFactor, kernelDim, outputChannels;
 
-    ConvolutionParameters(Dimension argInputDims, int fanOut, ArrayList<ArrayList<float[][]>> argKernels) {
+    ConvolutionParameters(Dimension argInputDims, int fanOut, ArrayList<ArrayList<float[][]>> argKernels, ArrayList<Float> argBias) {
         inputDim = argInputDims;
         outputChannels = fanOut;
         stride = 1;
@@ -17,6 +18,7 @@ public class ConvolutionParameters {
         kernelDim = argKernels.get(0).get(0).length;
         kernelFoldingFactor = kernelDim * kernelDim;
         kernels = dupKernelList(argKernels);
+        bias = Utils.dupArrayList(argBias);
     }
 
     public ArrayList<ArrayList<float[][]>> getKernels() {

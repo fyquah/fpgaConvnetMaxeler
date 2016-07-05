@@ -82,6 +82,26 @@ public class ResourceBenchmarkManager extends CustomManager {
         return ret;
     }
 
+    public static ArrayList<Float> getBias(int outputChannels) {
+        ArrayList<Float> ret = new ArrayList<Float>();
+
+        String filename = "../resource_benchmark/convolution_kernels/bias.txt";
+        try {
+            Scanner in = new Scanner(new FileInputStream(filename));
+
+            for (int i = 0 ; i < outputChannels ; i++) {
+                ret.add(in.nextFloat());
+            }
+
+            in.close();
+        } catch (FileNotFoundException e) {
+            e.printStackTrace();
+            System.exit(1);
+        }
+
+        return ret;
+    }
+
     public ResourceBenchmarkManager(
         EngineParameters engineParameters,
         int convUnitFoldingFactor,
@@ -92,7 +112,8 @@ public class ResourceBenchmarkManager extends CustomManager {
         convParams = new ConvolutionParameters(
             new Dimension(inputHeight, inputWidth, inputChannels),
             outputChannels,
-            getConvolutionKernels(outputChannels, inputChannels, kernelDim)
+            getConvolutionKernels(outputChannels, inputChannels, kernelDim),
+            getBias(outputChannels)
         );
         convParams.kernelFoldingFactor = kernelFoldingFactor;
         convParams.foldingFactor = convUnitFoldingFactor;

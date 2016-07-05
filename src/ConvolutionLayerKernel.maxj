@@ -12,6 +12,7 @@ import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVectorType;
 public class ConvolutionLayerKernel extends Kernel {
     private final DFEVectorType<DFEVar> outputType;
     private final DFEVectorType<DFEVar> inputType;
+    public final ArrayList<Float> bias;
     public ArrayList<ArrayList<float[][]>> convolutionKernels;
     public ArrayList<ConvolutionUnit> convolutionUnits;
     public ArrayList<OneHotDemux> demuxUnits;
@@ -176,6 +177,7 @@ public class ConvolutionLayerKernel extends Kernel {
         foldingFactor = cp.foldingFactor;
         kernelFoldingFactor = cp.kernelFoldingFactor;
         convolutionKernels = cp.getKernels();
+        bias = cp.bias;
         //    End parameter extraction
 
         // derived variables
@@ -255,7 +257,7 @@ public class ConvolutionLayerKernel extends Kernel {
 
         for (int i = 0 ; i < outputDimension.channels() ; i++) {
             outputChannelAccumulator[i].generate(0.0);
-            output[i] <== outputChannelAccumulator[i].output();
+            output[i] <== outputChannelAccumulator[i].output() + bias[i];
         }
 
         input <== io.input("x", inputType, iter.eq(0) & convIter.eq(0));
