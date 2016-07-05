@@ -37,7 +37,16 @@ def dump_kernel(o, i, mat):
     dump_matrix(f, [mat])
     f.close()
 
-def dump_test_data(inputData, mat, i):
+def dump_bias(bias):
+    filename = "convolution_kernels/bias.txt"
+    f = open(filename, "w")
+    assert len(bias) == outputChannels
+    for b in bias:
+        f.write("%.5f\n" % b)
+    f.close()
+
+
+def dump_test_data(inputData, mat, bias, i):
     input_filename = "inputs/input_" + str(i) + ".txt"
     output_filename = "outputs/output_" + str(i) + ".txt"
 
@@ -46,7 +55,7 @@ def dump_test_data(inputData, mat, i):
         out = 0
         for i in range(inputChannels):
             out = out + signal.convolve2d(inputData[i], flip_matrix(mat[o][i]), mode="valid")
-        output[o] = out
+        output[o] = out + bias[o]
 
 
     with open(input_filename, "w") as f: dump_matrix(f, inputData)
@@ -54,17 +63,21 @@ def dump_test_data(inputData, mat, i):
     
 
 kernels = [[None for i in range(inputChannels)] for x in range(outputChannels)]
+bias = 0.05 * np.random.randn(outputChannels)
 
-# inputs
+# bias
+dump_bias(bias)
+
+# kernels
 for o in range(outputChannels):
     for i in range(inputChannels):
         kernels[o][i] = np.random.randn(kernelDim, kernelDim) * 0.1
         dump_kernel(o, i, kernels[o][i])
 
-# outputs
+# inputs and outputs
 for i in range(testCases):
     inputData = [ 0.1 * np.random.randn(inputHeight, inputWidth) for c in range(inputChannels)]
-    dump_test_data(inputData, kernels, i)
+    dump_test_data(inputData, kernels, bias, i)
 
 # properties
 with open("config.properties", "w") as f:
