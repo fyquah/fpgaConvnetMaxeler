@@ -149,6 +149,10 @@ gdbsim:
 	DEBUG_FLAGS="-O0 -g" make $(PRJ)_sim
 	LD_PRELOAD=$(MAXOS_SIM) gdb $(PRJ)_sim
 
+test_blas_sim: ../src/feedforward.cpp ../src/test_blas.cpp
+	g++ $^ -D__SIM__ -o $@
+	./$@
+
 # ---- DFE ----
 
 resource_bench_dfec.o: $(CPUFILES) $(RESOURCE_BENCH_HELPERS) $(RESOURCE_BENCH_MAXFILES)
@@ -162,10 +166,9 @@ resource_bench_dfe: resource_bench_dfec.o $(RESOURCE_BENCH_SLIC_OBJECT_FILES)
 run_resource_bench: resource_bench_dfe
 	SLIC_CONF=$(SLIC_CONF) LD_PRELOAD=$(MAXOS_HW) ./resource_bench_dfe
 
-test_blas_sim: ../src/feedforward.cpp ../src/test_blas.cpp
-	g++ $^ -D__SIM__ -o $@
-	./$@
-
+test_blas: ../src/feedforward.cpp ../src/test_blas.cpp
+	g++ $^ -I ~/OpenBLAS/lapack-netlib/CBLAS/include -L ~/OpenBLAS -o $@
+	LD_LIBRARY_PATH="~/OpenBLAS:$$LD_LIBRARY_PATH" ./$@
 
 gdbdfe:
 	DEBUG_FLAGS="-O0 -g" make build
