@@ -1,13 +1,13 @@
 
 # [(int, int)], fst is foldingFactor, snd is kernelFoldingFactor
 factors = [
+    (7,2),
     (1,3),
     (5,6),
     (1,13),
     (10,1),
     (4,9),
     (1,6),
-    (7,2),
     (5,7),
     (2,6),
     (1,20),
