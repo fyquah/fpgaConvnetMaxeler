@@ -7,6 +7,7 @@ import java.io.InputStream;
 import java.util.Properties;
 
 import com.maxeler.maxcompiler.v2.managers.BuildConfig;
+import com.maxeler.maxcompiler.v2.managers.custom.CustomManager;
 import com.maxeler.maxcompiler.v2.managers.engine_interfaces.CPUTypes;
 import com.maxeler.maxcompiler.v2.managers.engine_interfaces.EngineInterface;
 import com.maxeler.maxcompiler.v2.managers.engine_interfaces.InterfaceParam;
@@ -24,10 +25,12 @@ public class fpgaConvNetMaxelerManager {
         );
         BuildConfig buildConfig = manager.getBuildConfig();
         buildConfig.setBuildEffort(BuildConfig.Effort.HIGH);
-        buildConfig.setDefaultStreamClockFrequency(50);
         buildConfig.setMPPRCostTableSearchRange(params.getMPPRStartCT(), params.getMPPREndCT());
         buildConfig.setMPPRParallelism(params.getMPPRThreads());
         buildConfig.setMPPRRetryNearMissesThreshold(params.getMPPRRetryThreshold());
+
+        CustomManager.Config config = manager.config;
+        config.setDefaultStreamClockFrequency(50);
 
         manager.createSLiCinterface(manager.interfaceDefault());
         manager.build();
