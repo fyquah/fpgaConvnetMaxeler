@@ -114,6 +114,7 @@ void resource_benchmark(max_file_t* max_file, void (*run_fnc)(max_engine_t*, act
                     float v;
 
                     fin >> v;
+                    std::cout << v << " vs " << y[idx] << std::endl;
                     if (!is_similar(v, y[idx])) {
                         correct = false;
                     } else {

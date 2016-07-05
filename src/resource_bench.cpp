@@ -19,7 +19,7 @@ string make_output_file_name (int x) {
 }
 
 bool is_similar (float a, float b) {
-    return fabs(a - b) < 0.0001;
+    return fabs(a - b) < 0.1;
 }
 
 map<string, string> load_config_file(string directory) {
