@@ -162,6 +162,11 @@ resource_bench_dfe: resource_bench_dfec.o $(RESOURCE_BENCH_SLIC_OBJECT_FILES)
 run_resource_bench: resource_bench_dfe
 	SLIC_CONF=$(SLIC_CONF) LD_PRELOAD=$(MAXOS_HW) ./resource_bench_dfe
 
+test_blas_sim: ../src/feedforward.cpp ../src/test_blas.cpp
+	g++ $^ -D__SIM__ -o $@
+	./$@
+
+
 gdbdfe:
 	DEBUG_FLAGS="-O0 -g" make build
 	LD_PRELOAD=$(MAXOS_HW) gdb $(PRJ)_dfe
