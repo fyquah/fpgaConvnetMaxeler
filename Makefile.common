@@ -120,7 +120,7 @@ all: runsim build
 .PHONY: stopsim run cleansim cleandfe debug debughw
 
 # Use various targets for resource benchmarking
-include $(WHEREISROOT)/Makefile.resource.benchmark
+include $(WHEREISROOT)/build/Makefile.resource.benchmark
 
 # ---- shared ----
 
