@@ -37,7 +37,7 @@ for (a, b) in factors.sim_factors:
     max_name = make_max_name(a, b)
     s = """%s: $(ENGINEFILES)
 \t$(MAXJC) $(JFLAGS) $(ENGINEFILES)
-\tMAXAPPJCP='.:$(CP)' MAXSOURCEDIRS='../src' $(MAXJAVARUN) -v -m 8192 $(MANAGER) DFEModel=$(DFEModel) maxFileName=%s target='DFE_SIM' enableMPCX=$(MPCX) convFoldingFactor=%d kernelFoldingFactor=%d
+\tMAXAPPJCP='.:$(CP)' MAXSOURCEDIRS='../src' $(MAXJAVARUN) -v -m 8192 $(MANAGER) resource_bench DFEModel=$(DFEModel) maxFileName=%s target='DFE_SIM' enableMPCX=$(MPCX) convFoldingFactor=%d kernelFoldingFactor=%d
 
 %s_sim.o: %s
 	$(SLICCOMPILE) $< $@
@@ -61,7 +61,7 @@ for (a, b) in factors.factors:
     max_name = make_max_name(a, b)
     s = """%s: $(ENGINEFILES)
 \t$(MAXJC) $(JFLAGS) $(ENGINEFILES)
-\tMAXAPPJCP='.:$(CP)' MAXSOURCEDIRS='../src' $(MAXJAVARUN) -v -m 8192 $(MANAGER) DFEModel=$(DFEModel) maxFileName=%s target='DFE' enableMPCX=$(MPCX) convFoldingFactor=%d kernelFoldingFactor=%d
+\tMAXAPPJCP='.:$(CP)' MAXSOURCEDIRS='../src' $(MAXJAVARUN) -v -m 8192 $(MANAGER) resource_bench DFEModel=$(DFEModel) maxFileName=%s target='DFE' enableMPCX=$(MPCX) convFoldingFactor=%d kernelFoldingFactor=%d
 
 %s_dfe.o: %s
 	$(SLICCOMPILE) $< $@
