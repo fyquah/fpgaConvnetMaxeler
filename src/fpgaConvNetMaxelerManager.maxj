@@ -30,7 +30,7 @@ public class fpgaConvNetMaxelerManager {
         buildConfig.setMPPRRetryNearMissesThreshold(params.getMPPRRetryThreshold());
 
         CustomManager.Config config = manager.config;
-        config.setDefaultStreamClockFrequency(300);
+        config.setDefaultStreamClockFrequency(25);
 
         manager.createSLiCinterface(manager.interfaceDefault());
         manager.build();

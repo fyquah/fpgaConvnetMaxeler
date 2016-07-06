@@ -155,8 +155,8 @@ test_blas_sim: ../src/feedforward.cpp ../src/test_blas.cpp
 
 # ---- DFE ----
 
-resource_bench_dfec.o: $(CPUFILES) $(RESOURCE_BENCH_HELPERS) $(RESOURCE_BENCH_MAXFILES)
-	$(CPUCOMPILER) resource_bench_helper.cpp $(ALL_FLAGS) $(RESOURCE_BENCH_SIM_INCLUDE_FLAGS) \
+resource_bench_dfec.o: ../src/resource_bench.cpp $(RESOURCE_BENCH_HELPERS) $(RESOURCE_BENCH_MAXFILES)
+	$(CPUCOMPILER) resource_bench_helper.cpp $(ALL_FLAGS) $(RESOURCE_BENCH_INCLUDE_FLAGS) \
 	    -I$(MAXCOMPILER_BUILD_DIR) -DDESIGN_NAME=$(PRJ) -c -o resource_bench_helper.o
 	$(CPUCOMPILER) $< $(ALL_FLAGS) $(RESOURCE_BENCH_INCLUDE_FLAGS) -I$(MAXCOMPILER_BUILD_DIR) -DDESIGN_NAME=$(PRJ) -c -o $@
 
