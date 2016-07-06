@@ -1,0 +1,223 @@
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.Properties;
+import java.util.Scanner;
+
+import com.maxeler.maxcompiler.v2.build.EngineParameters;
+import com.maxeler.maxcompiler.v2.managers.custom.CustomManager;
+import com.maxeler.maxcompiler.v2.managers.custom.DFELink;
+import com.maxeler.maxcompiler.v2.managers.custom.blocks.KernelBlock;
+import com.maxeler.maxcompiler.v2.managers.engine_interfaces.CPUTypes;
+import com.maxeler.maxcompiler.v2.managers.engine_interfaces.EngineInterface;
+import com.maxeler.maxcompiler.v2.managers.engine_interfaces.InterfaceParam;
+
+public class LeNetManager extends CustomManager {
+    private final int inputHeight = 28;
+    private final int inputWidth = 28;
+    private final int inputChannels = 1;
+    private ConvolutionParameters conv1Params;
+    private ConvolutionParameters conv2Params;
+    private PoolingParameters pool1Params;
+    private PoolingParameters pool2Params;
+    private ConvolutionLayerKernel conv1Kernel, conv2Kernel;
+    private PoolingLayerKernel pool1Kernel, pool2Kernel;
+    private DfeInputAlligner inputAllignerKernel;
+    private DfeOutputAlligner outputAllignerKernel;
+    
+    public Dimension outputDimension() {
+        return pool2Kernel.outputDimension;
+    }
+
+    public Dimension inputDimension() {
+        return conv1Kernel.inputDimension;
+    }
+
+    public PoolingParameters loadPool1Parameters() {
+        return new PoolingParameters(
+                conv1Params.outputDimension(),
+                2,
+                PoolingUnit.Type.Max);
+    }
+
+    public PoolingParameters loadPool2Parameters() {
+        return new PoolingParameters(
+                conv2Params.outputDimension(),
+                2,
+                PoolingUnit.Type.Max);
+
+    }
+
+    private static ArrayList<Float> getConvBias(int outputChannels, int id) {
+        ArrayList<Float> ret = new ArrayList<Float>();
+        String filename = "../lenet_params/conv" + id + "_bias.txt";
+
+        try {
+            Scanner in = new Scanner(new FileInputStream(filename));
+
+            for (int i = 0 ; i < outputChannels ; i++) {
+                ret.add(in.nextFloat());
+            }
+
+            in.close();
+        } catch (FileNotFoundException e) {
+            e.printStackTrace();
+            System.exit(1);
+        }
+
+        return ret;
+    }
+
+    private static ArrayList<ArrayList<float[][]>> getConvWeights(
+            int outputChannels, int inputChannels, int kernelDim, int id) {
+
+        ArrayList<ArrayList<float[][]>> ret = new ArrayList<ArrayList<float[][]>>();
+        String filename = "../lenet_params/conv" + id + "_weights.txt";
+
+        try {
+            Scanner in = new Scanner(new FileInputStream(filename));
+
+            for (int o = 0 ; o < outputChannels ; o++) {
+                ArrayList<float[][]> arr = new ArrayList<float[][]>();
+
+                for (int i = 0 ; i < inputChannels ; i++) {
+                    float[][] weights = new float[kernelDim][kernelDim];
+
+                    for (int r = 0 ; r < kernelDim ; r++) {
+                        for (int c = 0 ; c < kernelDim ; c++) {
+                            weights[r][c] = in.nextFloat();
+                        }
+                    }
+
+                    arr.add(weights);
+                }
+
+                ret.add(arr);
+            }
+
+            in.close();
+        } catch (FileNotFoundException e) {
+            e.printStackTrace();
+            System.exit(1);
+        }
+
+        return ret;
+    }
+
+    public ConvolutionParameters loadConv1Parameters(
+            int convUnitFoldingFactor, int kernelFoldingFactor) {
+
+        int kernelDim = 5;
+        int outputChannels = 20;
+        int inputChannels = 1;
+
+        ConvolutionParameters convParams = new ConvolutionParameters(
+            new Dimension(inputHeight, inputWidth, inputChannels),
+            outputChannels,
+            getConvWeights(outputChannels, inputChannels, kernelDim, 1),
+            getConvBias(outputChannels, 1)
+        );
+
+        // todo 2
+        convParams.kernelFoldingFactor = kernelFoldingFactor;
+        convParams.foldingFactor = convUnitFoldingFactor;
+
+        return convParams;
+    }
+
+    public ConvolutionParameters loadConv2Parameters(
+            int convUnitFoldingFactor, int kernelFoldingFactor) {
+
+        int kernelDim = 5;
+        int outputChannels = 50;
+        int inputChannels = 20;
+
+        ConvolutionParameters convParams = new ConvolutionParameters(
+            pool1Params.outputDimension,
+            50,
+            getConvWeights(outputChannels, inputChannels, kernelDim, 2),
+            getConvBias(outputChannels, 2)
+        );
+
+        // todo 1
+        convParams.kernelFoldingFactor = kernelFoldingFactor;
+        convParams.foldingFactor = convUnitFoldingFactor;
+
+        return convParams;
+    }
+
+    public LeNetManager (EngineParameters engineParameters) {
+        super(engineParameters);
+
+        conv1Params = loadConv1Parameters(5, 5);
+        pool1Params = loadPool1Parameters();
+        conv2Params = loadConv2Parameters(5, 5);
+        pool2Params = loadPool2Parameters();
+
+        inputAllignerKernel = new DfeInputAlligner(
+            makeKernelParameters("DfeInputAlligner"), inputChannels
+        );
+
+        conv1Kernel = new ConvolutionLayerKernel (
+            makeKernelParameters("conv1"), conv1Params
+        );
+
+        pool1Kernel = new PoolingLayerKernel (
+            makeKernelParameters("pool1"), pool1Params
+        );
+
+        conv2Kernel = new ConvolutionLayerKernel (
+            makeKernelParameters("conv2"), conv2Params
+        );
+
+        pool2Kernel = new PoolingLayerKernel (
+            makeKernelParameters("pool2"), pool2Params
+        );
+
+        outputAllignerKernel = new DfeOutputAlligner(
+            makeKernelParameters("DfeOutputAlligner"), pool2Kernel.outputDimension.channels()
+        );
+
+        KernelBlock[] blocks = new KernelBlock[]{
+            addKernel(inputAllignerKernel),
+            addKernel(conv1Kernel),
+            addKernel(pool1Kernel),
+            addKernel(conv2Kernel),
+            addKernel(pool2Kernel),
+            addKernel(outputAllignerKernel)
+        };
+
+        DFELink x = addStreamFromCPU("x");
+        DFELink y = addStreamToCPU("y");
+
+        blocks[0].getInput("x") <== x;
+
+        for (int i = 1 ; i < blocks.length ; i++) {
+            blocks[i].getInput("x") <==  blocks[i-1].getOutput("y");
+        }
+
+        y <== blocks[blocks.length - 1].getOutput("y");
+    }
+
+    public EngineInterface interfaceDefault() {
+        EngineInterface engine_interface = new EngineInterface();
+        CPUTypes   type = CPUTypes.FLOAT;
+        int        size = type.sizeInBytes();
+        InterfaceParam  N    = engine_interface.addParam("N", CPUTypes.INT);
+
+        engine_interface.setTicks("DfeInputAlligner", N * inputDimension().totalSize());
+        engine_interface.setTicks("conv1", N * conv1Kernel.cyclesPerImage());
+        engine_interface.setTicks("pool1", N * pool1Kernel.cyclesPerImage());
+        engine_interface.setTicks("conv2", N * conv2Kernel.cyclesPerImage());
+        engine_interface.setTicks("pool2", N * pool2Kernel.cyclesPerImage());
+        engine_interface.setTicks("DfeOutputAlligner", N * outputDimension().totalSize());
+
+        engine_interface.setStream("x", type, N * inputDimension().totalSize() * size);
+        engine_interface.setStream("y", type, N * outputDimension().totalSize() * size);
+
+        return engine_interface;
+    }
+}
+

@@ -13,6 +13,10 @@ public class PoolingLayerKernel extends Kernel {
     PoolingUnit[] poolingUnits;
     DFEVectorType<DFEVar> inputType, outputType;
 
+    public int cyclesPerImage() {
+        return inputDimension.height() * inputDimension.width();
+    }
+
     public PoolingLayerKernel(KernelParameters kp, PoolingParameters pp) {
         super(kp);
 

@@ -122,6 +122,9 @@ all: runsim build
 # Use various targets for resource benchmarking
 include $(WHEREISROOT)/build/Makefile.resource.benchmark
 
+# Lenet
+include $(WHEREISROOT)/Makefile.lenet
+
 # ---- shared ----
 
 RESOURCE_BENCH_HELPERS=resource_bench_helper.cpp resource_bench_helper.h

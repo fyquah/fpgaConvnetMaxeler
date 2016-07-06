@@ -22,4 +22,8 @@ public class Dimension {
     public int channels() {
         return channels_;
     }
+
+    public int totalSize() {
+        return height_ * width_ * channels_;
+    }
 }

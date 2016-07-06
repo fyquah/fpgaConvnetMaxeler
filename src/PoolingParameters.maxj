@@ -8,6 +8,7 @@ public class PoolingParameters {
     public PoolingParameters(Dimension argInputDim, int argPoolingDim, PoolingUnit.Type argType) {
         inputDimension = argInputDim;
         poolingDim = argPoolingDim;
+
         outputDimension = new Dimension(
             inputDimension.height() / poolingDim,
             inputDimension.width() / poolingDim,

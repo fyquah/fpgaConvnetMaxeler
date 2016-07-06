@@ -31,6 +31,10 @@ public class ConvolutionLayerKernel extends Kernel {
         return Utils.divCeil(totalConvolutions, foldingFactor);
     }
 
+    public int cyclesPerImage() {
+        return cyclesRequired * inputDimension.height() * inputDimension.width();
+    }
+
     protected class ChannelFrequency {
         public final int channel;
         public final int frequency;
