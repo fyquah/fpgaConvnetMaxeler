@@ -45,7 +45,7 @@ double* feed_forward (const int m, double * mat, layer_t layer) {
 
 double* feed_forward(const int m, double *mat, layer_t layer) {
     double *A = mat;
-    double *B = layer.mat;
+    double *B = layer.weights;
     double *C = new double[m * layer.out];
 
     for (int i = 0 ; i < m ; i++) {

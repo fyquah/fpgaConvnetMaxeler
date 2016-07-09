@@ -23,8 +23,11 @@ def make_header(max_file_name):
 def make_include_flag(max_file_name):
     return "-I%s_$(DFEModel)_DFE/results" % (max_file_name)
 
-def make_slic_object_file_path(max_name):
+def make_sim_slic_object_file_path(max_name):
     return max_name + "_sim.o"
+
+def make_slic_object_file_path(max_name):
+    return max_name + "_dfe.o"
 
 my_dir = os.path.dirname(os.path.realpath(__file__))
 makefile = open(os.path.join(my_dir, "../build/Makefile.resource.benchmark"), "w")
@@ -49,7 +52,7 @@ print >>makefile, "RESOURCE_BENCH_SIM_MAXFILES=" + " ".join(map(make_sim_path, s
 print >>makefile, "\n"
 print >>makefile, "RESOURCE_BENCH_SIM_INCLUDE_FLAGS=" + " ".join(map(make_sim_include_flag, sim_max_names))
 print >>makefile, "\n"
-print >>makefile, "RESOURCE_BENCH_SIM_SLIC_OBJECT_FILES=" + " ".join(map(make_slic_object_file_path, sim_max_names))
+print >>makefile, "RESOURCE_BENCH_SIM_SLIC_OBJECT_FILES=" + " ".join(map(make_sim_slic_object_file_path, sim_max_names))
 print >>makefile, "\n"
 print >>makefile, "# === END === "
 print >>makefile, "\n"
