@@ -67,15 +67,16 @@ public class TestPoolingLayerKernel {
         }
     }
 
-    /*
     @Test
     public void testOddDim() {
         int[] kernelDims = new int[]{3, 7};
 
         for (int k = 0 ; k < kernelDims.length ; k++) {
             int kernelDim = kernelDims[k];
+            int inputHeight = kernelDim * 5;
+            int inputWidth = kernelDim * 5;
             SimulationManager manager = new SimulationManager("PoolingTest");
-            Dimension inputDimension = new Dimension(28, 28, 1);
+            Dimension inputDimension = new Dimension(inputHeight, inputWidth, 1);
             PoolingParameters poolingParams = new PoolingParameters(
                     inputDimension, kernelDim, PoolingUnit.Type.Max);
             PoolingLayerKernel kernel = new PoolingLayerKernel(
@@ -88,8 +89,8 @@ public class TestPoolingLayerKernel {
             ArrayList<Bits> x = new ArrayList<Bits>();
             ArrayList<Double> ori_x = new ArrayList<Double>();
 
-            for (int i = 0 ; i < 28 ; i++) {
-                for (int j = 0 ; j< 28 ; j++) {
+            for (int i = 0 ; i < inputHeight ; i++) {
+                for (int j = 0 ; j< inputWidth ; j++) {
                     ori_x.add((double) 0.01 * (i + j));
                     x.add(Utils.doubleToBits((double) 0.01 * (i + j)));
                 }
@@ -101,15 +102,15 @@ public class TestPoolingLayerKernel {
             List<Bits> y = manager.getOutputDataRaw("y");
             List<Double> ey = new ArrayList<Double>();
 
-            for (int r = 0 ; r < 28 ; r++) {
-                for (int c = 0 ; c < 28 ; c++) {
+            for (int r = 0 ; r < inputHeight ; r++) {
+                for (int c = 0 ; c < inputWidth ; c++) {
                     if ((r - kernelDim / 2) % kernelDim == 0 &&
                             (c - kernelDim / 2) % kernelDim == 0) {
                         double m = 0.0;
 
-                        for (int i = -kernelDim / 2 ; i < kernelDim /2 ; i++) {
-                            for (int j = -kernelDim / 2 ; j < kernelDim /2 ; j++) {
-                                m = Math.max(ori_x[(r + i) + 28 * (c + j)], m);
+                        for (int i = - (kernelDim / 2) ; i <= kernelDim / 2 ; i++) {
+                            for (int j = -(kernelDim / 2) ; j <= kernelDim /2 ; j++) {
+                                m = Math.max(ori_x[(r + i) * inputWidth + (c + j)], m);
                             }
                         }
 
@@ -120,12 +121,10 @@ public class TestPoolingLayerKernel {
 
             assertTrue(y.size() == ey.size());
             for (int t = 0 ; t < y.size() ; t++) {
-                System.out.println(ey[t] + " " + Utils.bitsToDouble(y[t]));
                 double d = Math.abs(ey[t]  - Utils.bitsToDouble(y[t]));
                 assertTrue(d < 0.1);
             }
         }
     }
-    */
 }
 
