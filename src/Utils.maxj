@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import maxpower.ops.AssociativeOp;
 import maxpower.utils.TreeReduce;
 
+import com.maxeler.maxcompiler.v2.utils.Bits;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
 
 
@@ -203,5 +204,46 @@ public class Utils {
             s = s + a[i];
         }
         return s;
+    }
+
+    public static Bits doubleToBits(double x) {
+        Bits ret = Bits.allZeros(GlobalConfig.fracBits + GlobalConfig.intBits);
+
+        double top = Math.pow(2, GlobalConfig.intBits - 1);
+
+        for (int i = GlobalConfig.fracBits + GlobalConfig.intBits - 1 ; i >= 0; i--) {
+            if (top < x) {
+                x = x - top;
+                ret.setBit(i, true);
+            }
+
+            top = top / 2;
+        }
+
+        return ret;
+    }
+
+    public static double bitsToDouble(Bits bits) {
+        double ret = 0.0;
+        double tmp = 0.5;
+
+        for (int i = GlobalConfig.fracBits - 1; i >= 0; i--) {
+            if (bits.getBit(i)) {
+                ret += tmp;
+            }
+
+            tmp = tmp / 2;
+        }
+
+        tmp = 1;
+        for (int i = 0 ; i < GlobalConfig.intBits ; i++) {
+            if (bits.getBit(i + GlobalConfig.fracBits)) {
+                ret += tmp;
+            }
+
+            tmp *= 2;
+        }
+
+        return ret;
     }
 }
