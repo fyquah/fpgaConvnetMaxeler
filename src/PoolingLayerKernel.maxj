@@ -55,7 +55,6 @@ public class PoolingLayerKernel extends Kernel {
         // set the kernel I/O interface
         DFEVector<DFEVar> x = io.input("x", inputType);
         input <== x;
-        debug.simPrintf("output = %.4f\n", output[0]);
         io.output("y", output, outputType, poolingUnits[0].isOutputReady());
     }
 }

@@ -1,7 +1,10 @@
 #ifndef MNIST_H
 #define MNIST_H
 
-void read_mnist_images(vector<vector<double> > &arr, std::string filename);
-void read_mnist_labels(vector<int> & arr, std::string filename);
+#include <string>
+#include <vector>
+
+void read_mnist_images(std::vector<std::vector<double> > &arr, std::string filename);
+void read_mnist_labels(std::vector<int> & arr, std::string filename);
 
 #endif

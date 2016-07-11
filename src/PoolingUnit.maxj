@@ -49,16 +49,24 @@ public class PoolingUnit extends KernelLib {
         row = chain.addCounter(inputHeight, 1);
         col = chain.addCounter(inputWidth, 1);
 
-        colStride = control.count.simpleCounter(
-            Utils.ceilLog2(kernelDim), kernelDim);
-        Counter c = control.count.makeCounter(
-            control.count.makeParams(2)
-                .withMax(3)
+        Counter colStrideCtr = control.count.makeCounter(
+            control.count.makeParams(Utils.ceilLog2(kernelDim))
+                .withMax(kernelDim)
                 .withInc(1)
+                .withInitValue(kernelDim / 2)
+                .withWrapMode(Count.WrapMode.COUNT_LT_MAX_THEN_WRAP)
+        );
+        colStride = colStrideCtr.getCount();
+
+        Counter rowStrideCtr = control.count.makeCounter(
+            control.count.makeParams(Utils.ceilLog2(kernelDim))
+                .withMax(kernelDim)
+                .withInc(1)
+                .withInitValue(kernelDim / 2)
                 .withWrapMode(Count.WrapMode.COUNT_LT_MAX_THEN_WRAP)
                 .withEnable(col.eq(inputWidth - 1))
         );
-        rowStride = c.getCount();
+        rowStride = rowStrideCtr.getCount();
 
         switch (type) {
         case Average:
@@ -82,8 +90,30 @@ public class PoolingUnit extends KernelLib {
     }
 
     private DFEVar isBorder() {
-        return row < kernelDim / 2 | row >= (inputHeight - kernelDim / 2)
-            | col < kernelDim / 2 | col >= (inputWidth - kernelDim / 2);
+        DFEVar flag = constant.var(dfeBool(), 0);
+
+        if (kernelDim % 2 == 1) {
+            for (int i = 0 ; i < (kernelDim - 1) / 2 ; i++) {
+                flag = flag | row.eq(i) | col.eq(i)
+                        | row.eq(inputHeight - 1 - i)
+                        | col.eq(inputWidth - 1 - i);
+            }
+
+            return flag;
+        } else {
+            // handle top and left first
+            for (int i = 0 ; i < kernelDim / 2 ; i++) {
+                flag = flag | row.eq(i) | col.eq(i);
+            }
+
+            // handle bottom and right
+            for (int i = 0 ; i < (kernelDim / 2) - 1 ; i++) {
+                flag = flag | row.eq(inputHeight - 1 - i)
+                        | col.eq(inputWidth - 1 - i);
+            }
+
+            return flag;
+        }
     }
 
     private DFEVar isValidStride() {
