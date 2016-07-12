@@ -24,11 +24,22 @@ public class MultiSourceAccumulator extends KernelLib {
         cycleLength = argCycleLength;
 
         if (cycleLength == 1) {
-            iter = control.count.simpleCounter(Utils.ceilLog2(argHoldCycles), argHoldCycles);
-            cycleStage = constant.var(dfeBool(), 0);
+            if (argHoldCycles == 1) {
+                iter = constant.var(dfeBool(), 0);
+                cycleStage = constant.var(dfeBool(), 0);
+            } else {
+                iter = control.count.simpleCounter(Utils.ceilLog2(argHoldCycles), argHoldCycles);
+                cycleStage = constant.var(dfeBool(), 0);
+            }
         } else {
             CounterChain chain = control.count.makeCounterChain();
-            iter = chain.addCounter(argHoldCycles, 1);
+
+            if (argHoldCycles == 1) {
+                iter = constant.var(dfeBool(), 0);
+            } else {
+                iter = chain.addCounter(argHoldCycles, 1);
+            }
+
             cycleStage = chain.addCounter(cycleLength, 1);
         }
 

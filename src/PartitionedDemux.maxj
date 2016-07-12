@@ -36,7 +36,12 @@ public class PartitionedDemux extends OneHotDemux {
         int[] cumulative = accumulate(counts);
 
         CounterChain chain = control.count.makeCounterChain();
-        DFEVar ctr = chain.addCounter(total, 1);
+        DFEVar ctr;
+        if (total == 1) {
+            ctr = constant.var(dfeBool(), 0);
+        } else {
+            ctr = chain.addCounter(total, 1);
+        }
 
         if (tickDelay > 1) {
             chain.addCounter(tickDelay, 1);
