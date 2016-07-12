@@ -36,6 +36,7 @@ public class LeNetManager extends CustomManager {
     }
 
     public PoolingParameters loadPool1Parameters() {
+        conv1Params.outputDimension().print();
         return new PoolingParameters(
                 conv1Params.outputDimension(),
                 2,
@@ -156,6 +157,15 @@ public class LeNetManager extends CustomManager {
         conv2Params = loadConv2Parameters(5, 5);
         pool2Params = loadPool2Parameters();
 
+        conv1Params.inputDimension().print();
+        conv1Params.outputDimension().print();
+        pool1Params.inputDimension.print();
+        pool1Params.outputDimension.print();
+        conv2Params.inputDimension().print();
+        conv2Params.outputDimension().print();
+        pool2Params.inputDimension.print();
+        pool2Params.outputDimension.print();
+
         inputAllignerKernel = new DfeInputAlligner(
             makeKernelParameters("DfeInputAlligner"), inputChannels
         );
@@ -197,6 +207,15 @@ public class LeNetManager extends CustomManager {
         for (int i = 1 ; i < blocks.length ; i++) {
             blocks[i].getInput("x") <==  blocks[i-1].getOutput("y");
         }
+
+        conv1Kernel.inputDimension.print();
+        conv1Kernel.outputDimension.print();
+        pool1Kernel.inputDimension.print();
+        pool1Kernel.outputDimension.print();
+        conv2Kernel.inputDimension.print();
+        conv2Kernel.outputDimension.print();
+        pool2Kernel.inputDimension.print();
+        pool2Kernel.outputDimension.print();
 
         y <== blocks[blocks.length - 1].getOutput("y");
     }

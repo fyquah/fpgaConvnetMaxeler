@@ -22,7 +22,6 @@ static int ReverseInt (int i) {
 void read_mnist_labels(std::vector<int> & arr, std::string filename) {
     ifstream file (filename.c_str(), ios::binary);
 
-
     if (file.is_open()) {
         int magic_number = 0;
         int number_of_labels = 0;
@@ -40,6 +39,8 @@ void read_mnist_labels(std::vector<int> & arr, std::string filename) {
             file.read((char*) &temp,sizeof(temp));
             arr[i] = (int) temp;
         }
+    } else {
+        throw std::string(filename + " is not found!");
     }
 }
 
@@ -73,5 +74,7 @@ void read_mnist_images(vector<vector<double> > &arr, std::string filename) {
                 }
             }
         }
+    } else {
+        throw std::string(filename + " is not found!");
     }
 }

@@ -165,6 +165,27 @@ public class ConvolutionLayerKernel extends Kernel {
         return ret;
     }
 
+    protected void debugPosition(String name) {
+        DFEVar ticksCtr = control.count.simpleCounter(32);
+        CounterChain chain2 = control.count.makeCounterChain();
+        DFEVar e = chain2.addCounter(10000, 1);
+        chain2.addCounter(inputDimension.height(), 1);
+        chain2.addCounter(inputDimension.width(), 1);
+
+        if (loopIterations > 1) {
+            chain2.addCounter(loopIterations, 1);
+        }
+
+        if (convCyclesRequired > 1) {
+            chain2.addCounter(convCyclesRequired, 1);
+        }
+
+        debug.simPrintf(name + " tick = %d e = %d r = %d , c = %d\n",
+                ticksCtr, e,
+                convolutionUnits.get(0).row,
+                convolutionUnits.get(0).col);
+    }
+
     protected ConvolutionLayerKernel(KernelParameters parameters, ConvolutionParameters cp) {
         super(parameters);
 
@@ -263,6 +284,8 @@ public class ConvolutionLayerKernel extends Kernel {
             outputChannelAccumulator[i].generate(0.0);
             output[i] <== outputChannelAccumulator[i].output() + bias[i];
         }
+
+        // debugPosition(parameters.getName());
 
         input <== io.input("x", inputType, iter.eq(0) & convIter.eq(0));
         io.output("y", output, outputType,

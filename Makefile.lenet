@@ -15,9 +15,12 @@ lenet_simc.o: ../src/lenet.cpp $(LENET_SIM_MAXFILE)
 	$(CPUCOMPILER) $< $(ALL_FLAGS) -I$(MAXCOMPILER_BUILD_DIR) -I$(LENET_SIMMAXDIR) -D__SIM__ -DDESIGN_NAME=$(LENET_NAME) -c -o $@
 
 mnist.o: ../src/mnist.cpp
-	$(CPUCOMPILER) $< -c -o $@
+	$(CPUCOMPILER) $< -D__SIM__  -c -o $@
 
-lenet_sim: lenet_sim.o lenet_simc.o mnist.o
+feedforward.o: ../src/feedforward.cpp
+	$(CPUCOMPILER) $< -D__SIM__ -c -o $@
+
+lenet_sim: lenet_sim.o lenet_simc.o mnist.o feedforward.o
 	$(CPUCOMPILER) $(ALL_FLAGS) -o $@ $^ $(LFLAGS)
 
 run_lenet_sim: lenet_sim

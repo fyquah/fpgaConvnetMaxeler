@@ -1,41 +1,70 @@
 #include "feedforward.h"
+#include <fstream>
 
 layer_t layers[N_LAYERS];
 
-double rand_double() {
-    return static_cast <double> (rand()) / static_cast <double> (RAND_MAX); 
+float rand_float() {
+    return static_cast <float> (rand()) / static_cast <float> (RAND_MAX); 
 }
 
-void fully_connected_layers_init () {
-    for (int i = 0 ; i < N_LAYERS ; i++) {
-        layers[i].in = 10;
-        layers[i].out = 30;
-        int total = layers[i].in * layers[i].out;
+void fully_connected_layers_init (layer_t *layers) {
+    layers[0].in = 800;
+    layers[0].out = 500;
+    layers[0].weights = new float[layers[0].in * layers[0].out];
+    layers[0].bias = new float[layers[0].out];
 
-        for (int j = 0 ; j < total ; j++) {
-            layers[i].weights[j] = rand_double();
+    std::ifstream fin("../lenet_params/ip1_weights.txt");
+    for (int i = 0 ; i < layers[0].in ; i++) {
+        for (int j = 0 ; j < layers[0].out ; j++) {
+            fin >> layers[0].weights[i * layers[0].out + j];
         }
     }
+    fin.close();
+
+    fin.open("../lenet_params/ip1_bias.txt");
+    for (int i = 0 ; i < layers[0].out ; i++) {
+        fin >> layers[0].bias[i];
+    }
+    fin.close();
+
+    layers[1].in = 500;
+    layers[1].out = 10;
+    layers[1].weights = new float[layers[1].in * layers[1].out];
+    layers[1].bias = new float[layers[1].out];
+
+    fin.open("../lenet_params/ip2_weights.txt");
+    for (int i = 0 ; i < layers[1].in ; i++) {
+        for (int j = 0 ; j < layers[1].out ; j++) {
+            fin >> layers[1].weights[i * layers[1].out + j];
+        }
+    }
+    fin.close();
+
+    fin.open("../lenet_params/ip2_bias.txt");
+    for (int i = 0 ; i < layers[1].out ; i++) {
+        fin >> layers[1].bias[i];
+    }
+    fin.close();
 }
 
 #ifdef __SIM__
 
-double* feed_forward (const int m, double * mat, layer_t layer) {
+float* feed_forward (const int m, float * mat, layer_t layer) {
     /*
      * mat is m * layer.in
      * return value is m * layer.out
      * this performs a matrix multiplication of mat * layer
      */
-    double *ret = new double[m * layer.out];
+    float *ret = new float[m * layer.out];
     for (int i = 0 ; i < m ; i++) {
         for (int j = 0 ; j < layer.out ; j++) {
-            double x = 0;
+            float x = 0;
             for (int k = 0 ; k < layer.in ; k++) {
                 x += mat[i * layer.in + k] * layer.weights[k * layer.out + j];
             }
             ret[i * layer.out + j] = x + layer.bias[j];
-
         }
+        std::cout << std::endl;
     }
 
     return ret;
@@ -43,10 +72,10 @@ double* feed_forward (const int m, double * mat, layer_t layer) {
 
 #else
 
-double* feed_forward(const int m, double *mat, layer_t layer) {
-    double *A = mat;
-    double *B = layer.weights;
-    double *C = new double[m * layer.out];
+float* feed_forward(const int m, float *mat, layer_t layer) {
+    float *A = mat;
+    float *B = layer.weights;
+    float *C = new float[m * layer.out];
 
     for (int i = 0 ; i < m ; i++) {
         for (int j = 0 ; j < layer.out ; j++) {
@@ -63,11 +92,11 @@ double* feed_forward(const int m, double *mat, layer_t layer) {
 #endif
 
 
-int* get_row_max_index(const int m, const int n, double *mat) {
+int* get_row_max_index(const int m, const int n, float *mat) {
     int* ret = new int[m];
 
     for (int i = 0 ; i < m ; i++) {
-        double best = mat[i * n];
+        float best = mat[i * n];
         int best_index = 0;
 
         for (int j = 1; j < n ; j++) {
@@ -83,8 +112,8 @@ int* get_row_max_index(const int m, const int n, double *mat) {
     return ret;
 }
 
-double* softmax(const int m, const int n, double *mat) {
-    double *ret = new double[m * n];
+float* softmax(const int m, const int n, float *mat) {
+    float *ret = new float[m * n];
 
     for (int i = 0 ; i < m ; i++) {
         for (int j = 0 ; j < n ; j++) {
@@ -93,7 +122,7 @@ double* softmax(const int m, const int n, double *mat) {
     }
 
     for (int i = 0 ; i < m ; i++) {
-        double total = 0;
+        float total = 0;
         for (int j = 0 ; j < n ; j++) {
             total += ret[i * n + j];
         }

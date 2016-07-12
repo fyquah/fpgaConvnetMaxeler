@@ -26,4 +26,9 @@ public class Dimension {
     public int totalSize() {
         return height_ * width_ * channels_;
     }
+
+    public void print() {
+        System.out.println("height = " + height_ + ", width = " + width_ +
+                ", channels = " + channels_);
+    }
 }

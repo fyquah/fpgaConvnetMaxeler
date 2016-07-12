@@ -24,9 +24,14 @@ public class ConvolutionParameters {
     public Dimension outputDimension() {
         // TODO : Consider striding
         return new Dimension(
-                inputDim.height() - kernelDim - 1,
-                inputDim.width()  - kernelDim - 1,
+                inputDim.height() - (kernelDim - 1),
+                inputDim.width()  - (kernelDim - 1),
                 outputChannels);
+    }
+
+    public Dimension inputDimension() {
+        // TODO : Consider striding
+        return inputDim;
     }
 
     public ArrayList<ArrayList<float[][]>> getKernels() {
