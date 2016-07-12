@@ -152,9 +152,9 @@ public class LeNetManager extends CustomManager {
     public LeNetManager (EngineParameters engineParameters) {
         super(engineParameters);
 
-        conv1Params = loadConv1Parameters(5, 5);
+        conv1Params = loadConv1Parameters(20, 25);
         pool1Params = loadPool1Parameters();
-        conv2Params = loadConv2Parameters(5, 5);
+        conv2Params = loadConv2Parameters(500, 5);
         pool2Params = loadPool2Parameters();
 
         conv1Params.inputDimension().print();
