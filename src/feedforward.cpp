@@ -47,7 +47,6 @@ void fully_connected_layers_init (layer_t *layers) {
     fin.close();
 }
 
-#ifdef __SIM__
 
 float* feed_forward (const int m, float * mat, layer_t layer) {
     /*
@@ -70,8 +69,12 @@ float* feed_forward (const int m, float * mat, layer_t layer) {
     return ret;
 }
 
-#else
+/*
+ * Matrix multiplication in openBlas
+ * Don't care for now
+ */
 
+/*
 float* feed_forward(const int m, float *mat, layer_t layer) {
     float *A = mat;
     float *B = layer.weights;
@@ -88,8 +91,7 @@ float* feed_forward(const int m, float *mat, layer_t layer) {
 
     return C;
 }
-
-#endif
+*/
 
 
 int* get_row_max_index(const int m, const int n, float *mat) {
