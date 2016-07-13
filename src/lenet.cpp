@@ -82,7 +82,17 @@ int main() {
         */
 
         std::cout << "Running CNN ... " << std::endl;
-        lenet(N, x, conv_out);
+        max_file_t *max_file = lenet_init();
+        max_engine_t *dfe = max_load(max_file, "*");
+        lenet_actions_t action;
+
+        action.param_N = N;
+        action.instream_x = x;
+        action.outstream_y = conv_out;
+
+        lenet_run(dfe, &action);
+        max_unload(dfe);
+        // lenet(N, x, conv_out);
 
         /*
         for (int i = 0 ; i < N ; i++) {
