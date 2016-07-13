@@ -52,7 +52,7 @@ feedforward.o: ../src/feedforward.cpp
 lenet.o: $(LENET_MAXFILE)
 	$(SLICCOMPILE) $< $@
 
-lenetc.o: ../src/lenet.cpp $(LENET_SIM_MAXFILE)
+lenetc.o: ../src/lenet.cpp $(LENET_MAXFILE)
 	$(CPUCOMPILER) $< $(ALL_FLAGS) -I$(MAXCOMPILER_BUILD_DIR) -I$(LENET_MAXDIR) -DDESIGN_NAME=$(LENET_NAME) -c -o $@
 
 lenet: lenet.o lenetc.o mnist.o feedforward.o
