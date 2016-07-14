@@ -94,6 +94,7 @@ int main() {
         gettimeofday(&t_begin, NULL);
         lenet_run(dfe, &action);
         gettimeofday(&t_end, NULL);
+		std::cout << "Completed feature extraction!" << std::endl;
         max_unload(dfe);
         double begin = double(t_begin.tv_sec) * 1000000 + double(t_begin.tv_usec);
         double end = double(t_end.tv_sec) * 1000000 + double(t_end.tv_usec);
@@ -110,6 +111,7 @@ int main() {
         }
         */
 
+		std::cout << "Computing feedforward layers ..." << std::endl;
         float *a = feed_forward(N, reshape_lenet_conv_out(N, conv_out), layers[0]);
         inplace_relu(N * layers[0].out, a);
         float *b = feed_forward(N, a, layers[1]);
@@ -123,8 +125,14 @@ int main() {
             }
         }
 
+		double throughput = double(N) / delta * 1000000;
+		std::cout << "t_begin.tv_sec = " << t_begin.tv_sec << std::endl;
+		std::cout << "t_begin.tv_usec = " << t_begin.tv_usec << std::endl;
+		std::cout << "t_end.tv_sec = " << t_end.tv_sec << std::endl;
+		std::cout << "t_end.tv_usec = " << t_end.tv_usec << std::endl;
         std::cout << "Total time = " << delta << std::endl;
-        std::cout << "Throughput = " << delta / N << std::endl;
+        std::cout << "Throughput (images per second) = " << throughput << std::endl;
+		std::cout << "GOps = " << throughput * 0.0038 << std::endl;
         std::cout << "Proportion correct " << (double(total_correct) / double(N)) << std::endl;
 
     } catch (const std::string & s) {
