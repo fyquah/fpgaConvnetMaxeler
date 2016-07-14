@@ -154,7 +154,7 @@ public class LeNetManager extends CustomManager {
 
         conv1Params = loadConv1Parameters(20, 25);
         pool1Params = loadPool1Parameters();
-        conv2Params = loadConv2Parameters(500, 5);
+        conv2Params = loadConv2Parameters(50, 25);
         pool2Params = loadPool2Parameters();
 
         conv1Params.inputDimension().print();

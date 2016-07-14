@@ -53,11 +53,11 @@ lenet.o: $(LENET_MAXFILE)
 	$(SLICCOMPILE) $< $@
 
 lenetc.o: ../src/lenet.cpp $(LENET_MAXFILE)
-	$(CPUCOMPILER) $< $(ALL_FLAGS) -I$(MAXCOMPILER_BUILD_DIR) -I$(LENET_MAXDIR) -DDESIGN_NAME=$(LENET_NAME) -c -o $@
+	$(CPUCOMPILER) $< $(ALL_FLAGS) -I$(MAXCOMPILER_BUILD_DIR) -I$(LENET_DFEMAXDIR) -DDESIGN_NAME=$(LENET_NAME) -c -o $@
 
 lenet: lenet.o lenetc.o mnist.o feedforward.o
 	$(CPUCOMPILER) $(ALL_FLAGS) -o $@ $^ $(LFLAGS)
 
 run_lenet: lenet
-	SLIC_CONF=$(SLIC_CONF) LD_PRELOAD=$(MAXOS_HW) ./$<
+	SLIC_CONF="$(SLIC_CONF)" LD_PRELOAD=$(MAXOS_HW) ./$<
 
