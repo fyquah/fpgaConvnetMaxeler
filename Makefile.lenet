@@ -42,6 +42,8 @@ $(LENET_MAXFILE): $(ENGINEFILES)
 	MAXAPPJCP='.:$(CP)' MAXSOURCEDIRS='../src' $(MAXJAVARUN) -v -m 8192 $(MANAGER) le_net \
 		  DFEModel=$(DFEModel) maxFileName=$(LENET_NAME) \
 		  target='DFE' enableMPCX=$(MPCX)
+	cp -r $(HOME)/fpgaConvnetMaxeler \
+	    $(HOME)/lenet-build-backups/"build-`date +"%Y-%m-%d-%H-%M-%S"`"
 
 mnist.o: ../src/mnist.cpp
 	$(CPUCOMPILER) $< -c -o $@
