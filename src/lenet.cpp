@@ -124,7 +124,7 @@ int main() {
         }
 
         std::cout << "Total time = " << delta << std::endl;
-        std::cout << "Throughput = " << delta / 10000 << std::endl;
+        std::cout << "Throughput = " << delta / N << std::endl;
         std::cout << "Proportion correct " << (double(total_correct) / double(N)) << std::endl;
 
     } catch (const std::string & s) {

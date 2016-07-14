@@ -63,7 +63,6 @@ float* feed_forward (const int m, float * mat, layer_t layer) {
             }
             ret[i * layer.out + j] = x + layer.bias[j];
         }
-        std::cout << std::endl;
     }
 
     return ret;
