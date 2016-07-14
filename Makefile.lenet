@@ -59,5 +59,5 @@ lenet: lenet.o lenetc.o mnist.o feedforward.o
 	$(CPUCOMPILER) $(ALL_FLAGS) -o $@ $^ $(LFLAGS)
 
 run_lenet: lenet
-	SLIC_CONF=$(SLIC_CONF) LD_PRELOAD=$(MAXOS_HW) ./$<
+	SLIC_CONF="$(SLIC_CONF)" LD_PRELOAD=$(MAXOS_HW) ./$<
 
