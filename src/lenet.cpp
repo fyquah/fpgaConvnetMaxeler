@@ -42,7 +42,7 @@ int main() {
 #ifdef __SIM__
     int N = 3;
 #else
-    int N = 100;
+    int N = 10000;
 #endif
 
     float *x, *conv_out;
@@ -90,11 +90,17 @@ int main() {
         action.instream_x = x;
         action.outstream_y = conv_out;
 
+        timeval t_begin, t_end;
+        gettimeofday(&t_begin, NULL);
         lenet_run(dfe, &action);
+        gettimeofday(&t_end, NULL);
         max_unload(dfe);
-        // lenet(N, x, conv_out);
+        double begin = double(t_begin.tv_sec) * 1000000 + double(t_begin.tv_usec);
+        double end = double(t_end.tv_sec) * 1000000 + double(t_end.tv_usec);
+        double delta = end - begin;
 
         /*
+        lenet(N, x, conv_out);
         for (int i = 0 ; i < N ; i++) {
             for (int j = 0 ; j < layers[0].in ; j++) {
                 std::cout << conv_out[i * layers[0].in + j] << " ";
@@ -104,28 +110,22 @@ int main() {
         }
         */
 
-        std::cout << "HERE" << std::endl;
         float *a = feed_forward(N, reshape_lenet_conv_out(N, conv_out), layers[0]);
-        for (int i = 0 ; i < 100 ; i++) {
-            std::cout << a[i] << " ";
-        }
-
         inplace_relu(N * layers[0].out, a);
         float *b = feed_forward(N, a, layers[1]);
         float *c = softmax(N, 10, b);
         int *klasses = get_row_max_index(N, 10, c);
+        int total_correct = 0;
 
         for (int i = 0 ; i < N ; i++) {
-            std::cout << "Example " << i << ": " << std::endl;
-            std::cout << "Softmax: " << std::endl;
-            for (int j =0 ; j < 10 ; j++) {
-                std::cout << c[i * 10 + j] << " ";
+            if (klasses[i] == labels[i]) {
+                total_correct++;
             }
-            std::cout << std::endl;
-            std::cout << "Class: " << klasses[i] << std::endl;
-            std::cout << "Expected class: " << labels[i] << std::endl;
-            std::cout << std::endl;
         }
+
+        cout << "Total time = " << delta << endl;
+        cout << "Throughput = " << delta / 10000 << endl;
+        cout << "Proportion correct " << (double(total_correct) / double(N)) << endl;
 
     } catch (const std::string & s) {
         std::cerr << s << std::endl;
