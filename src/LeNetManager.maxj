@@ -156,6 +156,8 @@ public class LeNetManager extends CustomManager {
         int conv1KernelFactor = 0;
         int conv2Factor = 0;
         int conv2KernelFactor = 0;
+        int defaultFrequency = 0;
+
 
         try {
             Properties prop = new Properties();
@@ -168,6 +170,7 @@ public class LeNetManager extends CustomManager {
             conv2Factor = Integer.parseInt(prop.getProperty("conv2Factor"));
             conv1Factor = Integer.parseInt(prop.getProperty("conv1KernelFactor"));
             conv2Factor = Integer.parseInt(prop.getProperty("conv2KernelFactor"));
+            defaultFrequency = Integer.parseInt(prop.getProperty("frequency"));
 
             input.close();
 
@@ -180,6 +183,9 @@ public class LeNetManager extends CustomManager {
         System.out.println("conv1KernelFactor = " + conv1KernelFactor);
         System.out.println("conv2Factor = " + conv2Factor);
         System.out.println("conv2KernelFactor = " + conv2KernelFactor);
+        System.out.println("Default frequency = " + defaultFrequency);
+
+        config.setDefaultStreamClockFrequency(defaultFrequency);
 
         conv1Params = loadConv1Parameters(conv1Factor, conv1KernelFactor);
         pool1Params = loadPool1Parameters();
