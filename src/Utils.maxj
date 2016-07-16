@@ -246,4 +246,43 @@ public class Utils {
 
         return ret;
     }
+
+    public static Bits subBits(Bits bits, int start, int len) {
+        Bits ret = Bits.allZeros(len);
+
+        for (int i = 0 ; i < len ; i++) {
+            if (bits.getBit(start + i)) {
+                ret.setBit(i, true);
+            }
+        }
+
+        return ret;
+    }
+
+    public static void printBits(Bits x) {
+        for (int i = 0 ; i < x.getWidth() ; i++) {
+            System.out.print(x.getBit(i) ? 1 : 0);
+        }
+        System.out.println("");
+    }
+
+    public static Bits concatBits(Bits[] bitsArr) {
+        int width = 0;
+        for (int i = 0;  i < bitsArr.length ; i++) {
+            width += bitsArr[i].getWidth();
+        }
+
+        Bits ret = Bits.allZeros(width);
+
+        int idx = 0;
+
+        for (int i = 0 ; i < bitsArr.length ; i++) {
+            for (int j = 0 ; j < bitsArr[i].getWidth() ; j++) {
+                ret.setBit(idx ,bitsArr[i].getBit(j));
+                idx++;
+            }
+        }
+
+        return ret;
+    }
 }

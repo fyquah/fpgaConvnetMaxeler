@@ -55,7 +55,21 @@ public class fpgaConvNetMaxelerManager {
     }
 
     public static void test(String[] args) {
-        Result result = JUnitCore.runClasses(TestPoolingLayerKernel.class);
+        Result result;
+
+        if (args.length == 0) {
+            result = JUnitCore.runClasses(TestConvolutionLayerKernel.class);
+        } else {
+            result = JUnitCore.runClasses(TestConvolutionLayerKernel.class);
+           
+            /*
+            Class<?>[] act = new Class<?>[args.length];
+            for (int i = 0 ; i < args.length ; i++) {
+
+            }
+            Class<?> act = Class.forName("com.bla.TestActivity");
+            */
+        }
 
 
         if (result.wasSuccessful()) {

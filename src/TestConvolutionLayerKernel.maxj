@@ -1,0 +1,177 @@
+import org.junit.Test;
+import static org.junit.Assert.*;
+import org.junit.runner.Result;
+import java.util.List;
+import java.util.ArrayList;
+import java.util.Scanner;
+import java.io.InputStream;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+
+import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
+import com.maxeler.maxcompiler.v2.kernelcompiler.KernelLib;
+import com.maxeler.maxcompiler.v2.kernelcompiler.KernelParameters;
+import com.maxeler.maxcompiler.v2.managers.standard.SimulationManager;
+import com.maxeler.maxcompiler.v2.utils.Bits;
+
+public class TestConvolutionLayerKernel {
+
+    public static int inputChannels = 10;
+    public static int outputChannels = 20;
+    public static int inputHeight = 28;
+    public static int inputWidth = 28;
+    public static int kernelDim = 5;
+
+    public ArrayList<Double> loadSampleData(String filename, 
+           int height, int width, int totalChannels) {
+        ArrayList<Double> ret = new ArrayList<Double>();
+
+        try {
+            Scanner in = new Scanner(new FileInputStream(filename));
+            for (int r = 0; r < height ; r++) {
+                for (int c = 0 ; c < width ; c++) {
+                    for (int i = 0 ;i < totalChannels ; i++) {
+                        ret.add((double) in.nextFloat());
+                    }
+                }
+            }
+            in.close();
+
+        } catch (FileNotFoundException e) {
+            e.printStackTrace();
+            System.exit(1);
+        }
+
+
+        return ret;
+    }
+
+    public static ArrayList<Float> loadConvolutionBiases() {
+        ArrayList<Float> ret = new ArrayList<Float>();
+
+        String filename = "../resource_benchmark/convolution_kernels/bias.txt";
+        try {
+            Scanner in = new Scanner(new FileInputStream(filename));
+
+            for (int i = 0 ; i < outputChannels ; i++) {
+                ret.add(in.nextFloat());
+            }
+
+            in.close();
+        } catch (FileNotFoundException e) {
+            e.printStackTrace();
+            System.exit(1);
+        }
+
+        return ret;
+    }
+
+    public ArrayList<ArrayList<float[][]>> loadConvolutionKernels() {
+        ArrayList<ArrayList<float[][]>> ret = new ArrayList<ArrayList<float[][]>>();
+
+        for (int o = 0 ; o < outputChannels ; o++) {
+            ArrayList<float[][]> l = new ArrayList<float[][]>();
+
+            for (int i = 0 ; i < inputChannels ; i++) {
+                float mat[][] = new float[kernelDim][kernelDim];
+                String filename = "../resource_benchmark/convolution_kernels/mat_" +
+                    Integer.toString(o) + "_" +
+                    Integer.toString(i) + ".txt";
+
+                try {
+                    Scanner in = new Scanner(new FileInputStream(filename));
+                    for (int r = 0 ; r < kernelDim ; r++) {
+                        for (int c = 0 ; c < kernelDim ; c++) {
+                            mat[r][c] = in.nextFloat();
+                        }
+                    }
+                    in.close();
+                    l.add(mat);
+                } catch (FileNotFoundException e) {
+                    e.printStackTrace();
+                    System.exit(1);
+                }
+            }
+
+            ret.add(l);
+        }
+
+        return ret;
+    }
+
+    public ArrayList<Double> loadInputData(int id) {
+        String filename = "../resource_benchmark/inputs/input_" +
+            Integer.toString(id) + ".txt";
+        return loadSampleData(filename, inputHeight, inputWidth, inputChannels);
+    }
+
+    public ArrayList<Double> loadOutputData(int id) {
+        String filename = "../resource_benchmark/outputs/output_" +
+            Integer.toString(id) + ".txt";
+        return loadSampleData(filename,
+                inputHeight - (kernelDim - 1),
+                inputWidth - (kernelDim - 1),
+                outputChannels);
+    }
+
+    @Test
+    public void testConvolution() {
+        SimulationManager manager = new SimulationManager("TestConvolution");
+        Dimension inputDimension = new Dimension(28, 28, inputChannels);
+        ConvolutionParameters convParams = new ConvolutionParameters(
+                inputDimension, outputChannels,
+                loadConvolutionKernels(), loadConvolutionBiases());
+        ConvolutionLayerKernel kernel = new ConvolutionLayerKernel(
+                manager.makeKernelParameters(), convParams);
+
+        // manager.logInfo("Seed: %d", seed);
+        manager.setKernel(kernel);
+        manager.build();
+
+        ArrayList<Double> ori_x = new ArrayList<Double>();
+
+        for (int t = 0 ; t < 2 ; t++) {
+            ArrayList<Double> inputData = loadInputData(t);
+            ArrayList<Double> expectedOutputData = loadOutputData(t);
+            List<Bits> inputBits = new ArrayList<Bits>();
+            List<Bits> outputBits;
+
+            for (int i = 0 ; i < inputData.size() / inputChannels ; i++) {
+                Bits[] bitsArr = new Bits[inputChannels];
+
+                for (int j = 0 ; j < inputChannels ; j++) {
+                    int idx = i * inputChannels + j;
+                    bitsArr[j] = Utils.doubleToBits(inputData[idx]);
+                }
+
+                inputBits.add(Utils.concatBits(bitsArr));
+            }
+
+            manager.setInputDataRaw("x", inputBits);
+            manager.setKernelCycles(kernel.cyclesPerImage());
+            manager.run();
+            outputBits = manager.getOutputDataRaw("y");
+
+            assertTrue(expectedOutputData.size() / outputBits.size() == outputChannels);
+            assertTrue(expectedOutputData.size() % outputBits.size() == 0 );
+
+            for (int i = 0 ; i < outputBits.size() ; i++) {
+                for (int j = 0 ; j < outputChannels ; j++) {
+                    int totalBits = GlobalConfig.intBits + GlobalConfig.fracBits;
+                    Bits b = Utils.subBits(outputBits[i], j * totalBits, totalBits);
+
+                    System.out.println("j = " + j);
+                    Utils.printBits(Utils.subBits(outputBits[i], j * totalBits, totalBits));
+                    Utils.printBits(Utils.doubleToBits(
+                                expectedOutputData[i*outputChannels+j]));
+
+                    double d = Math.abs(
+                            expectedOutputData[i * outputChannels + j]  - Utils.bitsToDouble(b));
+                    // assertTrue(d < 0.1);
+                }
+            }
+        }
+    }
+}
+
