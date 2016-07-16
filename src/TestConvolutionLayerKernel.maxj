@@ -131,7 +131,7 @@ public class TestConvolutionLayerKernel {
 
         ArrayList<Double> ori_x = new ArrayList<Double>();
 
-        for (int t = 0 ; t < 2 ; t++) {
+        for (int t = 0 ; t < 10 ; t++) {
             ArrayList<Double> inputData = loadInputData(t);
             ArrayList<Double> expectedOutputData = loadOutputData(t);
             List<Bits> inputBits = new ArrayList<Bits>();
@@ -161,14 +161,10 @@ public class TestConvolutionLayerKernel {
                     int totalBits = GlobalConfig.intBits + GlobalConfig.fracBits;
                     Bits b = Utils.subBits(outputBits[i], j * totalBits, totalBits);
 
-                    System.out.println("j = " + j);
-                    Utils.printBits(Utils.subBits(outputBits[i], j * totalBits, totalBits));
-                    Utils.printBits(Utils.doubleToBits(
-                                expectedOutputData[i*outputChannels+j]));
-
                     double d = Math.abs(
                             expectedOutputData[i * outputChannels + j]  - Utils.bitsToDouble(b));
-                    // assertTrue(d < 0.1);
+
+                    assertTrue(d < 0.05);
                 }
             }
         }

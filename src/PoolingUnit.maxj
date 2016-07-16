@@ -2,6 +2,7 @@
 
 import maxpower.ops.AssociativeOp;
 import maxpower.utils.TreeReduce;
+import java.util.List;
 
 import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
 import com.maxeler.maxcompiler.v2.kernelcompiler.KernelLib;
@@ -71,14 +72,22 @@ public class PoolingUnit extends KernelLib {
         switch (type) {
         case Average:
             op = dfeSumOp;
+            output_ = TreeReduce.reduce(op, slidingWindow.asList()) / (kernelDim * kernelDim);
             break;
         case Max:
         default:
             op = dfeMaxOp;
+            output_ = TreeReduce.reduce(op, slidingWindow.asList());
             break;
         }
+    }
 
-        output_ = TreeReduce.reduce(op, slidingWindow.asList());
+    protected void debugDump(List<DFEVar> input, DFEVar output) {
+        debug.simPrintf("[%d] ", isValidStride());
+        for (int i = 0 ; i < input.size() ; i++) {
+            debug.simPrintf("%.5f ", input[i]);
+        }
+        debug.simPrintf("-> %.5f\n", output);
     }
 
     public void setInput(DFEVar x) {

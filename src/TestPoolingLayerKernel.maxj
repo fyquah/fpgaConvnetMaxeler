@@ -11,46 +11,37 @@ import com.maxeler.maxcompiler.v2.managers.standard.SimulationManager;
 import com.maxeler.maxcompiler.v2.utils.Bits;
 
 public class TestPoolingLayerKernel {
+    
+    public List<Double> computeExpected(ArrayList<Double> ori_x, Dimension inputDimension,
+            int kernelDim, PoolingUnit.Type poolingType) {
+        List<Double> ey = new ArrayList<Double>();
+        int inputHeight = inputDimension.height();
+        int inputWidth = inputDimension.width();
+        int channels = inputDimension.channels();
 
-    @Test
-    public void testEvenDim() {
-        for (int kernelDim = 2; kernelDim <= 4 ; kernelDim += 2) {
-            SimulationManager manager = new SimulationManager("PoolingTest");
-            Dimension inputDimension = new Dimension(28, 28, 1);
-            PoolingParameters poolingParams = new PoolingParameters(
-                    inputDimension, kernelDim, PoolingUnit.Type.Max);
-            PoolingLayerKernel kernel = new PoolingLayerKernel(
-                    manager.makeKernelParameters(), poolingParams);
+        for (int r = 0 ; r < inputHeight ; r++) {
+            for (int c = 0 ; c < inputWidth ; c++) {
+                if ((r - kernelDim / 2) % kernelDim == 0 &&
+                        (c - kernelDim / 2) % kernelDim == 0) {
 
-            // manager.logInfo("Seed: %d", seed);
-            manager.setKernel(kernel);
-            manager.build();
+                    for (int chan = 0 ; chan < channels ; chan++) {
+                        double m = poolingType == PoolingUnit.Type.Max ? Double.NEGATIVE_INFINITY : 0.0;
+                        int upper_bound = 0;
+                        if (kernelDim % 2 == 0) {
+                            upper_bound = kernelDim / 2;
+                        } else {
+                            upper_bound = kernelDim / 2 + 1;
+                        }
 
-            ArrayList<Bits> x = new ArrayList<Bits>();
-            ArrayList<Double> ori_x = new ArrayList<Double>();
+                        for (int i = -kernelDim / 2 ; i < upper_bound ; i++) {
+                            for (int j = -kernelDim / 2 ; j < upper_bound; j++) {
+                                int idx = chan + (c + j) * channels + (r + i) * (inputWidth * channels);
 
-            for (int i = 0 ; i < 28 ; i++) {
-                for (int j = 0 ; j< 28 ; j++) {
-                    ori_x.add((double) 0.01 * (i + j));
-                    x.add(Utils.doubleToBits((double) 0.01 * (i + j)));
-                }
-            }
-
-            manager.setInputDataRaw("x", x);
-            manager.setKernelCycles(x.size());
-            manager.run();
-            List<Bits> y = manager.getOutputDataRaw("y");
-            List<Double> ey = new ArrayList<Double>();
-
-            for (int r = 0 ; r < 28 ; r++) {
-                for (int c = 0 ; c < 28 ; c++) {
-                    if ((r - kernelDim / 2) % kernelDim == 0 &&
-                            (c - kernelDim / 2) % kernelDim == 0) {
-                        double m = 0.0;
-
-                        for (int i = -kernelDim / 2 ; i < kernelDim /2 ; i++) {
-                            for (int j = -kernelDim / 2 ; j < kernelDim /2 ; j++) {
-                                m = Math.max(ori_x[(r + i) + 28 * (c + j)], m);
+                                if (poolingType == PoolingUnit.Type.Max) {
+                                    m = Math.max(ori_x[idx], m);
+                                } else if (poolingType == PoolingUnit.Type.Average) {
+                                    m = m + ori_x[idx] / (kernelDim * kernelDim);
+                                }
                             }
                         }
 
@@ -58,73 +49,134 @@ public class TestPoolingLayerKernel {
                     }
                 }
             }
+        }
 
-            assertTrue(ey.size() == y.size());
-            for (int t = 0 ; t < y.size() ; t++) {
-                double d = Math.abs(ey[t]  - Utils.bitsToDouble(y[t]));
-                assertTrue(d < 0.1);
+        return ey;
+    }
+
+    public static double rand() {
+        return (Math.random() - 0.5) * 2;
+    }
+
+    public static ArrayList<Double> initRandomData(Dimension dim) {
+        ArrayList<Double> ori_x = new ArrayList<Double>();
+        int inputHeight = dim.height();
+        int inputWidth = dim.width();
+        int totalChannels = dim.channels();
+
+        for (int i = 0 ; i < inputHeight ; i++) {
+            for (int j = 0 ; j< inputWidth ; j++) {
+                for (int k = 0 ; k < totalChannels ; k++) {
+                    // ori_x.add((double) (i + j) * 0.01);
+                    ori_x.add(rand());
+                }
             }
         }
+
+        return ori_x;
+    }
+
+    public static ArrayList<Bits> toBitsInput(List<Double> input, Dimension inputDimension) {
+        ArrayList<Bits> ret= new ArrayList<Bits>();
+        int inputHeight = inputDimension.height();
+        int inputWidth = inputDimension.width();
+        int totalChannels = inputDimension.channels();
+
+        for (int i = 0 ; i < inputHeight ; i++) {
+            for (int j = 0 ; j < inputWidth ; j++) {
+                Bits[] bitsArr = new Bits[totalChannels];
+
+                for (int k = 0 ; k < totalChannels ; k++) {
+                    int idx = i * (inputWidth * totalChannels) +
+                              j * totalChannels + k;
+
+                    bitsArr[k] = Utils.doubleToBits(input[idx]);
+                }
+
+                ret.add(Utils.concatBits(bitsArr));
+            }
+        }
+
+        return ret;
+    }
+
+    public static ArrayList<Double> toDoubleOutput(List<Bits> output, Dimension outputDimension) {
+        ArrayList<Double> ret= new ArrayList<Double>();
+        int totalChannels = outputDimension.channels();
+
+        for (int i = 0 ; i < outputDimension.height() ; i++) {
+            for (int j = 0 ; j < outputDimension.width() ; j++) {
+                for (int k = 0 ; k < outputDimension.channels() ; k++) {
+                    int idx = i * outputDimension.width() + j;
+                    int totalBits = GlobalConfig.fracBits + GlobalConfig.intBits;
+                    ret.add(
+                        Utils.bitsToDouble(
+                            Utils.subBits(output[idx], k * totalBits, totalBits)));
+                }
+
+            }
+        }
+
+        return ret;
+    }
+
+    public void compareAnswers(List<Double> expected, List<Double> actual) {
+        assertTrue(expected.size() == actual.size());
+        for (int t = 0 ; t < actual.size() ; t++) {
+            double d = Math.abs(expected[t]  - actual[t]);
+            boolean flag = d < 0.1;
+            assertTrue(flag);
+        }
+    }
+
+    public void runSingleTest(Dimension inputDimension, int kernelDim, PoolingUnit.Type type) {
+        SimulationManager manager = new SimulationManager("PoolingTest");
+        PoolingParameters poolingParams = new PoolingParameters(
+                inputDimension, kernelDim, type);
+        PoolingLayerKernel kernel = new PoolingLayerKernel(
+                manager.makeKernelParameters(), poolingParams);
+        Dimension outputDimension = new Dimension(inputDimension.height() / kernelDim,
+                                                  inputDimension.width() / kernelDim ,
+                                                  inputDimension.channels());
+
+
+        // manager.logInfo("Seed: %d", seed);
+        manager.setKernel(kernel);
+        manager.build();
+
+        ArrayList<Double> ori_x = initRandomData(inputDimension);
+        ArrayList<Bits> x = toBitsInput(ori_x, inputDimension);
+
+        manager.setInputDataRaw("x", x);
+        manager.setKernelCycles(inputDimension.height() * inputDimension.width());
+        manager.run();
+
+        List<Bits> raw_y = manager.getOutputDataRaw("y");
+        List<Double> e_y = computeExpected(ori_x, inputDimension, kernelDim, type);
+        List<Double> y = toDoubleOutput(raw_y, outputDimension);
+        compareAnswers(e_y, y);
+    }
+
+    /*
+    @Test
+    public void testMultipleChannels() {
+        int[] arr = new int[]{2, 4, 7};
+        for (int kernelDim : arr) {
+            runSingleTest(new Dimension(28, 28, 20), kernelDim, PoolingUnit.Type.Max);
+        }
+    }
+    */
+
+    @Test
+    public void testEvenDim() {
+        runSingleTest(new Dimension(28, 28, 1), 2, PoolingUnit.Type.Max);
+        runSingleTest(new Dimension(28, 28, 1), 4, PoolingUnit.Type.Max);
     }
 
     @Test
     public void testOddDim() {
-        int[] kernelDims = new int[]{3, 7};
-
-        for (int k = 0 ; k < kernelDims.length ; k++) {
-            int kernelDim = kernelDims[k];
-            int inputHeight = kernelDim * 5;
-            int inputWidth = kernelDim * 5;
-            SimulationManager manager = new SimulationManager("PoolingTest");
-            Dimension inputDimension = new Dimension(inputHeight, inputWidth, 1);
-            PoolingParameters poolingParams = new PoolingParameters(
-                    inputDimension, kernelDim, PoolingUnit.Type.Max);
-            PoolingLayerKernel kernel = new PoolingLayerKernel(
-                    manager.makeKernelParameters(), poolingParams);
-
-            // manager.logInfo("Seed: %d", seed);
-            manager.setKernel(kernel);
-            manager.build();
-
-            ArrayList<Bits> x = new ArrayList<Bits>();
-            ArrayList<Double> ori_x = new ArrayList<Double>();
-
-            for (int i = 0 ; i < inputHeight ; i++) {
-                for (int j = 0 ; j< inputWidth ; j++) {
-                    ori_x.add((double) 0.01 * (i + j));
-                    x.add(Utils.doubleToBits((double) 0.01 * (i + j)));
-                }
-            }
-
-            manager.setInputDataRaw("x", x);
-            manager.setKernelCycles(x.size());
-            manager.run();
-            List<Bits> y = manager.getOutputDataRaw("y");
-            List<Double> ey = new ArrayList<Double>();
-
-            for (int r = 0 ; r < inputHeight ; r++) {
-                for (int c = 0 ; c < inputWidth ; c++) {
-                    if ((r - kernelDim / 2) % kernelDim == 0 &&
-                            (c - kernelDim / 2) % kernelDim == 0) {
-                        double m = 0.0;
-
-                        for (int i = - (kernelDim / 2) ; i <= kernelDim / 2 ; i++) {
-                            for (int j = -(kernelDim / 2) ; j <= kernelDim /2 ; j++) {
-                                m = Math.max(ori_x[(r + i) * inputWidth + (c + j)], m);
-                            }
-                        }
-
-                        ey.add(m);
-                    }
-                }
-            }
-
-            assertTrue(y.size() == ey.size());
-            for (int t = 0 ; t < y.size() ; t++) {
-                double d = Math.abs(ey[t]  - Utils.bitsToDouble(y[t]));
-                assertTrue(d < 0.1);
-            }
-        }
+        runSingleTest(new Dimension(36, 36, 1), 3, PoolingUnit.Type.Average);
+        runSingleTest(new Dimension(35, 35, 1), 7, PoolingUnit.Type.Max);
     }
 }
 

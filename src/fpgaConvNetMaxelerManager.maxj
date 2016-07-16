@@ -1,13 +1,16 @@
 // package nothing;
 
+import org.junit.runner.JUnitCore;
 import java.io.IOException;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Properties;
 import org.junit.runner.JUnitCore;
+import org.junit.runner.Request;
 import org.junit.runner.Result;
 import org.junit.runner.notification.Failure;
+import java.util.List;
 
 import com.maxeler.maxcompiler.v2.managers.BuildConfig;
 import com.maxeler.maxcompiler.v2.managers.custom.CustomManager;
@@ -55,32 +58,58 @@ public class fpgaConvNetMaxelerManager {
     }
 
     public static void test(String[] args) {
-        Result result;
+        Class<?>[] klasses;
+        TestParameters params = new TestParameters(args);
+        List<TestParameters.Arg> testKlasses =
+                TestParameters.parseKlassArg(params.getTestKlass());
+        String[] methodNames = new String[1];  // to make javac happy
 
-        if (args.length == 0) {
-            result = JUnitCore.runClasses(TestConvolutionLayerKernel.class);
-        } else {
-            result = JUnitCore.runClasses(TestConvolutionLayerKernel.class);
-           
-            /*
-            Class<?>[] act = new Class<?>[args.length];
-            for (int i = 0 ; i < args.length ; i++) {
+        if (testKlasses.size() == 0) {
+            klasses = new Class<?>[]{
+                TestPoolingLayerKernel.class
+            };
 
+            methodNames = new String[klasses.length];
+            for (int i =0 ; i < klasses.length ; i++) {
+                methodNames[i] = "";
             }
-            Class<?> act = Class.forName("com.bla.TestActivity");
-            */
+
+        } else {
+            klasses = new Class<?>[testKlasses.size()];
+            methodNames = new String[testKlasses.size()];
+
+            for (int i = 0 ; i < testKlasses.size() ; i++) {
+                TestParameters.Arg test = testKlasses[i];
+                methodNames[i] = test.method;
+                try {
+                    Class<?> act = Class.forName(test.klass);
+                    klasses[i] = act;
+                } catch (ClassNotFoundException e) {
+                    System.out.println("Class " + test.klass + " not found!");
+                    System.exit(-1);
+                }
+            }
         }
 
+        for (int i = 0 ; i < klasses.length ; i++) {
+            Result result;
 
-        if (result.wasSuccessful()) {
-            System.out.println("Sucessful!");
-        } else {
-            System.out.println("Error");
-            for (Failure failure : result.getFailures()) {
-                System.out.println(failure.toString());
+            if (methodNames[i].equals("")) {
+                result = JUnitCore.runClasses(klasses);
+            } else {
+                Request request = Request.method(klasses[i], methodNames[i]);
+                result = new JUnitCore().run(request);
+            }
+
+            if (result.wasSuccessful()) {
+                System.out.println("Sucessful!");
+            } else {
+                System.out.println("Error");
+                for (Failure failure : result.getFailures()) {
+                    System.out.println(failure.toString());
+                }
             }
         }
-
     }
 
     public static void main(String[] args) {

@@ -1,0 +1,27 @@
+import org.junit.Test;
+import static org.junit.Assert.*;
+import org.junit.runner.Result;
+import java.util.List;
+import java.util.ArrayList;
+import java.util.Scanner;
+import java.io.InputStream;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+
+import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
+import com.maxeler.maxcompiler.v2.kernelcompiler.KernelLib;
+import com.maxeler.maxcompiler.v2.kernelcompiler.KernelParameters;
+import com.maxeler.maxcompiler.v2.managers.standard.SimulationManager;
+import com.maxeler.maxcompiler.v2.utils.Bits;
+
+public class TestUtils {
+    @Test
+    public void testBitsToDouble() {
+        double d = 5.123;
+        double e = -4.0;
+
+        System.out.println(Utils.bitsToDouble(Utils.doubleToBits(d)));
+        System.out.println(Utils.bitsToDouble(Utils.doubleToBits(e)));
+    }
+}

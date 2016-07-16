@@ -135,7 +135,7 @@ $(RESOURCE_BENCH_HELPERS):
 
 test:
 	$(MAXJC) $(JFLAGS) $(ENGINEFILES)
-	MAXAPPJCP='.:$(CP)' MAXSOURCEDIRS='../src' $(MAXJAVARUN) -v -m 8192 $(MANAGER) test DFEModel=$(DFEModel) maxFileName=test target='DFE_SIM' enableMPCX=$(MPCX)
+	MAXAPPJCP='.:$(CP)' MAXSOURCEDIRS='../src' $(MAXJAVARUN) -v -m 8192 $(MANAGER) test DFEModel=$(DFEModel) maxFileName=test target='DFE_SIM' enableMPCX=$(MPCX) testKlass='~$(TESTKLASS)'
 
 
 # ---- Simulation ----

@@ -31,4 +31,10 @@ public class Dimension {
         System.out.println("height = " + height_ + ", width = " + width_ +
                 ", channels = " + channels_);
     }
+
+    public boolean equals(Dimension other) {
+        return height_ == other.height() &&
+                width_ == other.width() &&
+                channels_ == other.channels();
+    }
 }

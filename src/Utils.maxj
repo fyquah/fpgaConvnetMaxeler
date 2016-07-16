@@ -206,18 +206,46 @@ public class Utils {
         return s;
     }
 
-    public static Bits doubleToBits(double x) {
+    public static Bits negate(Bits x) {
+        Bits y = Bits.allZeros(x.getWidth());;
+
+        for (int i = 0 ; i < x.getWidth() ; i++) {
+            y.setBit(i, !x.getBit(i));
+        }
+
+        int idx = 0;
+
+        do {
+            if (y.getBit(idx)) {
+                y.setBit(idx, false);
+            } else {
+                y.setBit(idx, true);
+                break;
+            }
+            idx += 1;
+        } while (idx < x.getWidth());
+
+        return y;
+    }
+
+    public static Bits doubleToBits(double arg) {
+        double x = Math.abs(arg);
         Bits ret = Bits.allZeros(GlobalConfig.fracBits + GlobalConfig.intBits);
 
-        double top = Math.pow(2, GlobalConfig.intBits - 1);
+        double top = Math.pow(2, GlobalConfig.intBits - 2);
 
-        for (int i = GlobalConfig.fracBits + GlobalConfig.intBits - 1 ; i >= 0; i--) {
+        for (int i = GlobalConfig.fracBits + GlobalConfig.intBits - 2 ; i >= 0; i--) {
             if (top < x) {
                 x = x - top;
                 ret.setBit(i, true);
             }
 
             top = top / 2;
+        }
+
+        // Handle negative case
+        if (arg < 0) {
+           return negate(ret); 
         }
 
         return ret;
@@ -236,12 +264,17 @@ public class Utils {
         }
 
         tmp = 1;
-        for (int i = 0 ; i < GlobalConfig.intBits ; i++) {
+        for (int i = 0 ; i < GlobalConfig.intBits - 1 ; i++) {
             if (bits.getBit(i + GlobalConfig.fracBits)) {
                 ret += tmp;
             }
 
             tmp *= 2;
+        }
+
+        if (bits.getBit(GlobalConfig.intBits + GlobalConfig.fracBits - 1)) {
+            double mostNegative = -Math.pow(2, GlobalConfig.intBits - 1);
+            return mostNegative + ret;
         }
 
         return ret;
@@ -278,7 +311,7 @@ public class Utils {
 
         for (int i = 0 ; i < bitsArr.length ; i++) {
             for (int j = 0 ; j < bitsArr[i].getWidth() ; j++) {
-                ret.setBit(idx ,bitsArr[i].getBit(j));
+                ret.setBit(idx, bitsArr[i].getBit(j));
                 idx++;
             }
         }

@@ -193,6 +193,7 @@ public class ConvolutionLayerKernel extends Kernel {
         convChannelIndices = new ArrayList<ConvChannelIndex>();
         demuxUnits = new ArrayList<OneHotDemux>();
 
+
         // Read definitions from ConvolutionParameters
 
         inputDimension = cp.inputDim;
@@ -287,6 +288,7 @@ public class ConvolutionLayerKernel extends Kernel {
 
         // debugPosition(parameters.getName());
 
+        System.out.println(input.getSize());
         input <== io.input("x", inputType, iter.eq(0) & convIter.eq(0));
         io.output("y", output, outputType,
                 iter.eq(loopIterations - 1) &
