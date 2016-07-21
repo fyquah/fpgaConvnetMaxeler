@@ -12,6 +12,7 @@ public class OneHotDemux extends KernelLib {
 
     public OneHotDemux(Kernel argKernel, int n) {
         super(argKernel);
+        optimization.pushPipeliningFactor(0.0);
         input = GlobalConfig.dataType.newInstance(this);
         selects = new DFEVar[n];
         outputs = new DFEVar[n];
@@ -21,6 +22,7 @@ public class OneHotDemux extends KernelLib {
             selects[i] = dfeBool().newInstance(this);
             outputs[i] = (selects[i] ? input : constant.var(GlobalConfig.dataType, 0));
         }
+        optimization.popPipeliningFactor();
     }
 
     public void setInput(DFEVar a) {

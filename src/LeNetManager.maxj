@@ -193,13 +193,22 @@ public class LeNetManager extends CustomManager {
         conv2Params = loadConv2Parameters(conv2Factor, conv2KernelFactor);
         pool2Params = loadPool2Parameters();
 
+        System.out.println("Layer dimensions:");
+        System.out.print("conv1.inputDimension() ");
         conv1Params.inputDimension().print();
+        System.out.print("conv1.outputDimension() ");
         conv1Params.outputDimension().print();
+        System.out.print("pool1.inputDimension() ");
         pool1Params.inputDimension.print();
+        System.out.print("pool1.outputDimension() ");
         pool1Params.outputDimension.print();
+        System.out.print("conv2.inputDimension() ");
         conv2Params.inputDimension().print();
+        System.out.print("conv2.outputDimension() ");
         conv2Params.outputDimension().print();
+        System.out.print("pool2.inputDimension() ");
         pool2Params.inputDimension.print();
+        System.out.print("pool2.outputDimension() ");
         pool2Params.outputDimension.print();
 
         inputAllignerKernel = new DfeInputAlligner(
@@ -243,15 +252,6 @@ public class LeNetManager extends CustomManager {
         for (int i = 1 ; i < blocks.length ; i++) {
             blocks[i].getInput("x") <==  blocks[i-1].getOutput("y");
         }
-
-        conv1Kernel.inputDimension.print();
-        conv1Kernel.outputDimension.print();
-        pool1Kernel.inputDimension.print();
-        pool1Kernel.outputDimension.print();
-        conv2Kernel.inputDimension.print();
-        conv2Kernel.outputDimension.print();
-        pool2Kernel.inputDimension.print();
-        pool2Kernel.outputDimension.print();
 
         y <== blocks[blocks.length - 1].getOutput("y");
     }

@@ -40,7 +40,7 @@ float *reshape_lenet_conv_out(int N, float *a) {
 
 int main() {
 #ifdef __SIM__
-    int N = 3;
+    int N = 20;
 #else
     int N = 10000;
 #endif

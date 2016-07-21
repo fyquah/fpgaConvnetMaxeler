@@ -157,7 +157,6 @@ public class TestPoolingLayerKernel {
         compareAnswers(e_y, y);
     }
 
-    /*
     @Test
     public void testMultipleChannels() {
         int[] arr = new int[]{2, 4, 7};
@@ -165,7 +164,6 @@ public class TestPoolingLayerKernel {
             runSingleTest(new Dimension(28, 28, 20), kernelDim, PoolingUnit.Type.Max);
         }
     }
-    */
 
     @Test
     public void testEvenDim() {

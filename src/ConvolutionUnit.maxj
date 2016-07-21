@@ -100,6 +100,7 @@ public class ConvolutionUnit extends KernelLib {
 
 
         // the computational stuff
+        kernel.optimization.pushPipeliningFactor(0.0);
         slidingWindow = new SlidingWindow(
             kernel,
             input_,
@@ -114,6 +115,7 @@ public class ConvolutionUnit extends KernelLib {
             Utils.unrollArray(argConvKernel),
             argFoldingFactor
         );
+        kernel.optimization.popPipeliningFactor();
 
         // output control (we only want to output the valid  bits (ignore the borders)
         CounterChain chain = control.count.makeCounterChain();
@@ -198,7 +200,7 @@ public class ConvolutionUnit extends KernelLib {
                 output_ = additionResult;
 
             } else {
-                optimization.pushDSPFactor(0.0);
+                optimization.pushNoPipelining();
                 optimization.pushPipeliningFactor(0.0);
                 output_ = GlobalConfig.dataType.newInstance(argKernel);
                 DFEVar x[] = new DFEVar[multiplierOutputs.size() + 1];
@@ -208,8 +210,8 @@ public class ConvolutionUnit extends KernelLib {
                 x[multiplierOutputs.size()] = iterationIndex.eq(0) ? constant.var(GlobalConfig.dataType, 0) : stream.offset(output_, -1);
                 additionResult = Utils.logarithmAdderTree(x);
                 output_ <== additionResult;
-                optimization.popDSPFactor();
                 optimization.popPipeliningFactor();
+                optimization.popNoPipelining();
             }
         }
 

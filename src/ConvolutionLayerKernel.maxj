@@ -20,7 +20,7 @@ public class ConvolutionLayerKernel extends Kernel {
     public final Dimension outputDimension;
     private final int kernelDim, stride, nOutput, loopIterations, cyclesRequired;
     private final int foldingFactor, convCyclesRequired;
-    private final DFEVector<DFEVar> input, output;
+    private DFEVector<DFEVar> input, output;
     // number of convolutionalUnits, between 1 <= ff <= inputChannels * outputChannels
     // defines how many convolutionUnits are available to perform all the convolutions
     private final int kernelFoldingFactor; // number of multipliers in every convolutionalUnit, between 1 <= kff <= kernelDim * kernelDim
@@ -288,7 +288,10 @@ public class ConvolutionLayerKernel extends Kernel {
 
         // debugPosition(parameters.getName());
 
-        System.out.println(input.getSize());
+        debug.simPrintf(iter.eq(loopIterations - 1) & convIter.eq(convCyclesRequired - 1),
+                "row = %d col = %d\n",
+                convolutionUnits[0].row, convolutionUnits[0].col);
+
         input <== io.input("x", inputType, iter.eq(0) & convIter.eq(0));
         io.output("y", output, outputType,
                 iter.eq(loopIterations - 1) &
