@@ -276,49 +276,54 @@ public class TestConvolutionLayerKernel {
 
     @Test
     public void testLargeConvolution() {
-        final int inputHeight = 28;
-        final int inputWidth = 28;
-        final int inputChannels = 20;
-        final int outputChannels = 50;
-        final int kernelDim = 5;
+        try {
+            final int inputHeight = 28;
+            final int inputWidth = 28;
+            final int inputChannels = 20;
+            final int outputChannels = 50;
+            final int kernelDim = 5;
 
-        SimulationManager manager = new SimulationManager("TestLargeConvolution");
-        Dimension inputDimension = new Dimension(inputHeight, inputWidth, inputChannels);
-        ArrayList<ArrayList<float[][]>> convKernels = generateRandomKernels(
-                inputDimension, kernelDim, outputChannels);
-        ArrayList<Float> biases = generateRandomBias(outputChannels);
-        ConvolutionParameters convParams = new ConvolutionParameters(
-                inputDimension, outputChannels,
-                convKernels, biases);
-        convParams.foldingFactor = 250;
-        convParams.kernelFoldingFactor = 1;
-        ConvolutionLayerKernel kernel = new ConvolutionLayerKernel(
-                manager.makeKernelParameters(), convParams);
+            SimulationManager manager = new SimulationManager("TestLargeConvolution");
+            Dimension inputDimension = new Dimension(inputHeight, inputWidth, inputChannels);
+            ArrayList<ArrayList<float[][]>> convKernels = generateRandomKernels(
+                    inputDimension, kernelDim, outputChannels);
+            ArrayList<Float> biases = generateRandomBias(outputChannels);
+            ConvolutionParameters convParams = new ConvolutionParameters(
+                    inputDimension, outputChannels,
+                    convKernels, biases);
+            convParams.foldingFactor = 5;
+            convParams.kernelFoldingFactor = 5;
+            ConvolutionLayerKernel kernel = new ConvolutionLayerKernel(
+                    manager.makeKernelParameters(), convParams);
 
-        // building the manager
-        // manager.logInfo("Seed: %d", seed);
-        manager.setKernel(kernel);
-        manager.build();
+            // building the manager
+            // manager.logInfo("Seed: %d", seed);
+            manager.setKernel(kernel);
+            manager.build();
 
-        // computing expected values
-        ArrayList<Double> doubleInput = generateRandomData(inputDimension);
-        ArrayList<Double> doubleExpectedOutput = computeExpected(
-                doubleInput, inputDimension, convKernels, biases);
-        ArrayList<Bits> rawInput = toBitsInput(doubleInput, inputChannels);
+            // computing expected values
+            ArrayList<Double> doubleInput = generateRandomData(inputDimension);
+            ArrayList<Double> doubleExpectedOutput = computeExpected(
+                    doubleInput, inputDimension, convKernels, biases);
+            ArrayList<Bits> rawInput = toBitsInput(doubleInput, inputChannels);
 
-        // running the kernel
-        manager.setInputDataRaw("x", rawInput);
-        manager.setKernelCycles(kernel.cyclesPerImage());
-        manager.run();
-        List<Bits> rawOutput = manager.getOutputDataRaw("y");
-        List<Double> doubleOutput = toDoubleOutput(rawOutput, outputChannels);
+            // running the kernel
+            manager.setInputDataRaw("x", rawInput);
+            manager.setKernelCycles(kernel.cyclesPerImage());
+            manager.run();
+            List<Bits> rawOutput = manager.getOutputDataRaw("y");
+            List<Double> doubleOutput = toDoubleOutput(rawOutput, outputChannels);
 
-        // check the results whether it is successful
-        assertEquals(doubleOutput.size(), doubleExpectedOutput.size());
+            // check the results whether it is successful
+            assertEquals("Output size is not equal",
+                    doubleOutput.size(), doubleExpectedOutput.size());
 
-        for (int i = 0 ; i < doubleOutput.size() ; i++) {
-            double d = Math.abs(doubleOutput[i] - doubleExpectedOutput[i]);
-            assertTrue(d < 0.05);
+            for (int i = 0 ; i < doubleOutput.size() ; i++) {
+                double d = Math.abs(doubleOutput[i] - doubleExpectedOutput[i]);
+                assertTrue("Difference is too big", d < 0.05);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
         }
     }
 

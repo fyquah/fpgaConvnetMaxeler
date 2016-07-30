@@ -104,7 +104,7 @@ public class fpgaConvNetMaxelerManager {
             if (result.wasSuccessful()) {
                 System.out.println("Sucessful!");
             } else {
-                System.out.println("Error");
+                System.out.println("Test failures:");
                 for (Failure failure : result.getFailures()) {
                     System.out.println(failure.toString());
                 }

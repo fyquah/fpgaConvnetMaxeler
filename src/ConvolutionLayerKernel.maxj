@@ -8,6 +8,7 @@ import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.CounterChain;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVector;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVectorType;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Stream.OffsetExpr;
 
 public class ConvolutionLayerKernel extends Kernel {
     private final DFEVectorType<DFEVar> outputType;
@@ -19,6 +20,7 @@ public class ConvolutionLayerKernel extends Kernel {
     public final Dimension inputDimension;
     public final Dimension outputDimension;
     private final int kernelDim, stride, nOutput, loopIterations, cyclesRequired;
+    private OffsetExpr loopLength;
     private final int foldingFactor, convCyclesRequired;
     private DFEVector<DFEVar> input, output;
     // number of convolutionalUnits, between 1 <= ff <= inputChannels * outputChannels
@@ -192,6 +194,7 @@ public class ConvolutionLayerKernel extends Kernel {
         convolutionKernels = new ArrayList<ArrayList<float[][]>>();
         convChannelIndices = new ArrayList<ConvChannelIndex>();
         demuxUnits = new ArrayList<OneHotDemux>();
+        // loopLength = stream.makeOffsetAutoLoop("ConvolutionLayerKernel");
 
 
         // Read definitions from ConvolutionParameters
@@ -224,7 +227,6 @@ public class ConvolutionLayerKernel extends Kernel {
                 convChannelIndices.add(new ConvChannelIndex(o, i));
             }
         }
-
         outputChannelAccumulator = makeOutputChannelAccumulator();
         // end of derived variables
 
@@ -289,8 +291,8 @@ public class ConvolutionLayerKernel extends Kernel {
         // debugPosition(parameters.getName());
 
         debug.simPrintf(iter.eq(loopIterations - 1) & convIter.eq(convCyclesRequired - 1),
-                "row = %d col = %d\n",
-                convolutionUnits[0].row, convolutionUnits[0].col);
+                "row = %d col = %d convUnitPipelineLength = %d\n",
+                convolutionUnits[0].row, convolutionUnits[0].col, convolutionUnits[0].pipelineLength.getDFEVar(this, dfeUInt(8)));
 
         input <== io.input("x", inputType, iter.eq(0) & convIter.eq(0));
         io.output("y", output, outputType,
