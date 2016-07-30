@@ -200,7 +200,6 @@ public class ConvolutionUnit extends KernelLib {
                 output_ = additionResult;
 
             } else {
-                optimization.pushNoPipelining();
                 optimization.pushPipeliningFactor(0.0);
                 output_ = GlobalConfig.dataType.newInstance(argKernel);
                 DFEVar x[] = new DFEVar[multiplierOutputs.size() + 1];
@@ -211,7 +210,6 @@ public class ConvolutionUnit extends KernelLib {
                 additionResult = Utils.logarithmAdderTree(x);
                 output_ <== additionResult;
                 optimization.popPipeliningFactor();
-                optimization.popNoPipelining();
             }
         }
 
