@@ -26,6 +26,12 @@ public class ConvolutionUnit extends KernelLib {
     DotProductUnit dotProductUnit;
     SlidingWindow slidingWindow;
     OffsetExpr pipelineLength;
+    private static int curLoopId = 1;
+
+    private static int generateLoopId() {
+        curLoopId += 1;
+        return curLoopId;
+    }
 
     public static int calcCyclesRequired(int kernelDim, int foldingFactor) {
         return Utils.divCeil(kernelDim * kernelDim, foldingFactor);
@@ -95,7 +101,8 @@ public class ConvolutionUnit extends KernelLib {
 
         // Set all counters here
         loopIterations = Utils.divCeil(kernelDim * kernelDim, foldingFactor);
-        pipelineLength = new OffsetExpr(1);
+        pipelineLength = stream.makeOffsetAutoLoop(
+                "ConvolutionUnitLoopLength" + generateLoopId());
 
         CounterChain chain = control.count.makeCounterChain();
         row = chain.addCounter(inputHeight, 1);
@@ -126,9 +133,9 @@ public class ConvolutionUnit extends KernelLib {
 
         // output control (we only want to output the valid bits,
         // i.e: ignore the borders)
-        output_ = isBorder()
+        output_ = (isBorder()
             ? constant.var(GlobalConfig.dataType, 0)
-            : dotProductUnit.output();
+            : dotProductUnit.output());
     }
 
     public void debugPrint() {
