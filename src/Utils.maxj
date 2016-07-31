@@ -5,8 +5,10 @@ import java.util.ArrayList;
 import maxpower.ops.AssociativeOp;
 import maxpower.utils.TreeReduce;
 
+import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
 import com.maxeler.maxcompiler.v2.utils.Bits;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.CounterChain;
 
 
 public class Utils {
@@ -317,5 +319,18 @@ public class Utils {
         }
 
         return ret;
+    }
+
+    public static DFEVar chainCounterOrZero(
+            Kernel kernel,
+            CounterChain chain,
+            int total) {
+        final int inc = 1;
+
+        if (total != 1) {
+            return chain.addCounter(total, inc);
+        }
+
+        return kernel.constant.var(Kernel.dfeUInt(1), 0);
     }
 }

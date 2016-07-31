@@ -8,6 +8,7 @@ import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.CounterChain;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVector;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVectorType;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Stream.OffsetExpr;
 
 // convolves an input stream with a kernel
 // TODO : STRIDING
@@ -20,9 +21,11 @@ public class ConvolutionUnit extends KernelLib {
     int inputWidth;
     int kernelDim;
     int loopIterations;
-    DFEVar input_, output_, iterationIndex, row, col;
+    DFEVar input_, output_;
+    DFEVar row, col, loopIndex, holdIndex, pipelineIndex;
     DotProductUnit dotProductUnit;
     SlidingWindow slidingWindow;
+    OffsetExpr pipelineLength;
 
     public static int calcCyclesRequired(int kernelDim, int foldingFactor) {
         return Utils.divCeil(kernelDim * kernelDim, foldingFactor);
@@ -44,7 +47,7 @@ public class ConvolutionUnit extends KernelLib {
             return l[0];
         } else {
             return control.mux(
-                iterationIndex,
+                loopIndex,
                 l.toArray(new DFEVar[l.size()])
             );
         }
@@ -65,7 +68,7 @@ public class ConvolutionUnit extends KernelLib {
         if (l.size() == 1) {
             return l[0];
         } else {
-            return control.mux(iterationIndex, l.toArray(new DFEVar[l.size()]));
+            return control.mux(loopIndex, l.toArray(new DFEVar[l.size()]));
         }
     }
 
@@ -86,18 +89,22 @@ public class ConvolutionUnit extends KernelLib {
         foldingFactor = argFoldingFactor;
         kernelDim = convKernel.length;
         kernel = argKernel;
-        vectorType = new DFEVectorType<DFEVar>(GlobalConfig.dataType, kernelDim * kernelDim);
+        vectorType = new DFEVectorType<DFEVar>(
+                GlobalConfig.dataType, kernelDim * kernelDim);
         input_ = GlobalConfig.dataType.newInstance(this);
 
-        // Set all the loop-related stuff here
+        // Set all counters here
         loopIterations = Utils.divCeil(kernelDim * kernelDim, foldingFactor);
+        pipelineLength = new OffsetExpr(1);
 
-        if (loopIterations == 1) {
-            iterationIndex = constant.var(dfeUInt(1), 0);
-        } else {
-            iterationIndex = control.count.simpleCounter(Utils.ceilLog2(loopIterations), loopIterations);
-        }
-
+        CounterChain chain = control.count.makeCounterChain();
+        row = chain.addCounter(inputHeight, 1);
+        col = chain.addCounter(inputWidth, 1);
+        holdIndex = Utils.chainCounterOrZero(kernel, chain, holdIterations);
+        loopIndex = Utils.chainCounterOrZero(kernel, chain, loopIterations);
+        pipelineIndex = chain.addCounter(
+                pipelineLength.getDFEVar(argKernel, dfeUInt(8)),
+                1);
 
         // the computational stuff
         kernel.optimization.pushPipeliningFactor(0.0);
@@ -117,15 +124,11 @@ public class ConvolutionUnit extends KernelLib {
         );
         kernel.optimization.popPipeliningFactor();
 
-        // output control (we only want to output the valid  bits (ignore the borders)
-        CounterChain chain = control.count.makeCounterChain();
-        row = chain.addCounter(inputHeight, 1);
-        col = chain.addCounter(inputWidth, 1);
-        DFEVar pipelineStage = loopIterations * holdIterations == 1 ?
-                constant.var(dfeUInt(1), 0) :
-                chain.addCounter(loopIterations * holdIterations, 1);
-
-        output_ = isBorder() ? constant.var(GlobalConfig.dataType, 0) : dotProductUnit.output();
+        // output control (we only want to output the valid bits,
+        // i.e: ignore the borders)
+        output_ = isBorder()
+            ? constant.var(GlobalConfig.dataType, 0)
+            : dotProductUnit.output();
     }
 
     public void debugPrint() {
@@ -139,7 +142,7 @@ public class ConvolutionUnit extends KernelLib {
         debug.simPrintf("\n");
         debug.simPrintf("multiplierOutput[0]: %.5f\n", dotProductUnit.multiplierOutputs[0]);
         debug.simPrintf("additionResult: %.5f\n", dotProductUnit.additionResult);
-        debug.simPrintf("iterationIndex = %d\n", iterationIndex);
+        debug.simPrintf("loopIndex = %d\n", loopIndex);
         debug.simPrintf("output() = %.3f\n", dotProductUnit.output());
         debug.simPrintf("row = %d col = %d\n", row, col);
         debug.simPrintf("isBorder() = %d\n", isBorder());
@@ -162,7 +165,7 @@ public class ConvolutionUnit extends KernelLib {
     }
 
     public DFEVar isOutputReady() {
-        return iterationIndex.eq(loopIterations - 1);
+        return loopIndex.eq(loopIterations - 1);
     }
 
     public int cyclesRequired() {
@@ -170,7 +173,7 @@ public class ConvolutionUnit extends KernelLib {
     }
 
     public DFEVar index() {
-        return iterationIndex;
+        return loopIndex;
     }
 
     public DFEVar output() {
@@ -184,9 +187,6 @@ public class ConvolutionUnit extends KernelLib {
         public DFEVar additionResult;
 
         DotProductUnit(Kernel argKernel, DFEVector<DFEVar> input, DFEVar[] a, int foldingFactor) {
-
-
-
             for (int i = 0; i < foldingFactor; i++) {
                 DFEVar convParam = getConvParam(i);
                 DFEVar convInput = getConvInput(i, input);
@@ -206,7 +206,9 @@ public class ConvolutionUnit extends KernelLib {
                 for (int i = 0 ; i < multiplierOutputs.size() ; i++) {
                     x[i] = multiplierOutputs[i];
                 }
-                x[multiplierOutputs.size()] = iterationIndex.eq(0) ? constant.var(GlobalConfig.dataType, 0) : stream.offset(output_, -1);
+                x[multiplierOutputs.size()] = (loopIndex.eq(0)
+                    ? constant.var(GlobalConfig.dataType, 0)
+                    : stream.offset(output_, -pipelineLength));
                 additionResult = Utils.logarithmAdderTree(x);
                 output_ <== additionResult;
                 optimization.popPipeliningFactor();
