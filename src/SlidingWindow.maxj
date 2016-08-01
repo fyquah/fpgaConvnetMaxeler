@@ -7,6 +7,7 @@ import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVector;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVectorType;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Stream.OffsetExpr;
 
 public class SlidingWindow  {
     DFEVector<DFEVar> output_;
@@ -19,14 +20,17 @@ public class SlidingWindow  {
         int inputHeight,
         int inputWidth,
         int kernelDim,
-        int cyclesToHoldWindow
+        OffsetExpr cyclesToHoldWindow
     ) {
-         DFEVectorType<DFEVar> vectorType = new DFEVectorType<DFEVar>(input.getType(), kernelDim * kernelDim);
+         DFEVectorType<DFEVar> vectorType = new DFEVectorType<DFEVar>(
+                 input.getType(),
+                 kernelDim * kernelDim);
          output_ = vectorType.newInstance(argKernel);
 
         for (int i = 0 ; i < kernelDim ; i++) {
             for (int j = 0 ; j < kernelDim ; j++) {
-                int offset = cyclesToHoldWindow * ((i - kernelDim / 2) * inputWidth + (j - kernelDim / 2));
+                int idx = ((i - kernelDim / 2) * inputWidth + (j - kernelDim / 2));
+                OffsetExpr offset = cyclesToHoldWindow * idx;
                 output_[i * kernelDim + j] <== argKernel.stream.offset(input, offset);
             }
         }

@@ -10,6 +10,7 @@ import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Count;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Count.Counter;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.CounterChain;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Stream.OffsetExpr;
 
 public class PoolingUnit extends KernelLib {
     public enum Type {
@@ -43,9 +44,10 @@ public class PoolingUnit extends KernelLib {
         slidingWindow = new SlidingWindow(
             kernel,
             input,
-            inputHeight, inputWidth, kernelDim,
-            1
-        );
+            inputHeight,
+            inputWidth,
+            kernelDim,
+            new OffsetExpr(1));
         CounterChain chain = control.count.makeCounterChain();
         row = chain.addCounter(inputHeight, 1);
         col = chain.addCounter(inputWidth, 1);
