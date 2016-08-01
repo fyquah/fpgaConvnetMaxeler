@@ -3,6 +3,7 @@
 import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.CounterChain;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Stream.OffsetExpr;
 
 public class PartitionedDemux extends OneHotDemux {
     protected DFEVar[] counters;
@@ -30,7 +31,7 @@ public class PartitionedDemux extends OneHotDemux {
         return arr;
     }
 
-    public PartitionedDemux(Kernel argKernel, int[] counts, int tickDelay) {
+    public PartitionedDemux(Kernel argKernel, int[] counts, OffsetExpr tickDelay) {
         super(argKernel, counts.length);
         int total = sum(counts);
         int[] cumulative = accumulate(counts);
@@ -43,9 +44,7 @@ public class PartitionedDemux extends OneHotDemux {
             ctr = chain.addCounter(total, 1);
         }
 
-        if (tickDelay > 1) {
-            chain.addCounter(tickDelay, 1);
-        }
+        chain.addCounter(tickDelay.getDFEVar(this, dfeUInt(8)), 1);
 
         for (int i = 0 ; i < counts.length ; i++) {
             if (i == 0) {
