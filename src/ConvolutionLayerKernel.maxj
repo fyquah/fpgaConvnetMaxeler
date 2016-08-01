@@ -135,6 +135,28 @@ public class ConvolutionLayerKernel extends Kernel {
         return ret;
     }
 
+    protected int[] unrollFrequencies(ArrayList<ChannelFrequency> freqs) {
+        int totalCount = 0;
+        int[] counts;
+    
+        for (int i = 0 ; i < freqs.size() ; i++) {
+            totalCount += freqs[i].frequency;
+        }
+
+        if (totalCount < loopIterations) {
+            counts = new int[freqs.size() + 1];
+            counts[freqs.size()] = loopIterations - totalCount;
+        } else {
+            counts = new int[freqs.size()];
+        }
+
+        for (int i = 0 ; i < freqs.size() ; i++) {
+            counts[i] = freqs[i].frequency;
+        }
+
+        return counts;
+    }
+
     protected ArrayList<ChannelFrequency> getChannelFrequency(ArrayList<ConvChannelIndex> l) {
         ArrayList<ChannelFrequency> ret = new ArrayList<ChannelFrequency>();
 
@@ -242,23 +264,7 @@ public class ConvolutionLayerKernel extends Kernel {
             DFEVar[][] kernel = toMuxedKernel(iter, indices);
             DFEVar inputChannel = toMuxedInput(iter, indices);
             ArrayList<ChannelFrequency> freqs = getChannelFrequency(indices);
-            int totalCount = 0;
-            int[] counts;
-        
-            for (int i = 0 ; i < freqs.size() ; i++) {
-                totalCount += freqs[i].frequency;
-            }
-
-            if (totalCount < loopIterations) {
-                counts = new int[freqs.size() + 1];
-                counts[freqs.size()] = loopIterations - totalCount;
-            } else {
-                counts = new int[freqs.size()];
-            }
-
-            for (int i = 0 ; i < freqs.size() ; i++) {
-                counts[i] = freqs[i].frequency;
-            }
+            int[] counts = unrollFrequencies(freqs);
 
             ConvolutionUnit c = new ConvolutionUnit(
                 this,
