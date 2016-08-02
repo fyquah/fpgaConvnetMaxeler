@@ -13,8 +13,17 @@ public class MultiSourceAccumulator extends KernelLib {
     private DFEVar out;
     public ArrayList<DFEVar> sources;
     public int addCycles, holdCycles;
-    public OffsetExpr cycleLength;
-    public DFEVar cycleLengthVar, iter, cycleStage;
+    public OffsetExpr cycleLength, pipelineLength;
+    public static OffsetExpr pipelineLengthCache = null;
+    public DFEVar cycleLengthVar, iter, cycleStage, pipelineIndex, pipelineLengthVar;
+
+    public OffsetExpr getOffsetAutoLoop() {
+        if (pipelineLengthCache == null) {
+            pipelineLengthCache = new OffsetExpr(1);
+        }
+
+        return pipelineLengthCache;
+    }
 
     public MultiSourceAccumulator (
             Kernel argKernel,
@@ -28,6 +37,9 @@ public class MultiSourceAccumulator extends KernelLib {
         out = GlobalConfig.dataType.newInstance(this);
         cycleLength = argCycleLength;
         cycleLengthVar = cycleLength.getDFEVar(this, dfeUInt(8));
+        pipelineLength = getOffsetAutoLoop();
+        pipelineLengthVar = pipelineLength.getDFEVar(this, dfeUInt(8));
+        pipelineIndex = Utils.simpleCounter(pipelineLengthVar, 1);
 
         CounterChain chain = control.count.makeCounterChain();
         iter = Utils.chainCounterOrZero(argKernel, chain, argHoldCycles);

@@ -333,4 +333,9 @@ public class Utils {
 
         return kernel.constant.var(Kernel.dfeUInt(1), 0);
     }
+
+    public static DFEVar simpleCounter(DFEVar x, int inc) {
+        CounterChain chain = control.count.makeCounterChain();
+        return chain.addCounter(x, inc);
+    }
 }
