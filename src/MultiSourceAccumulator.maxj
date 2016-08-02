@@ -19,7 +19,8 @@ public class MultiSourceAccumulator extends KernelLib {
 
     public OffsetExpr getOffsetAutoLoop() {
         if (pipelineLengthCache == null) {
-            pipelineLengthCache = new OffsetExpr(1);
+            pipelineLengthCache = stream.makeOffsetAutoLoop("MultiSourceAccumulator", 1, 120);
+            // pipelineLengthCache = new OffsetExpr(1);
         }
 
         return pipelineLengthCache;

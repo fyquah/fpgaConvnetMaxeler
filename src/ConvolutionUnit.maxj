@@ -80,8 +80,7 @@ public class ConvolutionUnit extends KernelLib {
 
     public OffsetExpr getOffsetAutoLoop(String loopName) {
         if (null == cacheLoopLength) {
-            cacheLoopLength = new OffsetExpr(1);
-            // cacheLoopLength = stream.makeOffsetAutoLoop(loopName);
+            cacheLoopLength = stream.makeOffsetAutoLoop(loopName, 1, 128);
         }
         return cacheLoopLength;
     }
