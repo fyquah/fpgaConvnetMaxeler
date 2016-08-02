@@ -76,6 +76,16 @@ public class ConvolutionUnit extends KernelLib {
         }
     }
 
+    public static OffsetExpr cacheLoopLength;
+
+    public OffsetExpr getOffsetAutoLoop(String loopName) {
+        if (null == cacheLoopLength) {
+            cacheLoopLength = new OffsetExpr(1);
+            // cacheLoopLength = stream.makeOffsetAutoLoop(loopName);
+        }
+        return cacheLoopLength;
+    }
+
     /* 
      * expects input and argConvKernel to be of the same dimension
      * */
@@ -84,7 +94,8 @@ public class ConvolutionUnit extends KernelLib {
         int argInputHeight, int argInputWidth,
         DFEVar[][] argConvKernel,
         int argFoldingFactor,
-        int holdIterations
+        int holdIterations,
+        String loopName
     ) {
         super(argKernel);
         // some constants ...
@@ -100,9 +111,7 @@ public class ConvolutionUnit extends KernelLib {
 
         // Set all counters here
         loopIterations = Utils.divCeil(kernelDim * kernelDim, foldingFactor);
-        pipelineLength = stream.makeOffsetAutoLoop(
-                "ConvolutionUnitLoopLength_" + generateLoopId());
-        // pipelineLength = new OffsetExpr(1);
+        pipelineLength = getOffsetAutoLoop(loopName);
 
         CounterChain chain = control.count.makeCounterChain();
         row = chain.addCounter(inputHeight, 1);

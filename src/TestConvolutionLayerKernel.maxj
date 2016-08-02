@@ -291,7 +291,7 @@ public class TestConvolutionLayerKernel {
                 inputDimension, outputChannels,
                 convKernels, biases);
         convParams.foldingFactor = 5;
-        convParams.kernelFoldingFactor = 5;
+        convParams.kernelFoldingFactor = 20;
         ConvolutionLayerKernel kernel = new ConvolutionLayerKernel(
                 manager.makeKernelParameters(), convParams);
 
