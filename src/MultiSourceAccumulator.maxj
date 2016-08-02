@@ -39,7 +39,7 @@ public class MultiSourceAccumulator extends KernelLib {
         cycleLengthVar = cycleLength.getDFEVar(this, dfeUInt(8));
         pipelineLength = getOffsetAutoLoop();
         pipelineLengthVar = pipelineLength.getDFEVar(this, dfeUInt(8));
-        pipelineIndex = Utils.simpleCounter(pipelineLengthVar, 1);
+        pipelineIndex = Utils.simpleCounter(this, pipelineLengthVar, 1);
 
         CounterChain chain = control.count.makeCounterChain();
         iter = Utils.chainCounterOrZero(argKernel, chain, argHoldCycles);
@@ -49,6 +49,14 @@ public class MultiSourceAccumulator extends KernelLib {
             System.out.println("addCycles cannot be < holdcycles!");
             System.exit(-1);
         }
+    }
+
+    public DFEVar pipelineStart() {
+        return pipelineIndex.eq(0);
+    }
+
+    public DFEVar pipelineEnd() {
+        return pipelineIndex.eq(pipelineLengthVar - 1);
     }
 
     public void addSource(DFEVar x) {

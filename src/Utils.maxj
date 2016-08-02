@@ -6,6 +6,7 @@ import maxpower.ops.AssociativeOp;
 import maxpower.utils.TreeReduce;
 
 import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
+import com.maxeler.maxcompiler.v2.kernelcompiler.KernelLib;
 import com.maxeler.maxcompiler.v2.utils.Bits;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.CounterChain;
@@ -334,8 +335,8 @@ public class Utils {
         return kernel.constant.var(Kernel.dfeUInt(1), 0);
     }
 
-    public static DFEVar simpleCounter(DFEVar x, int inc) {
-        CounterChain chain = control.count.makeCounterChain();
+    public static DFEVar simpleCounter(KernelLib k, DFEVar x, int inc) {
+        CounterChain chain = k.control.count.makeCounterChain();
         return chain.addCounter(x, inc);
     }
 }
