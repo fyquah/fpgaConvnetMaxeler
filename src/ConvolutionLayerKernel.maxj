@@ -19,9 +19,12 @@ public class ConvolutionLayerKernel extends Kernel {
     public ArrayList<OneHotDemux> demuxUnits;
     public final Dimension inputDimension;
     public final Dimension outputDimension;
+    private final CounterChain masterChain;
     private final int kernelDim, stride, nOutput, loopIterations, cyclesRequired;
     private final int foldingFactor, convCyclesRequired;
     private DFEVector<DFEVar> input, output;
+    private DFEVar pipelineStage, pipelineLengthVar;
+    private OffsetExpr pipelineLength;
     // number of convolutionalUnits, between 1 <= ff <= inputChannels * outputChannels
     // defines how many convolutionUnits are available to perform all the convolutions
     private final int kernelFoldingFactor; // number of multipliers in every convolutionalUnit, between 1 <= kff <= kernelDim * kernelDim
@@ -34,6 +37,20 @@ public class ConvolutionLayerKernel extends Kernel {
 
     public int cyclesPerImage() {
         return cyclesRequired * inputDimension.height() * inputDimension.width();
+    }
+
+    protected void initPipelineLength() {
+        MultiSourceAccumulator acc = outputChannelAccumulator[0];
+        pipelineLength = (acc.pipelineLength + acc.convPipelineLength - 1);
+        pipelineLengthVar = pipelineLength.getDFEVar(this, dfeUInt(8));
+    }
+
+    protected DFEVar pipelineEnd() {
+        return pipelineStage.eq(pipelineLengthVar - 1);
+    }
+
+    protected DFEVar pipelineStart() {
+        return pipelineStage.eq(0);
     }
 
     protected class ChannelFrequency {
@@ -182,8 +199,12 @@ public class ConvolutionLayerKernel extends Kernel {
     protected ArrayList<MultiSourceAccumulator> makeOutputChannelAccumulator() {
         ArrayList<MultiSourceAccumulator> ret = new ArrayList<MultiSourceAccumulator>();
         for (int i = 0 ; i < outputDimension.channels() ; i++) {
-            ret.add(new MultiSourceAccumulator(this,
-                    loopIterations, loopIterations, new OffsetExpr(convCyclesRequired)));
+            MultiSourceAccumulator acc = new MultiSourceAccumulator(
+                    this,
+                    loopIterations,
+                    loopIterations,
+                    new OffsetExpr(convCyclesRequired));
+            ret.add(acc);
         }
         return ret;
     }
@@ -233,8 +254,7 @@ public class ConvolutionLayerKernel extends Kernel {
         outputDimension = new Dimension(
             inputDimension.height() - (kernelDim - 1),
             inputDimension.width() - (kernelDim - 1),
-            nOutput
-        );
+            nOutput);
         inputType = new DFEVectorType<DFEVar>(GlobalConfig.dataType, inputDimension.channels());
         outputType = new DFEVectorType<DFEVar>(GlobalConfig.dataType, nOutput);
         convolutionUnits = new ArrayList<ConvolutionUnit>();
@@ -254,11 +274,10 @@ public class ConvolutionLayerKernel extends Kernel {
         // doing the actual maxeler kernel stuff here
         input = inputType.newInstance(this);
         output = outputType.newInstance(this);
-        CounterChain chain = control.count.makeCounterChain();
-        DFEVar iter = loopIterations == 1 ? constant.var(dfeUInt(1), 0)
-                        : chain.addCounter(loopIterations, 1);
-        DFEVar convIter = convCyclesRequired == 1 ? constant.var(dfeUInt(1), 0)
-                        : chain.addCounter(convCyclesRequired, 1);
+        masterChain = control.count.makeCounterChain();
+        DFEVar iter = (loopIterations == 1
+                       ? constant.var(dfeUInt(1), 0)
+                       : masterChain.addCounter(loopIterations, 1));
 
         for (int k = 0 ; k < foldingFactor ; k++) {
             ArrayList<ConvChannelIndex> indices = getConvUnitChannelIndices(k);
@@ -276,7 +295,7 @@ public class ConvolutionLayerKernel extends Kernel {
                 loopIterations,
                 "ConvolutionUnit");
 
-            PartitionedDemux demux = new PartitionedDemux(this, counts, new OffsetExpr(convCyclesRequired));
+            PartitionedDemux demux = new PartitionedDemux(this, counts, c.cyclesRequired());
 
             c.setInput(inputChannel);
             convolutionUnits.add(c);
@@ -288,6 +307,9 @@ public class ConvolutionLayerKernel extends Kernel {
             }
         }
 
+        initPipelineLength();
+        pipelineStage = masterChain.addCounter(pipelineLengthVar, 1);
+
         for (int i = 0 ; i < outputDimension.channels() ; i++) {
             outputChannelAccumulator[i].generate(0.0);
             output[i] <== outputChannelAccumulator[i].output() + bias[i];
@@ -298,12 +320,14 @@ public class ConvolutionLayerKernel extends Kernel {
         //         "row = %d col = %d\n",
         //         convolutionUnits[0].row, convolutionUnits[0].col);
 
+        // setting the loop counters
+
+        // input and output controls
         MultiSourceAccumulator acc = outputChannelAccumulator[0];
-        DFEVar inputControl = iter.eq(0) & convIter.eq(0) & acc.pipelineStart();
+        DFEVar inputControl = iter.eq(0) & pipelineStart();
         DFEVar outputControl = iter.eq(loopIterations - 1)
-                               & convIter.eq(convCyclesRequired - 1)
                                & ~convolutionUnits.get(0).isBorder()
-                               & acc.pipelineEnd();
+                               & pipelineEnd();
         input <== io.input("x", inputType, inputControl);
         io.output("y", output, outputType, outputControl);
     }
