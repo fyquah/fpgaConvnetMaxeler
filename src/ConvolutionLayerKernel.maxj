@@ -8,6 +8,7 @@ import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.CounterChain;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVector;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVectorType;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Stream.OffsetExpr;
 
 public class ConvolutionLayerKernel extends Kernel {
     private final DFEVectorType<DFEVar> outputType;
@@ -182,7 +183,7 @@ public class ConvolutionLayerKernel extends Kernel {
         ArrayList<MultiSourceAccumulator> ret = new ArrayList<MultiSourceAccumulator>();
         for (int i = 0 ; i < outputDimension.channels() ; i++) {
             ret.add(new MultiSourceAccumulator(this,
-                    loopIterations, loopIterations, convCyclesRequired));
+                    loopIterations, loopIterations, new OffsetExpr(convCyclesRequired)));
         }
         return ret;
     }
@@ -272,9 +273,10 @@ public class ConvolutionLayerKernel extends Kernel {
                 inputDimension.width(),
                 kernel,
                 kernelFoldingFactor,
-                loopIterations);
+                loopIterations,
+                "ConvolutionUnit");
 
-            PartitionedDemux demux = new PartitionedDemux(this, counts, convCyclesRequired);
+            PartitionedDemux demux = new PartitionedDemux(this, counts, new OffsetExpr(convCyclesRequired));
 
             c.setInput(inputChannel);
             convolutionUnits.add(c);
