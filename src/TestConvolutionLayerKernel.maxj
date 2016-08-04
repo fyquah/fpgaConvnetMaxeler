@@ -333,7 +333,7 @@ public class TestConvolutionLayerKernel {
 
     @Test
     public void testLargeBothFactors() {
-        genericTestConvolution(500, 5);
+        genericTestConvolution(100, 25);
     }
 
     @Test
