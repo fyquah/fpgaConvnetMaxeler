@@ -3,18 +3,34 @@ import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
 
 public class OffsetExprDefaultDict extends DefaultDict<Kernel, OffsetExpr> {
     private int curLoopId = 0;
+    private int min, max;
     private final String name;
 
     public OffsetExprDefaultDict(String argName) {
+        this(argName, -1, -1);
+    }
+
+    public OffsetExprDefaultDict(String argName, int argMin, int argMax) {
         super();
         name = argName;
+        min = argMin;
+        max = argMax;
     }
 
     protected OffsetExpr getDefaultObject(Kernel k) {
-        OffsetExpr offset = k.stream.makeOffsetAutoLoop(
-                name + curLoopId,
-                1,
-                64);
+        OffsetExpr offset;
+
+        if (min == -1 || max == -1) {
+            offset = k.stream.makeOffsetAutoLoop(
+                    name + curLoopId);
+
+        } else {
+            offset = k.stream.makeOffsetAutoLoop(
+                    name + curLoopId,
+                    min,
+                    max);
+        }
+
         curLoopId += 1;
         return offset;
     }

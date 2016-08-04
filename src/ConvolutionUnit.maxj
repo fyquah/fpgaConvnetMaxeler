@@ -27,6 +27,8 @@ public class ConvolutionUnit extends KernelLib {
     SlidingWindow slidingWindow;
     OffsetExpr pipelineLength;
     private static int curLoopId = 0;
+    public static OffsetExprDefaultDict pipelineLengthCache = new OffsetExprDefaultDict(
+            "ConvolutionUnit", 1, 10);
 
     private static int generateLoopId() {
         return ++curLoopId;
@@ -79,10 +81,7 @@ public class ConvolutionUnit extends KernelLib {
     public static OffsetExpr cacheLoopLength;
 
     public OffsetExpr getOffsetAutoLoop(String loopName) {
-        if (null == cacheLoopLength) {
-            cacheLoopLength = stream.makeOffsetAutoLoop(loopName, 1, 10);
-        }
-        return cacheLoopLength;
+        return pipelineLengthCache.get(kernel);
     }
 
     /* 

@@ -72,7 +72,7 @@ public class MultiSourceAccumulator extends KernelLib {
     public void generate(double pipeliningFactor) {
         // Compute previous (either 0 or output[-1])
         optimization.pushPipeliningFactor(pipeliningFactor);
-        OffsetExpr offset = -(convPipelineLength + pipelineLength - 1);
+        OffsetExpr offset = -(convPipelineLength + pipelineLength);
         DFEVar prev = (iter.eq(0)
                 ? constant.var(GlobalConfig.dataType, 0)
                 : stream.offset(out, offset));
