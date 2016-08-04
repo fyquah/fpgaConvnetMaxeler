@@ -307,7 +307,6 @@ public class ConvolutionLayerKernel extends Kernel {
         // setting the loop counters
 
         // input and output controls
-        MultiSourceAccumulator acc = outputChannelAccumulator[0];
         DFEVar inputControl = iter.eq(0) & pipelineStart();
         DFEVar outputControl = iter.eq(loopIterations - 1)
                                & ~convolutionUnits.get(0).isBorder()
