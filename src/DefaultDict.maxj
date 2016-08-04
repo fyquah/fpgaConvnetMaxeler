@@ -1,0 +1,17 @@
+import java.util.AbstractMap;
+import java.util.HashMap;
+
+public abstract class DefaultDict<K, V> extends HashMap<K, V> {
+    @Override
+    public V get(Object key) {
+        if (containsKey(key)) {
+            return super.get(key);
+        }
+
+        V obj = getDefaultObject((K) key);
+        put((K) key, obj);
+        return obj;
+    }
+
+    protected abstract V getDefaultObject(K key);
+}

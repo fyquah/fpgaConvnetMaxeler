@@ -16,18 +16,17 @@ public class MultiSourceAccumulator extends KernelLib {
      * */
     private boolean generated = false;
     private DFEVar out;
+    private Kernel kernel;
     public ArrayList<DFEVar> sources;
     public int addCycles, holdCycles;
     public OffsetExpr convPipelineLength, pipelineLength;
-    public static OffsetExpr pipelineLengthCache = null;
     public DFEVar convPipelineLengthVar, iter, cycleStage, pipelineIndex, pipelineLengthVar;
+    /* offsetdefaultdict ensures that every kernel has only one offsetexpr, which
+     * should be perfectly sensible since there is only one output per kernel */
+    public static OffsetDefaultDict pipelineLengthCache = new OffsetDefaultDict();
 
     public OffsetExpr getOffsetAutoLoop() {
-        if (pipelineLengthCache == null) {
-            pipelineLengthCache = stream.makeOffsetAutoLoop("MultiSourceAccumulator", 1, 64);
-        }
-
-        return pipelineLengthCache;
+        return pipelineLengthCache.get(kernel);
     }
 
     public MultiSourceAccumulator (
@@ -36,6 +35,7 @@ public class MultiSourceAccumulator extends KernelLib {
             int argHoldCycles,
             OffsetExpr argCycleLength) {
         super(argKernel);
+        kernel = argKernel;
         addCycles = argAddCycles;
         holdCycles = argHoldCycles;
         sources = new ArrayList<DFEVar>();
@@ -97,5 +97,18 @@ public class MultiSourceAccumulator extends KernelLib {
 
     public DFEVar output() {
         return out;
+    }
+
+    private static class OffsetDefaultDict extends DefaultDict<Kernel, OffsetExpr> {
+        private int curLoopId = 0;
+
+        protected OffsetExpr getDefaultObject(Kernel k) {
+            OffsetExpr offset = k.stream.makeOffsetAutoLoop(
+                    "MultiSourceAccumulator" + curLoopId,
+                    1,
+                    64);
+            curLoopId += 1;
+            return offset;
+        }
     }
 }
