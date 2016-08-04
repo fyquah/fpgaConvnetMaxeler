@@ -91,24 +91,35 @@ public class fpgaConvNetMaxelerManager {
             }
         }
 
+        System.out.println("Running tests ...");
         for (int i = 0 ; i < klasses.length ; i++) {
             Result result;
 
             if (methodNames[i].equals("")) {
+                System.out.println("Running all tests in " + klasses[i]);
                 result = JUnitCore.runClasses(klasses);
             } else {
+                System.out.println("Testing " + klasses[i] + "." + methodNames[i]);
                 Request request = Request.method(klasses[i], methodNames[i]);
                 result = new JUnitCore().run(request);
             }
 
+            System.out.println("");
+
             if (result.wasSuccessful()) {
-                System.out.println("Sucessful!");
+                System.out.println("All test passed!");
             } else {
-                System.out.println("Error");
+                System.out.println(result.getFailureCount() + "/" + result.getRunCount() + " tests failed");
+
                 for (Failure failure : result.getFailures()) {
-                    System.out.println(failure.toString());
+                    System.out.println(failure.getTestHeader());
+                    System.out.println("   Traceback : ");
+                    System.out.println(failure.getTrace());
+                    System.out.println("");
                 }
             }
+
+            System.out.println("");
         }
     }
 

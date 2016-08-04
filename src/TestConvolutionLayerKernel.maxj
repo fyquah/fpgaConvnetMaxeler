@@ -328,7 +328,7 @@ public class TestConvolutionLayerKernel {
 
     @Test
     public void testLargeFoldingFactor() {
-        genericTestConvolution(500, 1);
+        genericTestConvolution(200, 1);
     }
 
     @Test
