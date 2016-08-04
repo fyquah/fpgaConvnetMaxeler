@@ -1,0 +1,21 @@
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Stream.OffsetExpr;
+import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
+
+public class OffsetExprDefaultDict extends DefaultDict<Kernel, OffsetExpr> {
+    private int curLoopId = 0;
+    private final String name;
+
+    public OffsetExprDefaultDict(String argName) {
+        super();
+        name = argName;
+    }
+
+    protected OffsetExpr getDefaultObject(Kernel k) {
+        OffsetExpr offset = k.stream.makeOffsetAutoLoop(
+                name + curLoopId,
+                1,
+                64);
+        curLoopId += 1;
+        return offset;
+    }
+}
