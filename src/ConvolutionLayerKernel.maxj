@@ -299,10 +299,13 @@ public class ConvolutionLayerKernel extends Kernel {
             output[i] <== outputChannelAccumulator[i].output() + bias[i];
         }
 
-        // debugPosition(parameters.getName());
-        // debug.simPrintf(iter.eq(loopIterations - 1) & convIter.eq(convCyclesRequired - 1),
-        //         "row = %d col = %d\n",
-        //         convolutionUnits[0].row, convolutionUnits[0].col);
+        DFEVar tick = control.count.simpleCounter(32);
+        debug.simPrintf(
+                iter.eq(loopIterations - 1) & pipelineStage.eq(pipelineLengthVar - 1),
+                "tick = %d row = %d col = %d\n",
+                tick,
+                convolutionUnits[0].row,
+                convolutionUnits[0].col);
 
         // setting the loop counters
 
