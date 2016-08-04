@@ -257,22 +257,32 @@ public class LeNetManager extends CustomManager {
     }
 
     public EngineInterface interfaceDefault() {
-        EngineInterface engine_interface = new EngineInterface();
+        EngineInterface ei = new EngineInterface();
         CPUTypes   type = CPUTypes.FLOAT;
         int        size = type.sizeInBytes();
-        InterfaceParam  N    = engine_interface.addParam("N", CPUTypes.INT);
+        InterfaceParam  N    = ei.addParam("N", CPUTypes.INT);
+        InterfaceParam loopLength;
 
-        engine_interface.setTicks("DfeInputAlligner", N * inputDimension().totalSize());
-        engine_interface.setTicks("conv1", N * conv1Kernel.cyclesPerImage());
-        engine_interface.setTicks("pool1", N * pool1Kernel.cyclesPerImage());
-        engine_interface.setTicks("conv2", N * conv2Kernel.cyclesPerImage());
-        engine_interface.setTicks("pool2", N * pool2Kernel.cyclesPerImage());
-        engine_interface.setTicks("DfeOutputAlligner", N * outputDimension().totalSize());
+        ei.setTicks("DfeInputAlligner", N * inputDimension().totalSize());
 
-        engine_interface.setStream("x", type, N * inputDimension().totalSize() * size);
-        engine_interface.setStream("y", type, N * outputDimension().totalSize() * size);
+       
+        loopLength = ei.getAutoLoopOffset("conv1", conv1Kernel.cyclesPerImage().toString());
+        ei.ignoreAutoLoopOffset("conv1", conv1Kernel.cyclesPerImage().toString());
+        ei.setTicks("conv1", N * loopLength);
 
-        return engine_interface;
+        ei.setTicks("pool1", N * pool1Kernel.cyclesPerImage());
+
+        loopLength = ei.getAutoLoopOffset("conv2", conv2Kernel.cyclesPerImage().toString());
+        ei.ignoreAutoLoopOffset("conv2", conv2Kernel.cyclesPerImage().toString());
+        ei.setTicks("conv2", N * loopLength);
+
+        ei.setTicks("pool2", N * pool2Kernel.cyclesPerImage());
+        ei.setTicks("DfeOutputAlligner", N * outputDimension().totalSize());
+
+        ei.setStream("x", type, N * inputDimension().totalSize() * size);
+        ei.setStream("y", type, N * outputDimension().totalSize() * size);
+
+        return ei;
     }
 }
 

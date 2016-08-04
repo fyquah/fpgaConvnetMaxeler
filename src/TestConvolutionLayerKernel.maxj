@@ -21,6 +21,8 @@ public class TestConvolutionLayerKernel {
     // various utilities to do convolution tests ...
     // ---------------------------
 
+    public static long TEST_KERNEL_CYCLES = 100000000;
+
     public static float rand() {
         return (float) (((Math.random() - 0.5) * 1));
     }
@@ -307,7 +309,8 @@ public class TestConvolutionLayerKernel {
 
         // running the kernel
         manager.setInputDataRaw("x", rawInput);
-        manager.setKernelCycles(kernel.cyclesPerImage());
+        // TODO(fyquah): This is a terrible hack
+        manager.setKernelCycles(TEST_KERNEL_CYCLES);
         manager.run();
         List<Bits> rawOutput = manager.getOutputDataRaw("y");
         List<Double> doubleOutput = toDoubleOutput(rawOutput, outputChannels);
@@ -375,7 +378,8 @@ public class TestConvolutionLayerKernel {
             }
 
             manager.setInputDataRaw("x", inputBits);
-            manager.setKernelCycles(kernel.cyclesPerImage());
+            // TODO(fyquah): This is a terrible hack
+            manager.setKernelCycles(TEST_KERNEL_CYCLES);
             manager.run();
             outputBits = manager.getOutputDataRaw("y");
 
