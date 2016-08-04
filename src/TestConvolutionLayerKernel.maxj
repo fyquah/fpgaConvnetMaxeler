@@ -332,6 +332,11 @@ public class TestConvolutionLayerKernel {
     }
 
     @Test
+    public void testLargeBothFactors() {
+        genericTestConvolution(500, 5);
+    }
+
+    @Test
     public void testSmallConvolution() {
         final int inputHeight = 28;
         final int inputWidth = 28;
