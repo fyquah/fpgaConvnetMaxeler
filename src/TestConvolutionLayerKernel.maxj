@@ -274,8 +274,7 @@ public class TestConvolutionLayerKernel {
         return ret;
     }
 
-    @Test
-    public void testLargeConvolution() {
+    private void genericTestConvolution(int foldingFactor, int kernelFoldingFactor) {
         final int inputHeight = 28;
         final int inputWidth = 28;
         final int inputChannels = 20;
@@ -290,8 +289,8 @@ public class TestConvolutionLayerKernel {
         ConvolutionParameters convParams = new ConvolutionParameters(
                 inputDimension, outputChannels,
                 convKernels, biases);
-        convParams.foldingFactor = 100;
-        convParams.kernelFoldingFactor = 1;
+        convParams.foldingFactor = foldingFactor;
+        convParams.kernelFoldingFactor = kernelFoldingFactor;
         ConvolutionLayerKernel kernel = new ConvolutionLayerKernel(
                 manager.makeKernelParameters(), convParams);
 
@@ -320,6 +319,16 @@ public class TestConvolutionLayerKernel {
             double d = Math.abs(doubleOutput[i] - doubleExpectedOutput[i]);
             assertTrue(d < 0.05);
         }
+    }
+
+    @Test
+    public void testLargeKernelFoldingFactor() {
+        genericTestConvolution(1, 25);
+    }
+
+    @Test
+    public void testLargeFoldingFactor() {
+        genericTestConvolution(500, 1);
     }
 
     @Test
