@@ -57,14 +57,6 @@ public class MultiSourceAccumulator extends KernelLib {
         }
     }
 
-    public DFEVar pipelineStart() {
-        return pipelineIndex.eq(0);
-    }
-
-    public DFEVar pipelineEnd() {
-        return pipelineIndex.eq(pipelineLengthVar - 1);
-    }
-
     public void addSource(DFEVar x) {
         sources.add(x);
     }

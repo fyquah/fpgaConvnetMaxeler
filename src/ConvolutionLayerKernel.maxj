@@ -41,7 +41,7 @@ public class ConvolutionLayerKernel extends Kernel {
 
     protected void initPipelineLength() {
         MultiSourceAccumulator acc = outputChannelAccumulator[0];
-        pipelineLength = (acc.pipelineLength + acc.convPipelineLength - 1);
+        pipelineLength = (acc.pipelineLength + acc.convPipelineLength);
         pipelineLengthVar = pipelineLength.getDFEVar(this, dfeUInt(8));
     }
 
