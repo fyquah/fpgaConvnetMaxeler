@@ -1,10 +1,13 @@
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Stream.OffsetExpr;
 import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
+import java.util.AbstractMap;
+import java.util.HashMap;
 
 public class OffsetExprDefaultDict extends DefaultDict<Kernel, OffsetExpr> {
     private int curLoopId = 0;
     private int min, max;
     private final String name;
+    private final HashMap<Kernel, String> nameMap;
 
     public OffsetExprDefaultDict(String argName) {
         this(argName, -1, -1);
@@ -15,6 +18,11 @@ public class OffsetExprDefaultDict extends DefaultDict<Kernel, OffsetExpr> {
         name = argName;
         min = argMin;
         max = argMax;
+        nameMap = new HashMap<Kernel, String>();
+    }
+
+    public String getOffsetExprName(Kernel k) {
+        return nameMap.get(k);
     }
 
     protected OffsetExpr getDefaultObject(Kernel k) {
@@ -23,12 +31,14 @@ public class OffsetExprDefaultDict extends DefaultDict<Kernel, OffsetExpr> {
         if (min == -1 || max == -1) {
             offset = k.stream.makeOffsetAutoLoop(
                     name + curLoopId);
+            nameMap.put(k, name + curLoopId);
 
         } else {
             offset = k.stream.makeOffsetAutoLoop(
                     name + curLoopId,
                     min,
                     max);
+            nameMap.put(k, name + curLoopId);
         }
 
         curLoopId += 1;

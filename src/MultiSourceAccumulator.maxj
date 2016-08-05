@@ -30,6 +30,10 @@ public class MultiSourceAccumulator extends KernelLib {
         return pipelineLengthCache.get(kernel);
     }
 
+    public String getOffsetExprName() {
+        return pipelineLengthCache.getOffsetExprName(kernel);
+    }
+
     public MultiSourceAccumulator (
             Kernel argKernel,
             int argAddCycles,

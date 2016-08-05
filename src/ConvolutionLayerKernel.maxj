@@ -1,6 +1,7 @@
 // package nothing;
 
 import java.util.ArrayList;
+import java.util.List;
 
 import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
 import com.maxeler.maxcompiler.v2.kernelcompiler.KernelParameters;
@@ -9,6 +10,8 @@ import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVector;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVectorType;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Stream.OffsetExpr;
+import com.maxeler.maxcompiler.v2.managers.engine_interfaces.EngineInterface;
+import com.maxeler.maxcompiler.v2.managers.engine_interfaces.InterfaceParam;
 
 public class ConvolutionLayerKernel extends Kernel {
     private final DFEVectorType<DFEVar> outputType;
@@ -38,9 +41,29 @@ public class ConvolutionLayerKernel extends Kernel {
         return inputDimension.height() * inputDimension.width() * loopIterations * pipelineLength;
     }
 
+    public InterfaceParam getTicksPerImage(EngineInterface ei, String name) {
+        String accName = outputChannelAccumulator[0].getOffsetExprName();
+        String convName = convolutionUnits[0].getOffsetExprName();
+
+        InterfaceParam accPipelineLength = ei.getAutoLoopOffset(name, accName);
+        InterfaceParam convPipelineLength = ei.getAutoLoopOffset(name, convName);
+
+        InterfaceParam ticksPerImage =
+            accPipelineLength + convPipelineLength
+            * loopIterations
+            * inputDimension.width()
+            * inputDimension.height();
+
+        ei.ignoreAutoLoopOffset(name, accName);
+        ei.ignoreAutoLoopOffset(name, convName);
+
+        return ticksPerImage;
+    }
+
     protected void initPipelineLength() {
+        /* NOTE : Remember to change this for getTicksPerImage too */
         MultiSourceAccumulator acc = outputChannelAccumulator[0];
-        pipelineLength = (acc.pipelineLength + acc.convPipelineLength);
+        pipelineLength = acc.pipelineLength +  acc.convPipelineLength;
         pipelineLengthVar = pipelineLength.getDFEVar(this, dfeUInt(8));
     }
 
@@ -50,6 +73,14 @@ public class ConvolutionLayerKernel extends Kernel {
 
     protected DFEVar pipelineStart() {
         return pipelineStage.eq(0);
+    }
+
+    protected List<OffsetExpr> getOffsetParameters() {
+        ArrayList<OffsetExpr> ret = new ArrayList<OffsetExpr>();
+        ret.add(getAccumulator(0).getOffsetAutoLoop());
+        ret.add(convolutionUnits[0].getOffsetAutoLoop());
+
+        return ret;
     }
 
     protected class ChannelFrequency {
@@ -275,8 +306,7 @@ public class ConvolutionLayerKernel extends Kernel {
                 inputDimension.width(),
                 kernel,
                 kernelFoldingFactor,
-                loopIterations,
-                "ConvolutionUnit");
+                loopIterations);
 
             PartitionedDemux demux = new PartitionedDemux(this, counts, c.cyclesRequired());
 

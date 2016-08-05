@@ -38,6 +38,10 @@ public class ConvolutionUnit extends KernelLib {
         return Utils.divCeil(kernelDim * kernelDim, foldingFactor);
     }
 
+    public String getOffsetExprName() {
+        return pipelineLengthCache.getOffsetExprName(kernel);
+    }
+
     public DFEVar getConvParam(int multiplierNumber) {
         ArrayList<DFEVar> l = new ArrayList<DFEVar>();
         for (int i = multiplierNumber * loopIterations ;
@@ -78,9 +82,7 @@ public class ConvolutionUnit extends KernelLib {
         }
     }
 
-    public static OffsetExpr cacheLoopLength;
-
-    public OffsetExpr getOffsetAutoLoop(String loopName) {
+    public OffsetExpr getOffsetAutoLoop() {
         return pipelineLengthCache.get(kernel);
     }
 
@@ -92,8 +94,7 @@ public class ConvolutionUnit extends KernelLib {
         int argInputHeight, int argInputWidth,
         DFEVar[][] argConvKernel,
         int argFoldingFactor,
-        int holdIterations,
-        String loopName
+        int holdIterations
     ) {
         super(argKernel);
         // some constants ...
@@ -109,7 +110,7 @@ public class ConvolutionUnit extends KernelLib {
 
         // Set all counters here
         loopIterations = Utils.divCeil(kernelDim * kernelDim, foldingFactor);
-        pipelineLength = getOffsetAutoLoop(loopName);
+        pipelineLength = getOffsetAutoLoop();
 
         CounterChain chain = control.count.makeCounterChain();
         row = chain.addCounter(inputHeight, 1);

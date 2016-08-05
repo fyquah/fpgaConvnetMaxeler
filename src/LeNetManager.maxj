@@ -13,6 +13,7 @@ import com.maxeler.maxcompiler.v2.managers.custom.blocks.KernelBlock;
 import com.maxeler.maxcompiler.v2.managers.engine_interfaces.CPUTypes;
 import com.maxeler.maxcompiler.v2.managers.engine_interfaces.EngineInterface;
 import com.maxeler.maxcompiler.v2.managers.engine_interfaces.InterfaceParam;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Stream.OffsetExpr;
 
 public class LeNetManager extends CustomManager {
     private final int inputHeight = 28;
@@ -265,17 +266,9 @@ public class LeNetManager extends CustomManager {
 
         ei.setTicks("DfeInputAlligner", N * inputDimension().totalSize());
 
-       
-        loopLength = ei.getAutoLoopOffset("conv1", conv1Kernel.cyclesPerImage().toString());
-        ei.ignoreAutoLoopOffset("conv1", conv1Kernel.cyclesPerImage().toString());
-        ei.setTicks("conv1", N * loopLength);
-
+        ei.setTicks("conv1", N * conv1Kernel.getTicksPerImage(ei, "conv1"));
         ei.setTicks("pool1", N * pool1Kernel.cyclesPerImage());
-
-        loopLength = ei.getAutoLoopOffset("conv2", conv2Kernel.cyclesPerImage().toString());
-        ei.ignoreAutoLoopOffset("conv2", conv2Kernel.cyclesPerImage().toString());
-        ei.setTicks("conv2", N * loopLength);
-
+        ei.setTicks("conv2", N * conv2Kernel.getTicksPerImage(ei, "conv2"));
         ei.setTicks("pool2", N * pool2Kernel.cyclesPerImage());
         ei.setTicks("DfeOutputAlligner", N * outputDimension().totalSize());
 
