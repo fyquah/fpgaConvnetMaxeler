@@ -1,0 +1,168 @@
+// package nothing;
+
+import java.util.ArrayList;
+
+import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
+import com.maxeler.maxcompiler.v2.kernelcompiler.KernelLib;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.CounterChain;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVector;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVectorType;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Stream.OffsetExpr;
+
+// convolves an input stream with a kernel
+// TODO(fuyong): STRIDING
+public class ConvolutionUnit extends KernelLib {
+    DFEVectorType vectorType;
+    DFEVar[][] convKernel;
+    Kernel kernel;
+    int foldingFactor;
+    int inputHeight;
+    int inputWidth;
+    int kernelDim;
+    int loopIterations;
+    DFEVar input_, output_;
+    DFEVar loopIndex, holdIndex, pipelineIndex;
+    DotProductUnit dotProductUnit;
+    SlidingWindow slidingWindow;
+    OffsetExpr pipelineLength;
+    private static int curLoopId = 0;
+    public static OffsetExprDefaultDict pipelineLengthCache = new OffsetExprDefaultDict(
+            "ConvolutionUnit", 1, 10);
+
+    private static int generateLoopId() {
+        return ++curLoopId;
+    }
+
+    public static int calcCyclesRequired(int kernelDim, int foldingFactor) {
+        return Utils.divCeil(kernelDim * kernelDim, foldingFactor);
+    }
+
+    public String getOffsetExprName() {
+        return pipelineLengthCache.getOffsetExprName(kernel);
+    }
+
+    public OffsetExpr getOffsetAutoLoop() {
+        return pipelineLengthCache.get(kernel);
+    }
+
+    /* 
+     * expects input and argConvKernel to be of the same dimension
+     * */
+    public ConvolutionUnit(
+        Kernel argKernel,
+        int argInputHeight, int argInputWidth,
+        DFEVar[][] argConvKernel,
+        int argFoldingFactor,
+        int holdIterations
+    ) {
+        super(argKernel);
+        // some constants ...
+        inputHeight = argInputHeight;
+        inputWidth = argInputWidth;
+        convKernel = argConvKernel;
+        foldingFactor = argFoldingFactor;
+        kernelDim = convKernel.length;
+        kernel = argKernel;
+        vectorType = new DFEVectorType<DFEVar>(
+                GlobalConfig.dataType, kernelDim * kernelDim);
+        input_ = GlobalConfig.dataType.newInstance(this);
+
+        // Set all counters here
+        loopIterations = Utils.divCeil(kernelDim * kernelDim, foldingFactor);
+        pipelineLength = getOffsetAutoLoop();
+
+        CounterChain chain = control.count.makeCounterChain();
+        holdIndex = Utils.chainCounterOrZero(kernel, chain, holdIterations);
+        loopIndex = Utils.chainCounterOrZero(kernel, chain, loopIterations);
+        pipelineIndex = chain.addCounter(pipelineLength.getDFEVar(this, dfeUInt(32)), 1);
+
+        // the computational stuff
+        optimization.pushPipeliningFactor(0.0);
+        slidingWindow = new SlidingWindow(
+            kernel,
+            input_,
+            inputHeight,
+            inputWidth,
+            kernelDim,
+            pipelineLength * loopIterations * holdIterations);
+        dotProductUnit = new DotProductUnit(
+            kernel,
+            slidingWindow.output(),
+            Utils.unrollArray(argConvKernel),
+            argFoldingFactor);
+        optimization.popPipeliningFactor();
+
+        // output control (we only want to output the valid bits,
+        // i.e: ignore the borders)
+        output_ = (pipelineIndex.eq(pipelineLength.getDFEVar(this, dfeUInt(32)) - 1) & loopIndex.eq(loopIterations - 1)
+            ? dotProductUnit.output
+            : constant.var(GlobalConfig.dataType,  0));
+    }
+
+    public void debugPrint() {
+        DFEVector<DFEVar> v = slidingWindow.output();
+
+        debug.simPrintf("Sliding window : ");
+        for (int i = 0 ; i < v.getSize(); i++) {
+            debug.simPrintf("%.5f ", v[i]);
+        }
+
+        debug.simPrintf("\n");
+        debug.simPrintf("multiplierOutput[0]: %.5f\n", dotProductUnit.multiplierOutputs[0]);
+        debug.simPrintf("additionResult: %.5f\n", dotProductUnit.additionResult);
+        debug.simPrintf("loopIndex = %d\n", loopIndex);
+        debug.simPrintf("output() = %.3f\n", dotProductUnit.output);
+        debug.simPrintf("\n");
+    }
+
+    public void setInput(DFEVar argInput) {
+        input_ <== argInput;
+    }
+
+    public OffsetExpr cyclesRequired() {
+        return loopIterations * pipelineLength;
+    }
+
+    public DFEVar index() {
+        return loopIndex;
+    }
+
+    public DFEVar output() {
+        return output_;
+    }
+
+    // this class performs the dotProduct functionality
+    private class DotProductUnit {
+        public DFEVar output, additionResult;
+        public ArrayList<DFEVar> multiplierOutputs = new ArrayList<DFEVar>();
+
+        DotProductUnit(Kernel argKernel, DFEVector<DFEVar> input, DFEVar[] a, int foldingFactor) {
+            for (int i = 0; i < foldingFactor; i++) {
+                DFEVar convParam = getConvParam(i);
+                DFEVar convInput = getConvInput(i, input);
+                multiplierOutputs.add(convParam * convInput);
+            }
+
+            if (loopIterations == 1) {
+                additionResult = Utils.treeReduceAdd(multiplierOutputs);
+                output = additionResult;
+
+            } else {
+                output = GlobalConfig.dataType.newInstance(argKernel);
+                ArrayList<DFEVar> x = new ArrayList<DFEVar>();
+
+                for (int i = 0 ; i < multiplierOutputs.size() ; i++) {
+                    x.add(multiplierOutputs[i]);
+                }
+
+                x.add(loopIndex.eq(0) & pipelineIndex.eq(0)
+                        ? constant.var(GlobalConfig.dataType, 0)
+                        : stream.offset(output, -pipelineLength));
+                additionResult = Utils.treeReduceAdd(x);
+                output <== additionResult;
+            }
+        }
+    }
+}
+

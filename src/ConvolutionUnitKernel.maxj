@@ -1,0 +1,118 @@
+import java.util.ArrayList;
+
+import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
+import com.maxeler.maxcompiler.v2.kernelcompiler.KernelLib;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.CounterChain;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVector;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVectorType;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Stream.OffsetExpr;
+
+public class ConvolutionUnitKernel extends Kernel {
+
+    private final DFEVectorType vectorType;
+    private final Kernel kernel;
+    private final int foldingFactor;
+    private final int inputHeight;
+    private final int inputWidth;
+    private final int kernelDim, inputChannels;
+    private final int loopIterations;
+    private final int kernelFoldingFactor;
+    private final DFEVector<DFEVar> input_w, input_x;
+    private final DFEVar output, cycle, pipelineLengthVar, cycleLengthVar;
+    private final OffsetExpr pipelineLength;
+    private final ArrayList<DFEVar> multiplierOutputs;
+    private static int curLoopId = 0;
+    private static final OffsetExprDefaultDict pipelineLengthCache = new OffsetExprDefaultDict(
+            "ConvolutionUnit", 1, 10);
+
+    private OffsetExpr getOffsetAutoLoop() {
+        return pipelineLengthCache.get(kernel);
+    }
+
+    public ConvolutionUnitKernel(
+            KernelParameters kp,
+            ConvolutionParameters params) {
+        super(kp);
+        kernelFoldingFactor = params.kernelFoldingFactor;
+        loopIterations = Utils.divCeil(
+                kernelDim * kernelDim,  kernelFoldingFactor);
+        output = GlobalConfig.dataType.newInstance(this);
+        input_w = new DFEVectorType(inputChannels).newInstance(this);
+        input_x = new DFEVectorType(inputChannels).newInstance(this);
+        output = GlobalConfig.dataType.newInstance(this);
+
+        pipelineLength = getOffsetAutoLoop();
+        pipelineLengthVar = pipelineLength.getDFEVar();
+        cycleLengthVar = pipelineLengthVar + loopIterations;
+        cycle = Utils.simpleCounter(this, cycleLengthVar, 1);
+
+        initOutput();
+
+        DFEVar inputControl = cycle.eq(0);
+        DFEVar outputControl = cycle.eq(cycleLengthVar - 1);
+        input_w <== io.input("input_w", GlobalConfig.dataType, inputControl);
+        input_x <== io.input("input_x", GlobalConfig.dataType, inputControl);
+        io.output("output", GlobalConfig.dataType, outputControl) <== output;
+    }
+
+    private void initOutput() {
+        for (int i = 0 ; i < kernelFoldingFactor ; i++) {
+            DFEVar convWeight = getConvWeight(i);
+            DFEVar convPixel = getConvPixel(i);
+            multiplierOutputs.add(convWeight * convPixel);
+        }
+
+        if (loopIterations == 1) {
+            output <== Utils.treeReduceAdd(multiplierOutputs);
+        } else {
+            DFEVar prev = (cycle.eq >= pipelineLengthVar
+                    ? constant.var(GlobalConfig.dataType, 0)
+                    : stream.offset(output, -pipelineLength));
+
+            output <== Utils.treeReduceAdd(x) + prev;
+        }
+    }
+
+    private DFEVar getConvWeight(int multiplierNumber) {
+        ArrayList<DFEVar> l = new ArrayList<DFEVar>();
+        for (int i = multiplierNumber * loopIterations ;
+                i < (multiplierNumber + 1) * loopIterations && i < kernelDim * kernelDim;
+                i++) {
+            l.add(convKernel[i / kernelDim][i % kernelDim]);
+        }
+
+        while (l.size() < loopIterations) {
+            l.add(constant.var(GlobalConfig.dataType, 0));
+        }
+
+        if (l.size() == 1) {
+            return l[0];
+        } else {
+            return control.mux(
+                loopIndex,
+                l.toArray(new DFEVar[l.size()]));
+        }
+    }
+
+    private DFEVar getConvPixel(int multiplierNumber) {
+        ArrayList<DFEVar> l = new ArrayList<DFEVar>();
+        for (int i = multiplierNumber * loopIterations ;
+                i < ((multiplierNumber + 1) * loopIterations
+                    && i < kernelDim * kernelDim);
+                i++) {
+            l.add(input[i]);
+        }
+
+        while (l.size() < loopIterations) {
+            l.add(constant.var(GlobalConfig.dataType, 0));
+        }
+
+        if (l.size() == 1) {
+            return l[0];
+        } else {
+            return control.mux(loopIndex, l.toArray(new DFEVar[l.size()]));
+        }
+    }
+
+}
