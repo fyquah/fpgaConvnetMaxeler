@@ -1,6 +1,7 @@
 // package nothing;
 
 import java.util.ArrayList;
+import java.lang.AssertionError;
 
 import maxpower.ops.AssociativeOp;
 import maxpower.utils.TreeReduce;
@@ -338,5 +339,15 @@ public class Utils {
     public static DFEVar simpleCounter(KernelLib k, DFEVar x, int inc) {
         CounterChain chain = k.control.count.makeCounterChain();
         return chain.addCounter(x, inc);
+    }
+
+    public static void assertTrue(boolean flag) {
+        assertTrue(flag, "");
+    }
+
+    public static void assertTrue(boolean flag, String message) {
+        if (flag) {
+            throw new AssertionError(message);
+        }
     }
 }

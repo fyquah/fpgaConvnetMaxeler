@@ -25,35 +25,37 @@ import com.maxeler.maxcompiler.v2.managers.engine_interfaces.InterfaceParam;
  */
 
 public class ConvolutionSchedulerKernel extends Kernel {
-    private final DFEVectorType inputVectorType, outputVectorType;
+    private final DFEVectorType<DFEVar> inputVectorType, outputVectorType;
     private final SlidingWindow[] slidingWindows;
-    private final OneHotDemux[] demuxUnits;
-    private final DFEVector input;
-    private final DFEVector[] output_w;
-    private final DFEVector[] output_y;
+    private final DFEVector<DFEVar> input;
+    private final List<DFEVector<DFEVar>> output_w, output_y;
     private final Dimension inputDimension, outputDimension;
-    private final int foldingFactor, kernelDim, nOutput, stride, kernelFoldingFactor;
+    private final int foldingFactor, kernelDim, nOutput, stride, kernelFoldingFactor,
+                      loopIterations;
+    private final DFEVar row, col;
     private final ArrayList<ArrayList<float[][]>> convolutionWeights;
-    private final ArrayList<float> bias;
+    private final ArrayList<Float> bias;
     private final CounterChain masterChain;
+    private final List<ConvChannelIndex> convChannelIndices;
 
     public ConvolutionSchedulerKernel(
            KernelParameters kp,
            ConvolutionParameters params) {
         super(kp);
 
-        inputDimension = cp.inputDim;
-        kernelDim = cp.kernelDim;
-        nOutput = cp.outputChannels;
-        stride = cp.stride;
-        foldingFactor = cp.foldingFactor;
-        kernelFoldingFactor = cp.kernelFoldingFactor;
-        convolutionWeights = cp.getKernels();
-        bias = cp.bias;
+        inputDimension = params.inputDim;
+        kernelDim = params.kernelDim;
+        nOutput = params.outputChannels;
+        stride = params.stride;
+        foldingFactor = params.foldingFactor;
+        kernelFoldingFactor = params.kernelFoldingFactor;
+        convolutionWeights = params.getKernels();
+        bias = params.bias;
         outputDimension = new Dimension(
             inputDimension.height() - (kernelDim - 1),
             inputDimension.width() - (kernelDim - 1),
             nOutput);
+        loopIterations = params.loopIterations();
         masterChain = control.count.makeCounterChain();
         inputVectorType = new DFEVectorType<DFEVar>(
                 GlobalConfig.dataType,
@@ -62,12 +64,15 @@ public class ConvolutionSchedulerKernel extends Kernel {
                 GlobalConfig.dataType,
                 kernelDim * kernelDim);
         input = inputVectorType.newInstance(this);
-        output_w = new DFEVector[kernelDim * kernelDim];
-        output_y = new DFEVector[kernelDim * kernelDim];
+        output_w = new ArrayList<DFEVector<DFEVar>>();
+        output_y = new ArrayList<DFEVector<DFEVar>>();;
+        convChannelIndices = ConvChannelIndex.rangeProduct(
+                outputDimension.channels(), inputDimension.channels());
+        slidingWindows = new SlidingWindow[inputDimension.channels()];
 
         for (int i = 0 ; i < foldingFactor; i++) {
-            output_w[i] = outputVectorType.newInstance(this);
-            output_y[i] = outputVectorType.newInstance(this);
+            output_w.add(outputVectorType.newInstance(this));
+            output_y.add(outputVectorType.newInstance(this));
         }
 
         row = Utils.chainCounterOrZero(
@@ -88,8 +93,8 @@ public class ConvolutionSchedulerKernel extends Kernel {
     }
 
     private void initSlidingWindow() {
-        for (int i = 0 ; i < inputChannel ; i++) {
-            slidingWindow[i] = new SlidingWindow(
+        for (int i = 0 ; i < inputDimension.channels() ; i++) {
+            slidingWindows[i] = new SlidingWindow(
                 this,
                 input[i],
                 inputDimension.height(),
@@ -99,11 +104,12 @@ public class ConvolutionSchedulerKernel extends Kernel {
         }
     }
 
-    protected void initOutputs() {
+    private void initOutputs() {
+        DFEVar iter = control.count.simpleCounter(loopIterations, 1);
         for (int i = 0 ; i < foldingFactor ; i++) {
             ArrayList<ConvChannelIndex> indices = getConvUnitChannelIndices(i);
-            DFEVector convWeights = toMuxedKernel(iter, indices);
-            DFEVector convInputs = toMuxedInput(iter, indices);
+            DFEVector<DFEVar> convWeights = toMuxedWeight(iter, indices);
+            DFEVector<DFEVar> convInputs = toMuxedPixel(iter, indices);
             output_w[i] <== convWeights;
             output_y[i] <== convInputs;
         }
@@ -121,73 +127,74 @@ public class ConvolutionSchedulerKernel extends Kernel {
         return ret;
     }
 
-    protected DFEVector zeroVector(DFEVectorType type) {
-        DFEVector newVector = type.newInstance(this);
+    protected DFEVector<DFEVar> zeroVector(DFEVectorType<DFEVar> type) {
+        DFEVector<DFEVar> newVector = type.newInstance(this);
 
-        for (int i = 0 ; i < type.size ; i++) {
+        for (int i = 0 ; i < newVector.getSize() ; i++) {
             newVector[i] <== constant.var(GlobalConfig.dataType, 0);
         }
 
         return newVector;
     }
 
-    protected DFEVector toMuxedPixel(
+    protected DFEVector<DFEVar> toMuxedPixel(
             DFEVar iter,
             ArrayList<ConvChannelIndex> indices) {
-        assert loopIterations == indices.size();
 
         if (loopIterations == 1) {
-            return input[indices[0].in];
+            Utils.assertTrue(loopIterations == indices.size());
+            return slidingWindows[indices[0].in].output;
         }
 
-        ArrayList<DFEVector> arr = new ArrayList<DFEVector>();
+        ArrayList<DFEVector<DFEVar>> arr = new ArrayList<DFEVector<DFEVar>>();
 
         for (int i = 0 ; i < indices.size() ; i++) {
             arr.add(slidingWindows[indices[i].in].output);
         }
 
         while (arr.size() < loopIterations) {
-            arr.add(zeroVector);
+            arr.add(zeroVector(outputVectorType));
         }
 
-        return control.mux(iter, arr.toArray(new DFEVector[arr.size()]));
+        return control.mux(iter, arr);
     }
 
-    protected DFEVector getConvWeightsVector(
+    protected DFEVector<DFEVar> getConvWeightsVector(
             int outputChannel, int inputChannel) {
-        DFEVector vector = outputVectorType.newInstance(this);
+        DFEVector<DFEVar> vector = outputVectorType.newInstance(this);
         float[][] weights = convolutionWeights[outputChannel][inputChannel];
 
         for (int i = 0 ; i < kernelDim ; i++) {
             for (int j = 0 ; j < kernelDim ; j++) {
-                vector[i * kernelDim + j] <== weights[i][j];
+                vector[i * kernelDim + j] <== constant.var(
+                        GlobalConfig.dataType, weights[i][j]);
             }
         }
 
         return vector;
     }
 
-    protected DFEVector toMuxedWeight(
+    protected DFEVector<DFEVar> toMuxedWeight(
             DFEVar iter,
             ArrayList<ConvChannelIndex> indices) {
         if (indices.size() == 1) {
-            assert indices.size() == loopIterations;
+            Utils.assertTrue(indices.size() == loopIterations);
             return getConvWeightsVector(indices[0].out, indices[0].in);
         }
 
-        DFEVector ret = outputVectorType.newInstance(this);
-        ArrayList<DFEVector> choices = new ArrayList<DFEVector>();
+        DFEVector<DFEVar> ret = outputVectorType.newInstance(this);
+        ArrayList<DFEVector<DFEVar>> choices = new ArrayList<DFEVector<DFEVar>>();
 
         for (int i = 0 ; i < indices.size() ; i++) {
             int out = indices[i].out;
             int in = indices[i].in;
-            DFEVector weightVector = outputVectorType.newInstance(this);
+            DFEVector<DFEVar> weightVector = outputVectorType.newInstance(this);
 
             for (int r = 0 ; r < kernelDim ; r++) {
                 for (int c = 0 ; c < kernelDim ; c++) {
                     DFEVar w = constant.var(
                             GlobalConfig.dataType,
-                            convolutionKernels[out][in][r][c]);
+                            convolutionWeights[out][in][r][c]);
                     weightVector[i] <== w;
                 }
             }
@@ -200,6 +207,6 @@ public class ConvolutionSchedulerKernel extends Kernel {
             choices.add(zeroVector(outputVectorType));
         }
 
-        return control.mux(iter, choices.toArray(new DFEVector[choices.size()]));
+        return control.mux(iter, choices);
     }
 }

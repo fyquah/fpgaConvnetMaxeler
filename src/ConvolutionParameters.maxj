@@ -34,6 +34,18 @@ public class ConvolutionParameters {
         return inputDim;
     }
 
+    public int loopIterations() {
+        return Utils.divCeil(
+                inputDimension().channels() * outputDimension().channels(),
+                foldingFactor);
+    }
+
+    public int convLoopIterations() {
+        return Utils.divCeil(
+                kernelDim * kernelDim,
+                kernelFoldingFactor);
+    }
+
     public ArrayList<ArrayList<float[][]>> getKernels() {
         return dupKernelList(kernels);
     }
@@ -50,5 +62,4 @@ public class ConvolutionParameters {
 
         return ret;
     }
-
 }

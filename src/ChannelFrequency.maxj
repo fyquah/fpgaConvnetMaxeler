@@ -1,4 +1,4 @@
-protected class ChannelFrequency {
+public class ChannelFrequency {
     public final int channel;
     public final int frequency;
 
