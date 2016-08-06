@@ -1,0 +1,9 @@
+protected class ConvChannelIndex {
+    public final int in;
+    public final int out;
+
+    public ConvChannelIndex(int o, int i) {
+        in = i;
+        out = o;
+    }
+}

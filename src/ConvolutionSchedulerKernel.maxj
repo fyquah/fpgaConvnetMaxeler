@@ -1,0 +1,201 @@
+import java.util.ArrayList;
+import java.util.List;
+
+import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
+import com.maxeler.maxcompiler.v2.kernelcompiler.KernelParameters;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.CounterChain;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVector;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVectorType;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Stream.OffsetExpr;
+import com.maxeler.maxcompiler.v2.managers.engine_interfaces.EngineInterface;
+import com.maxeler.maxcompiler.v2.managers.engine_interfaces.InterfaceParam;
+
+/* 
+ * io.input:
+ *  x : DFEVector[inputChannels] 
+ * io.output:
+ *  - y0, y1, y2, ...., y{kernelFoldingFactor-1}
+ *  - w0, w1, w2, ...., w{kernelFoldingFactor-1}
+ *  Bias will be handled at a later stage of the pipeline?
+ *  where y_i and p_i are both inputs to ConvolutionUnit_i
+ *        and are of type DFEVector[kerenlDim]
+ *        (they are both sliding windows of the input streams
+ *         and the convolution parameters respectively.)
+ */
+
+public class ConvolutionSchedulerKernel extends Kernel {
+    private final DFEVectorType inputVectorType, outputVectorType;
+    private final SlidingWindow[] slidingWindows;
+    private final OneHotDemux[] demuxUnits;
+    private final DFEVector input;
+    private final DFEVector[] output_w;
+    private final DFEVector[] output_y;
+
+    public ConvolutionSchedulerKernel(
+           KernelParameters kp,
+           ConvolutionParameters params) {
+        super(kp);
+
+        inputDimension = cp.inputDim;
+        kernelDim = cp.kernelDim;
+        nOutput = cp.outputChannels;
+        stride = cp.stride;
+        foldingFactor = cp.foldingFactor;
+        kernelFoldingFactor = cp.kernelFoldingFactor;
+        convolutionWeights = cp.getKernels();
+        bias = cp.bias;
+        outputDimension = new Dimension(
+            inputDimension.height() - (kernelDim - 1),
+            inputDimension.width() - (kernelDim - 1),
+            nOutput);
+        masterChain = control.count.makeCounterChain();
+        inputVectorType = new DFEVectorType<DFEVar>(
+                GlobalConfig.dataType,
+                inputDimension.channels());
+        outputVectorType = new DFEVectorType<DFEVar>(
+                GlobalConfig.dataType,
+                kernelDim * kernelDim);
+        input = inputVectorType.newInstance(this);
+
+        for (int i = 0 ; i < foldingFactor; i++) {
+            output_w[i] = outputVectorType.newInstance(this);
+            output_y[i] = outputVectorType.newInstance(this);
+        }
+
+        row = Utils.chainCounterOrZero(
+                this, masterChain, inputDimension.height());
+        col = Utils.chainCounterOrZero(
+                this, masterChain, inputDimension.width());
+        
+
+        initSlidingWindow();
+        initOutputs();
+
+        // TODO(fyquah): input and output control flags
+        input <== io.input("x", inputType);
+
+        for (int i = 0 ; i < foldingFactor ; i++) {
+            io.output("w_" + i, outputType) <== output_w[i];
+            io.output("y_" + i, outputType) <== output_y[i];
+        }
+    }
+
+    private void initSlidingWindow() {
+        for (int i = 0 ; i < inputChannel ; i++) {
+            slidingWindow[i] = new SlidingWindow(
+                this,
+                input[i],
+                inputDimension.height(),
+                inputDimension.width(),
+                kernelDim,
+                new OffsetExpr(1));
+        }
+    }
+
+    protected void initOutputs() {
+        for (int i = 0 ; i < foldingFactor ; i++) {
+            ArrayList<ConvChannelIndex> indices = getConvUnitChannelIndices(i);
+            DFEVector convWeights = toMuxedKernel(iter, indices);
+            DFEVector convInputs = toMuxedInput(iter, indices);
+            output_w[i] <== convWeights;
+            output_y[i] <== convInputs;
+        }
+    }
+
+    protected ArrayList<ConvChannelIndex> getConvUnitChannelIndices(int convUnitId) {
+        ArrayList<ConvChannelIndex> ret = new ArrayList<ConvChannelIndex>();
+
+        for (int i = convUnitId * loopIterations ;
+                i < (convUnitId + 1) * loopIterations && i < convChannelIndices.size();
+                i++) {
+            ret.add(convChannelIndices[i]);
+        }
+
+        return ret;
+    }
+
+    protected DFEVector zeroVector(DFEVectorType type) {
+        DFEVector newVector = type.newInstance(this);
+
+        for (int i = 0 ; i < type.size ; i++) {
+            newVector[i] <== constant.var(GlobalConfig.dataType, 0);
+        }
+
+        return newVector;
+    }
+
+    protected DFEVector toMuxedPixel(
+            DFEVar iter,
+            ArrayList<ConvChannelIndex> indices) {
+        assert loopIterations == indices.size();
+
+        if (loopIterations == 1) {
+            return input[indices[0].in];
+        }
+
+        ArrayList<DFEVector> arr = new ArrayList<DFEVector>();
+
+        for (int i = 0 ; i < indices.size() ; i++) {
+            arr.add(slidingWindows[indices[i].in].output);
+        }
+
+        while (arr.size() < loopIterations) {
+            arr.add(zeroVector);
+        }
+
+        return control.mux(iter, arr.toArray(new DFEVar[arr.size()]));
+    }
+
+    protected DFEVector getConvWeightsVector(
+            int outputChannel, int inputChannel) {
+        DFEVector vector = outputType.newInstance(this);
+        float[][] weights = convolutionWeights[outputChannel][inputChannel];
+
+        for (int i = 0 ; i < kernelDim ; i++) {
+            for (int j = 0 ; j < kernelDim ; j++) {
+                vector[i * kernelDim + j] <== weights[i][j];
+            }
+        }
+
+        return vector;
+    }
+
+    protected DFEVector toMuxedWeight(
+            DFEVar iter,
+            ArrayList<ConvChannelIndex> indices) {
+        if (indices.size() == 1) {
+            assert indices.size() == loopIterations;
+            return getConvWeightsVector(indices[0].out, indices[0].in);
+        }
+
+        DFEVector ret = outputType.newInstance(this);
+
+        for (int r = 0 ; r < kernelDim ; r++) {
+            for (int c = 0 ; c < kernelDim ; c++) {
+                ArrayList<DFEVar> arr = new ArrayList<DFEVar>();
+
+                for (int i = 0 ; i < indices.size() ; i++) {
+                    int out = indices[i].out;
+                    int in = indices[i].in;
+
+                    DFEVar w = constant.var(GlobalConfig.dataType,
+                        convolutionKernels
+                        .get(out)
+                        .get(in)[r][c])
+                    arr.add(w);
+                }
+
+                // unnecessary, but for completeness
+                while (arr.size() < loopIterations) {
+                    arr.add(constant.var(GlobalConfig.dataType, 0));
+                }
+
+                ret[r * kernelDim + c] <== control.mux(
+                        iter, arr.toArray(new DFEVar[arr.size()]));
+            }
+        }
+
+        return ret;
+    }
+}
