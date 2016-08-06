@@ -22,7 +22,7 @@ public class ConvolutionUnit extends KernelLib {
     int kernelDim;
     int loopIterations;
     DFEVar input_, output_;
-    DFEVar row, col, loopIndex, holdIndex, pipelineIndex;
+    DFEVar loopIndex, holdIndex, pipelineIndex;
     DotProductUnit dotProductUnit;
     SlidingWindow slidingWindow;
     OffsetExpr pipelineLength;
@@ -113,13 +113,9 @@ public class ConvolutionUnit extends KernelLib {
         pipelineLength = getOffsetAutoLoop();
 
         CounterChain chain = control.count.makeCounterChain();
-        row = chain.addCounter(inputHeight, 1);
-        col = chain.addCounter(inputWidth, 1);
         holdIndex = Utils.chainCounterOrZero(kernel, chain, holdIterations);
         loopIndex = Utils.chainCounterOrZero(kernel, chain, loopIterations);
-        pipelineIndex = chain.addCounter(
-                pipelineLength.getDFEVar(argKernel, dfeUInt(8)),
-                1);
+        pipelineIndex = chain.addCounter(pipelineLength.getDFEVar(this, dfeUInt(32)), 1);
 
         // the computational stuff
         optimization.pushPipeliningFactor(0.0);
@@ -139,9 +135,9 @@ public class ConvolutionUnit extends KernelLib {
 
         // output control (we only want to output the valid bits,
         // i.e: ignore the borders)
-        output_ = (isBorder()
-            ? constant.var(GlobalConfig.dataType, 0)
-            : dotProductUnit.output);
+        output_ = (pipelineIndex.eq(pipelineLength.getDFEVar(this, dfeUInt(32)) - 1) & loopIndex.eq(loopIterations - 1)
+            ? dotProductUnit.output
+            : constant.var(GlobalConfig.dataType,  0));
     }
 
     public void debugPrint() {
@@ -157,28 +153,11 @@ public class ConvolutionUnit extends KernelLib {
         debug.simPrintf("additionResult: %.5f\n", dotProductUnit.additionResult);
         debug.simPrintf("loopIndex = %d\n", loopIndex);
         debug.simPrintf("output() = %.3f\n", dotProductUnit.output);
-        debug.simPrintf("row = %d col = %d\n", row, col);
-        debug.simPrintf("isBorder() = %d\n", isBorder());
         debug.simPrintf("\n");
-    }
-
-    public DFEVar isBorder() {
-        DFEVar flag = constant.var(dfeBool(), 0);
-        for (int i = 0 ; i < (kernelDim - 1) / 2 ; i++) {
-            flag = flag | row.eq(i) | col.eq(i)
-                    | row.eq(inputHeight - 1 - i)
-                    | col.eq(inputWidth - 1 - i);
-        }
-
-        return flag;
     }
 
     public void setInput(DFEVar argInput) {
         input_ <== argInput;
-    }
-
-    public DFEVar isOutputReady() {
-        return loopIndex.eq(loopIterations - 1);
     }
 
     public OffsetExpr cyclesRequired() {
@@ -210,7 +189,6 @@ public class ConvolutionUnit extends KernelLib {
                 output = additionResult;
 
             } else {
-                optimization.pushPipeliningFactor(0.0);
                 output = GlobalConfig.dataType.newInstance(argKernel);
                 ArrayList<DFEVar> x = new ArrayList<DFEVar>();
 
@@ -223,7 +201,6 @@ public class ConvolutionUnit extends KernelLib {
                         : stream.offset(output, -pipelineLength));
                 additionResult = Utils.treeReduceAdd(x);
                 output <== additionResult;
-                optimization.popPipeliningFactor();
             }
         }
     }

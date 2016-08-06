@@ -10,7 +10,7 @@ import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Stream.OffsetExpr;
 
 public class MultiSourceAccumulator extends KernelLib {
     /*
-     * convPipelineLength is the number of cycles that ConvolutionUnit will require
+     * inputDataRate is the number of cycles that ConvolutionUnit will require
      * to generate an output. Right now, we do not assume that ConvolutionUnit
      * is in any sense pipelined.
      * */
@@ -19,8 +19,8 @@ public class MultiSourceAccumulator extends KernelLib {
     private Kernel kernel;
     public ArrayList<DFEVar> sources;
     public int addCycles, holdCycles;
-    public OffsetExpr convPipelineLength, pipelineLength;
-    public DFEVar convPipelineLengthVar, iter, cycleStage, pipelineIndex, pipelineLengthVar;
+    public OffsetExpr inputDataRate, pipelineLength;
+    public DFEVar inputDataRateVar, iter, cycleStage, pipelineIndex, pipelineLengthVar;
     /* offsetdefaultdict ensures that every kernel has only one offsetexpr, which
      * should be perfectly sensible since there is only one output per kernel */
     public static OffsetExprDefaultDict pipelineLengthCache = new OffsetExprDefaultDict(
@@ -38,22 +38,22 @@ public class MultiSourceAccumulator extends KernelLib {
             Kernel argKernel,
             int argAddCycles,
             int argHoldCycles,
-            OffsetExpr argCycleLength) {
+            OffsetExpr argDataRate) {
         super(argKernel);
         kernel = argKernel;
         addCycles = argAddCycles;
         holdCycles = argHoldCycles;
         sources = new ArrayList<DFEVar>();
         out = GlobalConfig.dataType.newInstance(this);
-        convPipelineLength = argCycleLength;
-        convPipelineLengthVar = convPipelineLength.getDFEVar(this, dfeUInt(8));
+        inputDataRate = argDataRate;
+        inputDataRateVar = inputDataRate.getDFEVar(this, dfeUInt(32));
         pipelineLength = getOffsetAutoLoop();
-        pipelineLengthVar = pipelineLength.getDFEVar(this, dfeUInt(8));
+        pipelineLengthVar = pipelineLength.getDFEVar(this, dfeUInt(32));
         pipelineIndex = Utils.simpleCounter(this, pipelineLengthVar, 1);
 
         CounterChain chain = control.count.makeCounterChain();
         iter = Utils.chainCounterOrZero(argKernel, chain, argHoldCycles);
-        cycleStage = chain.addCounter(convPipelineLengthVar, 1);
+        cycleStage = chain.addCounter(inputDataRateVar, 1);
 
         if (argAddCycles < argHoldCycles) {
             System.out.println("addCycles cannot be < holdcycles!");
@@ -68,7 +68,7 @@ public class MultiSourceAccumulator extends KernelLib {
     public void generate(double pipeliningFactor) {
         // Compute previous (either 0 or output[-1])
         optimization.pushPipeliningFactor(pipeliningFactor);
-        OffsetExpr offset = -(convPipelineLength + pipelineLength);
+        OffsetExpr offset = -(inputDataRate + pipelineLength);
         DFEVar prev = (iter.eq(0)
                 ? constant.var(GlobalConfig.dataType, 0)
                 : stream.offset(out, offset));
@@ -78,11 +78,11 @@ public class MultiSourceAccumulator extends KernelLib {
 
         // Decide whether to show previous / updated input
         if (addCycles == holdCycles) {
-            out <== (cycleStage.eq(convPipelineLengthVar - 1)
+            out <== (cycleStage.eq(inputDataRateVar - 1)
                 ? Utils.treeReduceAdd(adderInputs)
                 : prev);
         } else {
-            out <== ((cycleStage.eq(convPipelineLengthVar - 1) | iter >= addCycles)
+            out <== ((cycleStage.eq(inputDataRateVar - 1) | iter >= addCycles)
                 ? Utils.treeReduceAdd(adderInputs)
                 : prev);
         }

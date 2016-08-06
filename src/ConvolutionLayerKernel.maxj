@@ -25,7 +25,7 @@ public class ConvolutionLayerKernel extends Kernel {
     private final CounterChain masterChain;
     private final int kernelDim, stride, nOutput, loopIterations, foldingFactor;
     private DFEVector<DFEVar> input, output;
-    private DFEVar pipelineStage, pipelineLengthVar;
+    private DFEVar pipelineStage, pipelineLengthVar, row, col;
     private OffsetExpr pipelineLength;
     // number of convolutionalUnits, between 1 <= ff <= inputChannels * outputChannels
     // defines how many convolutionUnits are available to perform all the convolutions
@@ -42,6 +42,7 @@ public class ConvolutionLayerKernel extends Kernel {
     }
 
     public InterfaceParam getTicksPerImage(EngineInterface ei, String name) {
+        /* NOTE : Remember to change initPipelineLength() too */
         String accName = outputChannelAccumulator[0].getOffsetExprName();
         String convName = convolutionUnits[0].getOffsetExprName();
 
@@ -49,7 +50,7 @@ public class ConvolutionLayerKernel extends Kernel {
         InterfaceParam convPipelineLength = ei.getAutoLoopOffset(name, convName);
 
         InterfaceParam ticksPerImage =
-            accPipelineLength + convPipelineLength
+            accPipelineLength + (convPipelineLength * convolutionUnits[0].loopIterations)
             * loopIterations
             * inputDimension.width()
             * inputDimension.height();
@@ -63,8 +64,8 @@ public class ConvolutionLayerKernel extends Kernel {
     protected void initPipelineLength() {
         /* NOTE : Remember to change this for getTicksPerImage too */
         MultiSourceAccumulator acc = outputChannelAccumulator[0];
-        pipelineLength = acc.pipelineLength +  acc.convPipelineLength;
-        pipelineLengthVar = pipelineLength.getDFEVar(this, dfeUInt(8));
+        pipelineLength = acc.pipelineLength + convolutionUnits[0].cyclesRequired();
+        pipelineLengthVar = pipelineLength.getDFEVar(this, dfeUInt(32));
     }
 
     protected DFEVar pipelineEnd() {
@@ -73,6 +74,17 @@ public class ConvolutionLayerKernel extends Kernel {
 
     protected DFEVar pipelineStart() {
         return pipelineStage.eq(0);
+    }
+
+    protected DFEVar isBorder() {
+        DFEVar flag = constant.var(dfeBool(), 0);
+        for (int i = 0 ; i < (kernelDim - 1) / 2 ; i++) {
+            flag = flag | row.eq(i) | col.eq(i)
+                    | row.eq(inputDimension.height() - 1 - i)
+                    | col.eq(inputDimension.width() - 1 - i);
+        }
+
+        return flag;
     }
 
     protected List<OffsetExpr> getOffsetParameters() {
@@ -289,6 +301,9 @@ public class ConvolutionLayerKernel extends Kernel {
         input = inputType.newInstance(this);
         output = outputType.newInstance(this);
         masterChain = control.count.makeCounterChain();
+        
+        row = Utils.chainCounterOrZero(this, masterChain, inputDimension.height());
+        col = Utils.chainCounterOrZero(this, masterChain, inputDimension.width()); 
         DFEVar iter = (loopIterations == 1
                        ? constant.var(dfeUInt(1), 0)
                        : masterChain.addCounter(loopIterations, 1));
@@ -325,7 +340,7 @@ public class ConvolutionLayerKernel extends Kernel {
         pipelineStage = masterChain.addCounter(pipelineLengthVar, 1);
 
         for (int i = 0 ; i < outputDimension.channels() ; i++) {
-            outputChannelAccumulator[i].generate(0.0);
+            outputChannelAccumulator[i].generate(1.0);
             output[i] <== outputChannelAccumulator[i].output() + bias[i];
         }
 
@@ -334,15 +349,15 @@ public class ConvolutionLayerKernel extends Kernel {
                 iter.eq(loopIterations - 1) & pipelineStage.eq(pipelineLengthVar - 1),
                 "tick = %d row = %d col = %d\n",
                 tick,
-                convolutionUnits[0].row,
-                convolutionUnits[0].col);
+                row,
+                col);
 
         // setting the loop counters
 
         // input and output controls
         DFEVar inputControl = iter.eq(0) & pipelineStart();
         DFEVar outputControl = iter.eq(loopIterations - 1)
-                               & ~convolutionUnits.get(0).isBorder()
+                               & ~isBorder()
                                & pipelineEnd();
         input <== io.input("x", inputType, inputControl);
         io.output("y", output, outputType, outputControl);
