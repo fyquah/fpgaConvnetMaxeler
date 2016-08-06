@@ -22,6 +22,8 @@ import com.maxeler.maxcompiler.v2.managers.custom.blocks.KernelBlock;
 import com.maxeler.maxcompiler.v2.build.EngineParameters;
 
 public class fpgaConvNetMaxelerManager {
+    /*
+     * TODO(fyq14): Make this work.
     public static void resource_bench(String[] args) {
         ResourceBenchmarkParameters params = new ResourceBenchmarkParameters(args);
         ResourceBenchmarkManager manager = new ResourceBenchmarkManager(
@@ -41,7 +43,10 @@ public class fpgaConvNetMaxelerManager {
         manager.createSLiCinterface(manager.interfaceDefault());
         manager.build();
     }
+    */
 
+    /*
+     * TODO(fyq14): Make this work.
     public static void le_net(String[] args) {
         EngineParameters params = new EngineParameters(args);
         LeNetManager manager = new LeNetManager(params);
@@ -56,6 +61,7 @@ public class fpgaConvNetMaxelerManager {
         manager.createSLiCinterface(manager.interfaceDefault());
         manager.build();
     }
+    */
 
     public static void test(String[] args) {
         Class<?>[] klasses;
@@ -130,9 +136,7 @@ public class fpgaConvNetMaxelerManager {
             x[i-1] = args[i];
         }
 
-        if      (args[0].equals("resource_bench")) resource_bench(x);
-        else if (args[0].equals("test")) test(x);
-        else if (args[0].equals("le_net")) le_net(x);
+        if (args[0].equals("test")) test(x);
     }
 
 }
