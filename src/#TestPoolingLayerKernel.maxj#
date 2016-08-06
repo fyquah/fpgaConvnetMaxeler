@@ -1,7 +1,9 @@
 import org.junit.Test;
 import static org.junit.Assert.*;
+import org.junit.runner.Result;
 import java.util.List;
 import java.util.ArrayList;
+
 
 import com.maxeler.maxcompiler.v2.managers.standard.SimulationManager;
 import com.maxeler.maxcompiler.v2.utils.Bits;

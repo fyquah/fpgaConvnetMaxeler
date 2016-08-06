@@ -14,7 +14,6 @@ public class MultiSourceAccumulator extends KernelLib {
      * to generate an output. Right now, we do not assume that ConvolutionUnit
      * is in any sense pipelined.
      * */
-    private boolean generated = false;
     private DFEVar out;
     private Kernel kernel;
     public ArrayList<DFEVar> sources;
@@ -88,7 +87,6 @@ public class MultiSourceAccumulator extends KernelLib {
         }
 
         // set the flag
-        generated = true;
         optimization.popPipeliningFactor();
     }
 

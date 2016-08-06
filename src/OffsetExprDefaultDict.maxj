@@ -1,9 +1,9 @@
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Stream.OffsetExpr;
 import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
-import java.util.AbstractMap;
 import java.util.HashMap;
 
 public class OffsetExprDefaultDict extends DefaultDict<Kernel, OffsetExpr> {
+    public static final long serialVersionUID = 123L;
     private int curLoopId = 0;
     private int min, max;
     private final String name;

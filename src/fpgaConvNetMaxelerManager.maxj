@@ -1,25 +1,17 @@
 // package nothing;
 
 import org.junit.runner.JUnitCore;
-import java.io.IOException;
-import java.io.FileInputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.util.Properties;
-import org.junit.runner.JUnitCore;
 import org.junit.runner.Request;
 import org.junit.runner.Result;
 import org.junit.runner.notification.Failure;
 import java.util.List;
 
+/*
+ * These imports will be usef once resource_bench and le_net goes live
+ * Right now, these are commented out to surpress maxjc warnings.
 import com.maxeler.maxcompiler.v2.managers.BuildConfig;
 import com.maxeler.maxcompiler.v2.managers.custom.CustomManager;
-import com.maxeler.maxcompiler.v2.managers.engine_interfaces.CPUTypes;
-import com.maxeler.maxcompiler.v2.managers.engine_interfaces.EngineInterface;
-import com.maxeler.maxcompiler.v2.managers.engine_interfaces.InterfaceParam;
-import com.maxeler.maxcompiler.v2.managers.custom.CustomManager;
-import com.maxeler.maxcompiler.v2.managers.custom.blocks.KernelBlock;
-import com.maxeler.maxcompiler.v2.build.EngineParameters;
+*/
 
 public class fpgaConvNetMaxelerManager {
     /*

@@ -1,13 +1,10 @@
 import java.util.ArrayList;
 
 import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
-import com.maxeler.maxcompiler.v2.kernelcompiler.KernelLib;
-import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.CounterChain;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVector;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVectorType;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Stream.OffsetExpr;
-import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
 import com.maxeler.maxcompiler.v2.kernelcompiler.KernelParameters;
 
 public class ConvolutionUnitKernel extends Kernel {
@@ -18,9 +15,8 @@ public class ConvolutionUnitKernel extends Kernel {
     private final DFEVar output, cycle, pipelineLengthVar, cycleLengthVar, loopIndex;
     private final OffsetExpr pipelineLength;
     private final ArrayList<DFEVar> multiplierOutputs;
-    private static int curLoopId = 0;
-    private static final OffsetExprDefaultDict pipelineLengthCache = new OffsetExprDefaultDict(
-            "ConvolutionUnit", 1, 10);
+    private static final OffsetExprDefaultDict pipelineLengthCache =
+        new OffsetExprDefaultDict("ConvolutionUnit", 1, 10);
 
     private OffsetExpr getOffsetAutoLoop() {
         return pipelineLengthCache.get(this);
