@@ -1,32 +1,37 @@
-# About
+# Refactor
 
-TODO describe the design and provide links to useful resources
+The point of the refactor is to make ConvolutionUnit a *kernel on its own*. In part because i am getting a headache getting offseting and pipelining to sing well together.
 
-# Parameters
+To get ConvolutionLayer to work, there are a few things that we will need to consider:
 
-  TODO describe the design parameters (e.g. number of pipes)
+1. A scheduler that decides what goes into which ConvolutionUnit
 
-# Input
+- Should SlidingWindow be a kernel on its own, or can it live happily in ConvolutionSchedulerKernel?
+- Considering there is no computation happening within ConvolutionSchedulerKernel, it just might be possible 
+to do so without much complications.
+- Either way, please think about it more in depth.
 
-  TODO specify the design inputs (e.g. 'in is a stream of floating
-  point numbers representing ...')
+[ConvolutionSchedulerKernel]
+input: 
+    - DFEVector[n_input_channels]
 
-# Output
+output:
+    - output p0, p1, p2, p3, .... , p{n_con_units - 1} , y0, y1, y2, ... , y{n_conv_units - 1}
+    - Should use a DFEVector for this? Considering they are going to come out at the same time.
 
-  TODO specify the design inputs (e.g. 'out is a stream of floating
-  point numbers representing ...')
+2. How do we schedule ConvolutionUnit to do things correctly?
 
-# Example:
+[ConvolutionUnitKernel]
 
+3. Result accumulator that collects the results of convolutions - how would this work?
 
-  TODO give a very small example run of your design with concrete
-  values for parameters, input and output
+[ConvolutionAccumulatorKernel]
+input:
+    - DFEVector[n_conv_units]  -> rationale: all the results from ConvolutionUnitKernel
 
- * Parameters:
-  TODO add parameter values
+output:
+    - DFEVector[n_output_channels]
 
- * Input:
-  TODO add input values
+4. How can I test this?
 
- * Output:
-  TODO add output values
+- I have no idea :p
