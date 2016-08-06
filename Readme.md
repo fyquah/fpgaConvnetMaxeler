@@ -22,6 +22,12 @@ output:
 2. How do we schedule ConvolutionUnit to do things correctly?
 
 [ConvolutionUnitKernel]
+input:
+    - DFEVector[] convolutionWindow
+    - DFEVector[] convolution
+
+output:
+    - DFEVar result
 
 3. Result accumulator that collects the results of convolutions - how would this work?
 
@@ -34,4 +40,4 @@ output:
 
 4. How can I test this?
 
-- I have no idea :p
+- I have no idea yet.
