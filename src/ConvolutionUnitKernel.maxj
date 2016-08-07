@@ -6,13 +6,14 @@ import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVector;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVectorType;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Stream.OffsetExpr;
 import com.maxeler.maxcompiler.v2.kernelcompiler.KernelParameters;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.CounterChain;
 
 public class ConvolutionUnitKernel extends Kernel {
 
-    private final int kernelDim, inputChannels, loopIterations, kernelFoldingFactor;
+    private final int kernelDim, loopIterations, kernelFoldingFactor;
     private final DFEVectorType<DFEVar> inputVectorType;
-    private final DFEVector<DFEVar> input_w, input_x;
-    private final DFEVar output, cycle, pipelineLengthVar, cycleLengthVar, loopIndex;
+    private final DFEVector<DFEVar> input_weights, input_pixels;
+    private final DFEVar output, cycle, pipelineLengthVar, loopIndex, pipelineStage;
     private final OffsetExpr pipelineLength;
     private final ArrayList<DFEVar> multiplierOutputs;
     private static final OffsetExprDefaultDict pipelineLengthCache =
@@ -30,45 +31,61 @@ public class ConvolutionUnitKernel extends Kernel {
         kernelDim = params.kernelDim;
         loopIterations = Utils.divCeil(
                 kernelDim * kernelDim,  kernelFoldingFactor);
-        inputChannels = params.inputDimension().channels();
         multiplierOutputs = new ArrayList<DFEVar>();
 
         inputVectorType = new DFEVectorType<DFEVar>(
-                GlobalConfig.dataType, inputChannels);
-        input_w = inputVectorType.newInstance(this);
-        input_x = inputVectorType.newInstance(this);
+                GlobalConfig.dataType, kernelDim * kernelDim);
+        input_weights = inputVectorType.newInstance(this);
+        input_pixels = inputVectorType.newInstance(this);
         output = GlobalConfig.dataType.newInstance(this);
 
         pipelineLength = getOffsetAutoLoop();
-        pipelineLengthVar = pipelineLength.getDFEVar(this, dfeUInt(32));
-        cycleLengthVar = pipelineLengthVar + loopIterations;
-        cycle = Utils.simpleCounter(this, cycleLengthVar, 1);
-        loopIndex = cycle >= loopIterations ? loopIterations - 1 : cycle;
+        pipelineLengthVar = pipelineLength.getDFEVar(this, dfeUInt(25));
 
+        CounterChain chain = control.count.makeCounterChain();
+        loopIndex = Utils.chainCounterOrZero(this, chain, loopIterations);
+        pipelineStage = chain.addCounter(pipelineLengthVar, 1);
+        cycle = control.count.simpleCounter(32);
+
+        debug.simPrintf("---------------- cycle = %d\n", cycle);
+        debug.simPrintf("loopIterations = %d, pipelineLengthVar = %d\n", loopIterations, pipelineLengthVar);
+        debug.simPrintf("output = %.5f\n", output);
         initOutput();
 
-        DFEVar inputControl = cycle.eq(0);
-        DFEVar outputControl = cycle.eq(cycleLengthVar - 1);
-        input_w <== io.input("input_w", GlobalConfig.dataType, inputControl);
-        input_x <== io.input("input_x", GlobalConfig.dataType, inputControl);
-        io.output("output", GlobalConfig.dataType, outputControl) <== output;
+        DFEVar inputControl = pipelineStage.eq(0) & loopIndex.eq(0);
+        DFEVar outputControl = pipelineStage.eq(pipelineLengthVar - 1) & loopIndex.eq(loopIterations - 1);;
+        input_weights <== io.input(getInputWeightsName(), inputVectorType, inputControl);
+        input_pixels <== io.input(getInputPixelsName(), inputVectorType, inputControl);
+        io.output("output", output, GlobalConfig.dataType, outputControl);
+    }
+
+    public String getInputWeightsName() {
+        return "input_weights";
+    }
+
+    public String getInputPixelsName() {
+        return "input_pixels";
     }
 
     private void initOutput() {
         for (int i = 0 ; i < kernelFoldingFactor ; i++) {
             DFEVar convWeight = getConvWeight(i);
             DFEVar convPixel = getConvPixel(i);
+            debug.simPrintf("multiplier %d: %.5f %.5f\n", i, convWeight, convPixel);
             multiplierOutputs.add(convWeight * convPixel);
         }
 
         if (loopIterations == 1) {
             output <== Utils.treeReduceAdd(multiplierOutputs);
         } else {
-            DFEVar prev = ((cycle >= pipelineLengthVar)
+            DFEVar prev = (loopIndex.eq(0))
                     ? constant.var(GlobalConfig.dataType, 0)
-                    : stream.offset(output, -pipelineLength));
+                    : stream.offset(output, -pipelineLength);
+            DFEVar newSum = Utils.treeReduceAdd(multiplierOutputs);
+            debug.simPrintf("prev = %.5f\n", prev);
+            debug.simPrintf("newSum = %.5f\n", newSum);
 
-            output <== Utils.treeReduceAdd(multiplierOutputs) + prev;
+            output <== newSum + prev;
         }
     }
 
@@ -78,7 +95,7 @@ public class ConvolutionUnitKernel extends Kernel {
         for (int i = multiplierNumber * loopIterations ;
                 (i < (multiplierNumber + 1) * loopIterations) && (i < kernelDim * kernelDim);
                 i++) {
-            l.add(input_w[i]);
+            l.add(input_weights[i]);
         }
 
         while (l.size() < loopIterations) {
@@ -99,7 +116,7 @@ public class ConvolutionUnitKernel extends Kernel {
         for (int i = multiplierNumber * loopIterations ;
                 i < (multiplierNumber + 1) * loopIterations && i < kernelDim * kernelDim;
                 i++) {
-            l.add(input_x[i]);
+            l.add(input_pixels[i]);
         }
 
         while (l.size() < loopIterations) {

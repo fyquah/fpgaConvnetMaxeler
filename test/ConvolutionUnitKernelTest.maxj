@@ -1,0 +1,114 @@
+import java.util.List;
+import java.util.ArrayList;
+
+import static org.junit.Assert.*;
+import org.junit.Test;
+import com.maxeler.maxcompiler.v2.managers.standard.SimulationManager;
+import com.maxeler.maxcompiler.v2.utils.Bits;
+
+public class ConvolutionUnitKernelTest {
+
+    protected List<Float> generateRandomWindow(int kernelDim) {
+        ArrayList<Float> vec = new ArrayList<Float>();
+
+        for (int i = 0 ; i < kernelDim ; i++) {
+            for (int j = 0 ; j < kernelDim ; j++) {
+                vec.add(TestHelper.rand());
+            }
+        }
+
+        return vec;
+    }
+
+    protected float dotProduct(List<Float>  a, List<Float> b) {
+        float ret = 0.0f;
+
+        for (int i = 0 ; i < Math.max(b.size(), a.size()) ; i++) {
+            ret += a[i] * b[i];
+        }
+
+        return ret;
+    }
+
+    protected void printList(String name, List<Float> l) {
+        printList(name, l, 5);
+    }
+
+    protected void printList(String name, List<Float> l, int max) {
+        System.out.print(name + " = ");
+        for (int i = 0 ; i < Math.min(max, l.size()) ; i++) {
+            System.out.print(l[i] + " ");
+        }
+        System.out.println("...");
+    }
+
+    protected void printVriable(String name, float f) {
+        System.out.println(name + " = " + f);
+    }
+
+    protected void genericTestConvolution(
+            String testName,
+            int kernelFoldingFactor,
+            int kernelDim,
+            int numTicks) {
+
+        ConvolutionParameters params = new ConvolutionParameters();
+        params.kernelFoldingFactor = kernelFoldingFactor;
+        params.kernelDim = kernelDim;
+
+        List<Float> weights = generateRandomWindow(kernelDim);
+        List<Float> pixels = generateRandomWindow(kernelDim);
+        float expectedOutput = dotProduct(weights, pixels);
+
+        SimulationManager manager = new SimulationManager(testName + "Kernel");
+        ConvolutionUnitKernel kernel = new ConvolutionUnitKernel(
+                manager.makeKernelParameters(testName),
+                params);
+
+        // building the manager
+        manager.setKernel(kernel);
+        manager.build();
+
+        List<Bits> rawWeights = TestHelper.toBitsList(weights, kernelDim * kernelDim);
+        List<Bits> rawPixels = TestHelper.toBitsList(pixels, kernelDim * kernelDim);
+
+        // running the kernel
+        manager.setInputDataRaw(kernel.getInputPixelsName(), rawPixels);
+        manager.setInputDataRaw(kernel.getInputWeightsName(), rawWeights);
+
+        // TODO(fyq14): A better way to figure compute the cycles on the fly?
+        manager.setKernelCycles(numTicks);
+        manager.run();
+        List<Bits> rawOutput = manager.getOutputDataRaw("output");
+        List<Float> obtainedOutputList = TestHelper.fromBitsList(rawOutput, 1);
+
+        printList("inputWeights", weights, 25);
+        printList("inputPixels", pixels, 25);
+        printVriable("expectedOutput", expectedOutput);
+
+        // Check if the results are correct.
+        assertEquals(obtainedOutputList.size(), 1);
+        float difference = Math.abs(obtainedOutputList[0] - expectedOutput);
+        assertTrue(difference < 0.05);
+    }
+    
+    @Test
+    public void testSmallestKernelFoldingFactor() {
+        genericTestConvolution("testSmallestKernelFoldingFactor", 1, 5, 50);
+    }
+
+    @Test
+    public void testLargestKernelFoldingFactor() {
+        genericTestConvolution("testLargestKernelFoldingFactor", 25, 5, 1);
+    }
+
+    @Test
+    public void testMultipleKernelFoldingFactor() {
+        genericTestConvolution("testMultipleKernelFoldingFactor", 5, 5, 10);
+    }
+
+    @Test
+    public void testNonMultipleKernelFoldingFactor() {
+        genericTestConvolution("testNonMultipleKernelFoldingFactor", 4, 5, 14);
+    }
+}

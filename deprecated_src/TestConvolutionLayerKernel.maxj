@@ -21,10 +21,6 @@ public class TestConvolutionLayerKernel {
     // various utilities to do convolution tests ...
     // ---------------------------
 
-    public static float rand() {
-        return (float) (((Math.random() - 0.5) * 1));
-    }
-
     public static float[][] randomKernel(int kernelDim) {
         float[][] ret = new float[kernelDim][kernelDim];
 
@@ -319,7 +315,7 @@ public class TestConvolutionLayerKernel {
         for (int i = 0 ; i < doubleOutput.size() ; i++) {
             double d = Math.abs(doubleOutput[i] - doubleExpectedOutput[i]);
             System.out.println(doubleOutput[i] + ", " + doubleExpectedOutput[i]);
-            // assertTrue(d < 0.05);
+            assertTrue(d < 0.05);
         }
     }
 

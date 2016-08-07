@@ -1,4 +1,4 @@
-// package nothing;
+// TODO(fyquah): Use protocol buffers for this.
 
 import java.util.ArrayList;
 
@@ -10,7 +10,15 @@ public class ConvolutionParameters {
     public ArrayList<Float> bias;
     public int stride, foldingFactor, kernelFoldingFactor, kernelDim, outputChannels;
 
-    ConvolutionParameters(Dimension argInputDims, int fanOut, ArrayList<ArrayList<float[][]>> argKernels, ArrayList<Float> argBias) {
+    ConvolutionParameters() {
+        // do nothing ...
+    }
+
+    ConvolutionParameters(
+            Dimension argInputDims,
+            int fanOut,
+            ArrayList<ArrayList<float[][]>> argKernels,
+            ArrayList<Float> argBias) {
         inputDim = argInputDims;
         outputChannels = fanOut;
         stride = 1;

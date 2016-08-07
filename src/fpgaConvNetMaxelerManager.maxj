@@ -64,7 +64,7 @@ public class fpgaConvNetMaxelerManager {
 
         if (testKlasses.size() == 0) {
             klasses = new Class<?>[]{
-                TestPoolingLayerKernel.class
+                ConvolutionUnitKernelTest.class
             };
 
             methodNames = new String[klasses.length];
