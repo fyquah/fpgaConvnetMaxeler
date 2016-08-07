@@ -1,0 +1,135 @@
+import java.util.List;
+import java.util.ArrayList;
+
+import static org.junit.Assert.*;
+import org.junit.Test;
+import com.maxeler.maxcompiler.v2.managers.standard.SimulationManager;
+import com.maxeler.maxcompiler.v2.utils.Bits;
+
+
+public class ConvolutionSchedulerKernelTest {
+
+    /**
+     * Generates a pure-pseudorandom number purely based on the
+     * outputChannel and inputChannel of this kernel.
+     *
+     * The purpose of this is to generate kernels
+     * in a dsterminisitc manner and can test whether they are
+     * scheduled correctly by the scheduler.
+     */
+    protected float[][] generateSingleKernel(
+            int outputChannel,
+            int inputChannel,
+            int kernelDim) {
+
+        float[][] kernel = new float[kernelDim][kernelDim];
+
+        for (int i = 0 ; i < kernelDim ; i++) {
+            for (int j = 0 ; j < kernelDim ; j++) {
+                kernel[i][j] =
+                    outputChannel * 0.425372f
+                    + inputChannel *  0.5387549f
+                    + i * -0.538432f
+                    + j * -0.12324f;
+            }
+        }
+
+        return kernel;
+    }
+
+    protected List<List<float[][]>> generateRandomKernels(
+            int numberOfOutputChannels,
+            int numberOfInputChannels,
+            int kernelDim) {
+        List<List<float[][]>> ret = new ArrayList<List<float[][]>>();
+
+        for (int o = 0 ; o < numberOfOutputChannels ; o++) {
+            ArrayList<float[][]> l = new ArrayList<float[][]>();
+
+            for (int i = 0 ; i < numberOfInputChannels ; i++) {
+                l.add(generateSingleKernel(o, i, kernelDim));
+            }
+
+            ret.add(l);
+        }
+
+        return ret;
+    }
+
+    protected List<Float>  generatePixels(Dimension dim) {
+
+        List<Float> ret = new ArrayList<Float>();
+
+        for (int i = 0 ; i < dim.height() ; i++) {
+            for (int j = 0 ; j < dim.width() ; j++) {
+                for (int c = 0 ; c < dim.channels() ; c++) {
+                    ret.add(0.001f * 
+                            (i * dim.width() * dim.channels()
+                            + j * dim.channels()
+                            + c));
+                }
+            }
+        }
+
+        return ret;
+    }
+
+    protected void genericTest(String testName, final int foldingFactor) {
+        final int kernelDim = 4;
+        final int outputChannels = 10;
+        final int inputChannels = 20;
+        final Dimension inputDim = new Dimension(
+                30, 30, inputChannels);
+        final int numTicks = inputDim.width() * inputDim.height();
+        final int outputWindowSize =
+            (inputDim.height() - (kernelDim - 1))
+            * (inputDim.width() - (kernelDim - 1));
+        ConvolutionParameters params = new ConvolutionParameters();
+        params.inputDim = inputDim;
+        params.kernelDim = kernelDim;
+        params.outputChannels = outputChannels;
+        params.foldingFactor = foldingFactor;
+        params.kernels = generateRandomKernels(
+                outputChannels, inputChannels, kernelDim);
+
+        SimulationManager manager = new SimulationManager(testName + "Kernel");
+        ConvolutionSchedulerKernel kernel =
+            new ConvolutionSchedulerKernel(
+                    manager.makeKernelParameters(testName),
+                    params);
+        manager.setKernel(kernel);
+        manager.build();
+        manager.setKernelCycles(numTicks);
+
+        List<Float> pixelsInput = generatePixels(inputDim);
+        List<Bits> rawPixelsInput = TestHelper.toBitsList(
+                pixelsInput, inputDim.channels());
+
+        manager.setInputDataRaw(kernel.getInputName(), rawPixelsInput);
+        manager.setKernelCycles(inputDim.height() * inputDim.width());
+
+        for (int convUnitId = 0 ; convUnitId < foldingFactor ; convUnitId++) {
+            List<Bits> rawWeightsOutput = manager.getOutputDataRaw(
+                    kernel.getWeightOutputName(convUnitId));
+            List<Bits> rawPixelsOutput = manager.getOutputDataRaw(
+                    kernel.getPixelOutputName(convUnitId));
+
+            List<Float> pixelsOutput = TestHelper.fromBitsList(
+                    rawPixelsOutput, kernelDim * kernelDim);
+            List<Float> weightsOutput = TestHelper.fromBitsList(
+                    rawWeightsOutput, kernelDim * kernelDim);
+
+            assertEquals(
+                    pixelsOutput.size(),
+                    outputWindowSize * kernelDim * kernelDim);
+            assertEquals(
+                    weightsOutput.size(),
+                    outputWindowSize * kernelDim * kernelDim);
+        }
+    }
+
+    @Test
+    public void testModerateFoldingFactor() {
+        genericTest("testModerateFoldingFactor", 100);
+    }
+}

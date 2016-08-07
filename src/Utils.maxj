@@ -1,6 +1,7 @@
 // package nothing;
 
 import java.util.ArrayList;
+import java.util.List;
 import java.lang.AssertionError;
 
 import maxpower.ops.AssociativeOp;
@@ -107,7 +108,7 @@ public class Utils {
         return ret;
     }
 
-    public static DFEVar treeReduceAdd(ArrayList<DFEVar> l) {
+    public static DFEVar treeReduceAdd(List<DFEVar> l) {
         return TreeReduce.reduce(new AssociativeOp<DFEVar>() {
             @Override
             public DFEVar op(DFEVar a, DFEVar b) { return a + b; }
@@ -135,7 +136,7 @@ public class Utils {
         return logarithmAdderTree(left) + logarithmAdderTree(right);
     }
 
-    public static DFEVar logarithmAdderTree(ArrayList<DFEVar> l) {
+    public static DFEVar logarithmAdderTree(List<DFEVar> l) {
         return logarithmAdderTree(l.toArray(new DFEVar[l.size()]));
     }
 
@@ -188,8 +189,8 @@ public class Utils {
         return ret;
     }
 
-    public static <T> ArrayList<T> dupArrayList(ArrayList<T> a, T... b) {
-        ArrayList<T> ret = new ArrayList<T>();
+    public static <T> List<T> dupList(List<T> a, T... b) {
+        List<T> ret = new ArrayList<T>();
 
         for (int i = 0; i < a.size() ; i++) {
             ret.add(a[i]);

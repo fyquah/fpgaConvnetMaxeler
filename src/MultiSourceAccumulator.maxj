@@ -1,6 +1,7 @@
 // package nothing;
 
 import java.util.ArrayList;
+import java.util.List;
 
 import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
 import com.maxeler.maxcompiler.v2.kernelcompiler.KernelLib;
@@ -16,7 +17,7 @@ public class MultiSourceAccumulator extends KernelLib {
      * */
     private DFEVar out;
     private Kernel kernel;
-    public ArrayList<DFEVar> sources;
+    public List<DFEVar> sources;
     public int addCycles, holdCycles;
     public OffsetExpr inputDataRate, pipelineLength;
     public DFEVar inputDataRateVar, iter, cycleStage, pipelineIndex, pipelineLengthVar;
@@ -73,13 +74,13 @@ public class MultiSourceAccumulator extends KernelLib {
                 : stream.offset(out, offset));
 
         // compute the new input
-        ArrayList<DFEVar> adderInputs = Utils.dupArrayList(sources, prev);
+        List<DFEVar> adderInputs = Utils.dupList(sources, prev);
 
         // Decide whether to show previous / updated input
         if (addCycles == holdCycles) {
             out <== (cycleStage.eq(inputDataRateVar - 1)
-                ? Utils.treeReduceAdd(adderInputs)
-                : prev);
+                     ? Utils.treeReduceAdd(adderInputs)
+                     : prev);
         } else {
             out <== ((cycleStage.eq(inputDataRateVar - 1) | iter >= addCycles)
                 ? Utils.treeReduceAdd(adderInputs)

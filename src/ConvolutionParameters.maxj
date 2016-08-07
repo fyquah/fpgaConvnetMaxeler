@@ -1,13 +1,14 @@
 // TODO(fyquah): Use protocol buffers for this.
 
 import java.util.ArrayList;
+import java.util.List;
 
 
 public class ConvolutionParameters {
 
     public Dimension inputDim;
-    public ArrayList<ArrayList<float[][]>> kernels;
-    public ArrayList<Float> bias;
+    public List<List<float[][]>> kernels;
+    public List<Float> bias;
     public int stride, foldingFactor, kernelFoldingFactor, kernelDim, outputChannels;
 
     ConvolutionParameters() {
@@ -17,8 +18,8 @@ public class ConvolutionParameters {
     ConvolutionParameters(
             Dimension argInputDims,
             int fanOut,
-            ArrayList<ArrayList<float[][]>> argKernels,
-            ArrayList<Float> argBias) {
+            List<List<float[][]>> argKernels,
+            List<Float> argBias) {
         inputDim = argInputDims;
         outputChannels = fanOut;
         stride = 1;
@@ -26,7 +27,7 @@ public class ConvolutionParameters {
         kernelDim = argKernels.get(0).get(0).length;
         kernelFoldingFactor = kernelDim * kernelDim;
         kernels = dupKernelList(argKernels);
-        bias = Utils.dupArrayList(argBias);
+        bias = Utils.dupList(argBias);
     }
 
     public Dimension outputDimension() {
@@ -54,12 +55,12 @@ public class ConvolutionParameters {
                 kernelFoldingFactor);
     }
 
-    public ArrayList<ArrayList<float[][]>> getKernels() {
+    public List<List<float[][]>> getKernels() {
         return dupKernelList(kernels);
     }
 
-    protected static ArrayList<ArrayList<float[][]>> dupKernelList(ArrayList<ArrayList<float[][]>> l) {
-        ArrayList<ArrayList<float[][]>> ret = new ArrayList<ArrayList<float[][]>>();
+    protected static List<List<float[][]>> dupKernelList(List<List<float[][]>> l) {
+        List<List<float[][]>> ret = new ArrayList<List<float[][]>>();
 
         for (int i = 0 ; i < l.size() ; i++) {
             ret.add(new ArrayList<float[][]>());

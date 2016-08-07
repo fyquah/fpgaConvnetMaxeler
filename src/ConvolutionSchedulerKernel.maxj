@@ -15,7 +15,7 @@ import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Stream.OffsetExpr;
  * io.output:
  *  - y0, y1, y2, ...., y{foldingFactor - 1}
  *  - w0, w1, w2, ...., w{foldingFactor - 1}
- *  Bias will be handled at a later stage of the pipeline?
+ *  Bias will be handled at a later stage of the pipeline.
  *  where y_i and p_i are both inputs to ConvolutionUnit_i
  *        and are of type DFEVector[kerenlDim]
  *        (they are both sliding windows of the input streams
@@ -27,10 +27,10 @@ public class ConvolutionSchedulerKernel extends Kernel {
     private final SlidingWindow[] slidingWindows;
     private final DFEVector<DFEVar> input;
     private final List<DFEVector<DFEVar>> output_w, output_y;
-    private final Dimension inputDimension, outputDimension;
+    private final Dimension inputDimension;
     private final int foldingFactor, kernelDim, nOutput, loopIterations;
     private final DFEVar row, col;
-    private final ArrayList<ArrayList<float[][]>> convolutionWeights;
+    private final List<List<float[][]>> convolutionWeights;
     private final CounterChain masterChain;
     private final List<ConvChannelIndex> convChannelIndices;
 
@@ -44,10 +44,6 @@ public class ConvolutionSchedulerKernel extends Kernel {
         nOutput = params.outputChannels;
         foldingFactor = params.foldingFactor;
         convolutionWeights = params.getKernels();
-        outputDimension = new Dimension(
-            inputDimension.height() - (kernelDim - 1),
-            inputDimension.width() - (kernelDim - 1),
-            nOutput);
         loopIterations = params.loopIterations();
         masterChain = control.count.makeCounterChain();
         inputVectorType = new DFEVectorType<DFEVar>(
@@ -60,7 +56,7 @@ public class ConvolutionSchedulerKernel extends Kernel {
         output_w = new ArrayList<DFEVector<DFEVar>>();
         output_y = new ArrayList<DFEVector<DFEVar>>();;
         convChannelIndices = ConvChannelIndex.rangeProduct(
-                outputDimension.channels(), inputDimension.channels());
+                nOutput, inputDimension.channels());
         slidingWindows = new SlidingWindow[inputDimension.channels()];
 
         for (int i = 0 ; i < foldingFactor; i++) {
@@ -77,13 +73,25 @@ public class ConvolutionSchedulerKernel extends Kernel {
         initOutputs();
 
         // TODO(fyquah): input and output control flags
-        input <== io.input("input", inputVectorType);
+        input <== io.input(getInputName(), inputVectorType);
         DFEVar outputControlFlag = isBorder();
 
         for (int i = 0 ; i < foldingFactor ; i++) {
-            io.output("output_w_" + i, outputVectorType, outputControlFlag) <== output_w[i];
-            io.output("output_x_" + i, outputVectorType, outputControlFlag) <== output_y[i];
+            io.output(getWeightOutputName(i), output_w[i], outputVectorType, outputControlFlag);
+            io.output(getPixelOutputName(i), output_y[i], outputVectorType, outputControlFlag);
         }
+    }
+
+    public String getInputName() {
+        return "input";
+    }
+
+    public String getWeightOutputName(int convUnitId) {
+        return "output_w_" + convUnitId;
+    }
+
+    public String getPixelOutputName(int convUnitId) {
+        return "output_x_" + convUnitId;
     }
 
     protected DFEVar isBorder() {
