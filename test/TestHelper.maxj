@@ -118,4 +118,16 @@ public class TestHelper {
         return ret;
     }
 
+    public static void printList(String name, List<Float> l) {
+        printList(name, l, 5);
+    }
+
+    public static void printList(String name, List<Float> l, int max) {
+        System.out.print(name + " = ");
+        for (int i = 0 ; i < Math.min(max, l.size()) ; i++) {
+            System.out.print(l[i] + " ");
+        }
+        System.out.println("...");
+    }
+
 }

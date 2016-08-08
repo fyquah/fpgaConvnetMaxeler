@@ -30,18 +30,6 @@ public class ConvolutionUnitKernelTest {
         return ret;
     }
 
-    protected void printList(String name, List<Float> l) {
-        printList(name, l, 5);
-    }
-
-    protected void printList(String name, List<Float> l, int max) {
-        System.out.print(name + " = ");
-        for (int i = 0 ; i < Math.min(max, l.size()) ; i++) {
-            System.out.print(l[i] + " ");
-        }
-        System.out.println("...");
-    }
-
     protected void printVriable(String name, float f) {
         System.out.println(name + " = " + f);
     }
@@ -82,8 +70,8 @@ public class ConvolutionUnitKernelTest {
         List<Bits> rawOutput = manager.getOutputDataRaw("output");
         List<Float> obtainedOutputList = TestHelper.fromBitsList(rawOutput, 1);
 
-        printList("inputWeights", weights, 25);
-        printList("inputPixels", pixels, 25);
+        TestHelper.printList("inputWeights", weights, 25);
+        TestHelper.printList("inputPixels", pixels, 25);
         printVriable("expectedOutput", expectedOutput);
 
         // Check if the results are correct.

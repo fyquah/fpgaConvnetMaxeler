@@ -74,7 +74,9 @@ public class ConvolutionSchedulerKernel extends Kernel {
 
         // TODO(fyquah): input and output control flags
         input <== io.input(getInputName(), inputVectorType);
-        DFEVar outputControlFlag = isBorder();
+        DFEVar outputControlFlag = ~isBorder();
+        debug.simPrintf("row  = %d col = %d flag = %d\n",
+                row, col, outputControlFlag);
 
         for (int i = 0 ; i < foldingFactor ; i++) {
             io.output(getWeightOutputName(i), output_w[i], outputVectorType, outputControlFlag);
@@ -118,7 +120,8 @@ public class ConvolutionSchedulerKernel extends Kernel {
     }
 
     private void initOutputs() {
-        DFEVar iter = control.count.simpleCounter(loopIterations, 1);
+        DFEVar iter = control.count.simpleCounter(
+                Utils.ceilLog2(loopIterations), loopIterations);
         for (int i = 0 ; i < foldingFactor ; i++) {
             ArrayList<ConvChannelIndex> indices = getConvUnitChannelIndices(i);
             DFEVector<DFEVar> convWeights = toMuxedWeight(iter, indices);
@@ -207,7 +210,7 @@ public class ConvolutionSchedulerKernel extends Kernel {
                     DFEVar w = constant.var(
                             GlobalConfig.dataType,
                             convolutionWeights[out][in][r][c]);
-                    weightVector[i] <== w;
+                    weightVector[r * kernelDim + c] <== w;
                 }
             }
 

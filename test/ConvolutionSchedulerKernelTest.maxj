@@ -1,10 +1,14 @@
 import java.util.List;
 import java.util.ArrayList;
+import java.lang.reflect.Method;
+import java.lang.reflect.InvocationTargetException;
 
 import static org.junit.Assert.*;
 import org.junit.Test;
+
 import com.maxeler.maxcompiler.v2.managers.standard.SimulationManager;
 import com.maxeler.maxcompiler.v2.utils.Bits;
+import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
 
 
 public class ConvolutionSchedulerKernelTest {
@@ -75,7 +79,7 @@ public class ConvolutionSchedulerKernelTest {
     }
 
     protected void genericTest(String testName, final int foldingFactor) {
-        final int kernelDim = 4;
+        final int kernelDim = 5;
         final int outputChannels = 10;
         final int inputChannels = 20;
         final Dimension inputDim = new Dimension(
@@ -99,7 +103,6 @@ public class ConvolutionSchedulerKernelTest {
                     params);
         manager.setKernel(kernel);
         manager.build();
-        manager.setKernelCycles(numTicks);
 
         List<Float> pixelsInput = generatePixels(inputDim);
         List<Bits> rawPixelsInput = TestHelper.toBitsList(
@@ -107,6 +110,11 @@ public class ConvolutionSchedulerKernelTest {
 
         manager.setInputDataRaw(kernel.getInputName(), rawPixelsInput);
         manager.setKernelCycles(inputDim.height() * inputDim.width());
+
+        manager.setKernelCycles(numTicks);
+        manager.run();
+
+
 
         for (int convUnitId = 0 ; convUnitId < foldingFactor ; convUnitId++) {
             List<Bits> rawWeightsOutput = manager.getOutputDataRaw(
@@ -120,16 +128,36 @@ public class ConvolutionSchedulerKernelTest {
                     rawWeightsOutput, kernelDim * kernelDim);
 
             assertEquals(
-                    pixelsOutput.size(),
-                    outputWindowSize * kernelDim * kernelDim);
+                    outputWindowSize * kernelDim * kernelDim,
+                    pixelsOutput.size());
             assertEquals(
-                    weightsOutput.size(),
-                    outputWindowSize * kernelDim * kernelDim);
+                    outputWindowSize * kernelDim * kernelDim,
+                    weightsOutput.size());
         }
+    }
+
+    protected List<ConvChannelIndex> getConvUnitChannelIndices(Kernel kernel, int id){
+        try {
+            Method method = kernel.getClass().getMethod(
+                    "getConvUnitChannelIndices", int.class);
+            @SuppressWarnings("unchecked")
+            List<ConvChannelIndex> ret =
+                (List<ConvChannelIndex>) method.invoke(kernel, id);
+            return ret;
+
+        } catch (IllegalAccessException e) {
+            assertTrue("IllegalAccessException", false);
+        } catch (InvocationTargetException e) {
+            assertTrue("InvocationTargetException", false);
+        } catch (NoSuchMethodException e) {
+            assertTrue("NoSuchMethodException", false);
+        }
+
+        return null;
     }
 
     @Test
     public void testModerateFoldingFactor() {
-        genericTest("testModerateFoldingFactor", 100);
+        genericTest("testModerateFoldingFactor", 10);
     }
 }
