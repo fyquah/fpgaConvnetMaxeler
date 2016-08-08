@@ -1,14 +1,11 @@
 import java.util.List;
 import java.util.ArrayList;
-import java.lang.reflect.Method;
-import java.lang.reflect.InvocationTargetException;
 
 import static org.junit.Assert.*;
 import org.junit.Test;
 
 import com.maxeler.maxcompiler.v2.managers.standard.SimulationManager;
 import com.maxeler.maxcompiler.v2.utils.Bits;
-import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
 
 
 public class ConvolutionSchedulerKernelTest {
@@ -78,16 +75,84 @@ public class ConvolutionSchedulerKernelTest {
         return ret;
     }
 
+    protected void checkWeightsOutput(
+            ConvolutionSchedulerKernel kernel,
+            ConvolutionParameters params,
+            int convUnitId,
+            List<Float> weightsOutput) {
+
+        List<ConvChannelIndex> indices = kernel.getConvUnitChannelIndices(convUnitId);
+
+        int numberOfOutputChannels = params.outputDimension().channels();
+        int numberOfInputChannels = params.inputDimension().channels();
+        int outputWindowSize = params.outputDimension().width() * params.outputDimension().height();
+        int kernelDim = params.kernelDim;
+        int loopIterations = kernel.getLoopIterations();
+        final int kernelSize = kernelDim * kernelDim;
+
+        /*
+         * every [kernelDim * kernelDim] elements corresponds to the
+         * slidingWindow that ConvolutionUnit that will receive.
+         * we expect that the number of slidingWindows that we should receive
+         * must be a multiple of denom below.
+         * [indices.size() * convolultionOutputWindow_size * kernelDim * kernelDim]
+         */
+
+        int denom = loopIterations * outputWindowSize * (kernelDim * kernelDim);
+        System.out.println("denom = " + denom);
+        System.out.println("outputWindowSize = " + outputWindowSize);
+        System.out.println("weightsOutput.size() = " + weightsOutput.size());
+        assertTrue(
+                "weightsOutput.size() must be a multiple of " +
+                "(loopIterations * outputWindowSize * (kernelDim * kernelDim))",
+                weightsOutput.size() % denom == 0);
+
+        int numberOfWindows = weightsOutput.size() / denom;
+
+        /*
+         * w : window unit
+         * p : position of the outputKernel
+         * x : which ConvChannelIndex
+         * y : element index of the slidingWindow
+         */
+
+        List<List<float[][]>> generatedKernels = generateRandomKernels(
+                numberOfOutputChannels,
+                numberOfInputChannels,
+                kernelDim);
+
+        for (int w = 0 ; w < numberOfWindows ; w++) {
+            for (int p = 0 ; p < outputWindowSize ; p++) {
+                for (int x = 0 ; x < indices.size() ; x++) {
+                    for (int y = 0 ; y < kernelSize ; y++) {
+                        int idx = w * (outputWindowSize * loopIterations * kernelSize)
+                                  + p * (loopIterations * kernelSize)
+                                  + x * (kernelSize)
+                                  + y;
+                        
+                        float expectedWeight = generatedKernels
+                            .get(indices[x].out)
+                            .get(indices[x].in)
+                            [y / kernelDim][y % kernelDim];
+
+                        float delta = Math.abs(weightsOutput[idx] - expectedWeight);
+                        assertTrue(delta < 0.01f);
+                    }
+                }
+            }
+        }
+    }
+
     protected void genericTest(String testName, final int foldingFactor) {
         final int kernelDim = 5;
         final int outputChannels = 10;
         final int inputChannels = 20;
         final Dimension inputDim = new Dimension(
                 30, 30, inputChannels);
-        final int numTicks = inputDim.width() * inputDim.height();
         final int outputWindowSize =
             (inputDim.height() - (kernelDim - 1))
             * (inputDim.width() - (kernelDim - 1));
+
         ConvolutionParameters params = new ConvolutionParameters();
         params.inputDim = inputDim;
         params.kernelDim = kernelDim;
@@ -109,12 +174,9 @@ public class ConvolutionSchedulerKernelTest {
                 pixelsInput, inputDim.channels());
 
         manager.setInputDataRaw(kernel.getInputName(), rawPixelsInput);
-        manager.setKernelCycles(inputDim.height() * inputDim.width());
-
-        manager.setKernelCycles(numTicks);
+        manager.setKernelCycles(
+                inputDim.height() * inputDim.width() * kernel.getLoopIterations());
         manager.run();
-
-
 
         for (int convUnitId = 0 ; convUnitId < foldingFactor ; convUnitId++) {
             List<Bits> rawWeightsOutput = manager.getOutputDataRaw(
@@ -128,32 +190,14 @@ public class ConvolutionSchedulerKernelTest {
                     rawWeightsOutput, kernelDim * kernelDim);
 
             assertEquals(
-                    outputWindowSize * kernelDim * kernelDim,
+                    outputWindowSize * kernelDim * kernelDim * kernel.getLoopIterations(),
                     pixelsOutput.size());
             assertEquals(
-                    outputWindowSize * kernelDim * kernelDim,
+                    outputWindowSize * kernelDim * kernelDim * kernel.getLoopIterations(),
                     weightsOutput.size());
+
+            checkWeightsOutput(kernel, params, convUnitId, weightsOutput);
         }
-    }
-
-    protected List<ConvChannelIndex> getConvUnitChannelIndices(Kernel kernel, int id){
-        try {
-            Method method = kernel.getClass().getMethod(
-                    "getConvUnitChannelIndices", int.class);
-            @SuppressWarnings("unchecked")
-            List<ConvChannelIndex> ret =
-                (List<ConvChannelIndex>) method.invoke(kernel, id);
-            return ret;
-
-        } catch (IllegalAccessException e) {
-            assertTrue("IllegalAccessException", false);
-        } catch (InvocationTargetException e) {
-            assertTrue("InvocationTargetException", false);
-        } catch (NoSuchMethodException e) {
-            assertTrue("NoSuchMethodException", false);
-        }
-
-        return null;
     }
 
     @Test

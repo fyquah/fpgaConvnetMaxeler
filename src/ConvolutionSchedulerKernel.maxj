@@ -29,7 +29,7 @@ public class ConvolutionSchedulerKernel extends Kernel {
     private final List<DFEVector<DFEVar>> output_w, output_y;
     private final Dimension inputDimension;
     private final int foldingFactor, kernelDim, nOutput, loopIterations;
-    private final DFEVar row, col;
+    private final DFEVar row, col, iter;
     private final List<List<float[][]>> convolutionWeights;
     private final CounterChain masterChain;
     private final List<ConvChannelIndex> convChannelIndices;
@@ -68,15 +68,17 @@ public class ConvolutionSchedulerKernel extends Kernel {
                 this, masterChain, inputDimension.height());
         col = Utils.chainCounterOrZero(
                 this, masterChain, inputDimension.width());
+        iter = Utils.chainCounterOrZero(
+                this, masterChain, loopIterations);
 
         initSlidingWindow();
         initOutputs();
 
-        // TODO(fyquah): input and output control flags
-        input <== io.input(getInputName(), inputVectorType);
+        // TODO(fyq14): Optimize border cases
         DFEVar outputControlFlag = ~isBorder();
-        debug.simPrintf("row  = %d col = %d flag = %d\n",
-                row, col, outputControlFlag);
+        DFEVar inputControlFlag = iter.eq(0);
+
+        input <== io.input(getInputName(), inputVectorType, inputControlFlag);
 
         for (int i = 0 ; i < foldingFactor ; i++) {
             io.output(getWeightOutputName(i), output_w[i], outputVectorType, outputControlFlag);
@@ -94,6 +96,22 @@ public class ConvolutionSchedulerKernel extends Kernel {
 
     public String getPixelOutputName(int convUnitId) {
         return "output_x_" + convUnitId;
+    }
+
+    public int getLoopIterations() {
+        return loopIterations;
+    }
+
+    public List<ConvChannelIndex> getConvUnitChannelIndices(int convUnitId) {
+        List<ConvChannelIndex> ret = new ArrayList<ConvChannelIndex>();
+
+        for (int i = convUnitId * loopIterations ;
+                i < (convUnitId + 1) * loopIterations && i < convChannelIndices.size();
+                i++) {
+            ret.add(convChannelIndices[i]);
+        }
+
+        return ret;
     }
 
     protected DFEVar isBorder() {
@@ -115,32 +133,18 @@ public class ConvolutionSchedulerKernel extends Kernel {
                 inputDimension.height(),
                 inputDimension.width(),
                 kernelDim,
-                new OffsetExpr(1));
+                new OffsetExpr(loopIterations));
         }
     }
 
     private void initOutputs() {
-        DFEVar iter = control.count.simpleCounter(
-                Utils.ceilLog2(loopIterations), loopIterations);
         for (int i = 0 ; i < foldingFactor ; i++) {
-            ArrayList<ConvChannelIndex> indices = getConvUnitChannelIndices(i);
+            List<ConvChannelIndex> indices = getConvUnitChannelIndices(i);
             DFEVector<DFEVar> convWeights = toMuxedWeight(iter, indices);
             DFEVector<DFEVar> convInputs = toMuxedPixel(iter, indices);
             output_w[i] <== convWeights;
             output_y[i] <== convInputs;
         }
-    }
-
-    protected ArrayList<ConvChannelIndex> getConvUnitChannelIndices(int convUnitId) {
-        ArrayList<ConvChannelIndex> ret = new ArrayList<ConvChannelIndex>();
-
-        for (int i = convUnitId * loopIterations ;
-                i < (convUnitId + 1) * loopIterations && i < convChannelIndices.size();
-                i++) {
-            ret.add(convChannelIndices[i]);
-        }
-
-        return ret;
     }
 
     protected DFEVector<DFEVar> zeroVector(DFEVectorType<DFEVar> type) {
@@ -155,7 +159,7 @@ public class ConvolutionSchedulerKernel extends Kernel {
 
     protected DFEVector<DFEVar> toMuxedPixel(
             DFEVar iter,
-            ArrayList<ConvChannelIndex> indices) {
+            List<ConvChannelIndex> indices) {
 
         if (loopIterations == 1) {
             Utils.assertTrue(loopIterations == indices.size());
@@ -192,7 +196,7 @@ public class ConvolutionSchedulerKernel extends Kernel {
 
     protected DFEVector<DFEVar> toMuxedWeight(
             DFEVar iter,
-            ArrayList<ConvChannelIndex> indices) {
+            List<ConvChannelIndex> indices) {
         if (indices.size() == 1) {
             Utils.assertTrue(indices.size() == loopIterations);
             return getConvWeightsVector(indices[0].out, indices[0].in);
