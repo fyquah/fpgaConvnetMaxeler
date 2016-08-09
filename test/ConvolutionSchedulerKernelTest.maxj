@@ -57,6 +57,13 @@ public class ConvolutionSchedulerKernelTest {
         return ret;
     }
 
+    protected float getPixelValue(Dimension dim, int row, int col, int channel) {
+        return (0.001f * 
+            (row * dim.width() * dim.channels()
+            + col * dim.channels()
+            + channel));
+    }
+
     protected List<Float>  generatePixels(Dimension dim) {
 
         List<Float> ret = new ArrayList<Float>();
@@ -64,15 +71,92 @@ public class ConvolutionSchedulerKernelTest {
         for (int i = 0 ; i < dim.height() ; i++) {
             for (int j = 0 ; j < dim.width() ; j++) {
                 for (int c = 0 ; c < dim.channels() ; c++) {
-                    ret.add(0.001f * 
-                            (i * dim.width() * dim.channels()
-                            + j * dim.channels()
-                            + c));
+                    ret.add(getPixelValue(dim, i, j, c));
                 }
             }
         }
 
         return ret;
+    }
+
+    /*
+     * TODO(fyq14): Refactor this and checkWeightsOutput -
+     * the code for both is really similar
+     */
+    protected void checkPixelsOutput(
+            ConvolutionSchedulerKernel kernel,
+            ConvolutionParameters params,
+            int convUnitId,
+            List<Float> pixelsOutput) {
+        List<ConvChannelIndex> indices = kernel.getConvUnitChannelIndices(convUnitId);
+
+        int outputWindowSize = params.outputDimension().width() * params.outputDimension().height();
+        int kernelDim = params.kernelDim;
+        int loopIterations = kernel.getLoopIterations();
+        final int kernelSize = kernelDim * kernelDim;
+
+        /*
+         * every [kernelDim * kernelDim] elements corresponds to the
+         * slidingWindow that ConvolutionUnit that will receive.
+         * we expect that the number of slidingWindows that we should receive
+         * must be a multiple of denom below.
+         * [indices.size() * convolultionOutputWindow_size * kernelDim * kernelDim]
+         */
+
+        int denom = loopIterations * outputWindowSize * (kernelDim * kernelDim);
+        assertTrue(
+                "pixelsOutput.size() must be a multiple of " +
+                "(loopIterations * outputWindowSize * (kernelDim * kernelDim))",
+                pixelsOutput.size() % denom == 0);
+
+        int numberOfWindows = pixelsOutput.size() / denom;
+
+        /*
+         * w : window unit
+         * p : position of the outputKernel
+         * x : which ConvChannelIndex
+         * y : element index of the slidingWindow
+         */
+
+        for (int w = 0 ; w < numberOfWindows ; w++) {
+            for (int p = 0 ; p < outputWindowSize ; p++) {
+                for (int x = 0 ; x < loopIterations ; x++) {
+                    for (int y = 0 ; y < kernelSize ; y++) {
+
+                        int idx = w * (outputWindowSize * loopIterations * kernelSize)
+                                  + p * (loopIterations * kernelSize)
+                                  + x * (kernelSize)
+                                  + y;
+      
+                        if (x < indices.size()) {
+                            int width = params.outputDimension().width();
+                            int row = (p / width) + (y / kernelDim);
+                            int col = (p % width) + (y % kernelDim);
+                            int channel = indices[x].in;
+
+                            float expectedPixel = getPixelValue(
+                                    params.inputDimension(), row, col, channel);
+
+                            float delta = Math.abs(pixelsOutput[idx] - expectedPixel);
+                            assertTrue(delta < 0.01f);
+
+                        } else {
+                            assertTrue(Math.abs(pixelsOutput[idx]) < 0.01f);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    protected int calcPixelRow(Dimension dim, int kernelDim, int pixelIndex, int kernelIndex) {
+        int row = pixelIndex / dim.width();
+        return row + kernelIndex / kernelDim;
+    }
+
+    protected int calcPixelCol(Dimension dim, int kernelDim, int pixelIndex, int kernelIndex) {
+        int col = pixelIndex % dim.width();
+        return col + kernelIndex % kernelDim;
     }
 
     protected void checkWeightsOutput(
@@ -99,9 +183,6 @@ public class ConvolutionSchedulerKernelTest {
          */
 
         int denom = loopIterations * outputWindowSize * (kernelDim * kernelDim);
-        System.out.println("denom = " + denom);
-        System.out.println("outputWindowSize = " + outputWindowSize);
-        System.out.println("weightsOutput.size() = " + weightsOutput.size());
         assertTrue(
                 "weightsOutput.size() must be a multiple of " +
                 "(loopIterations * outputWindowSize * (kernelDim * kernelDim))",
@@ -123,20 +204,26 @@ public class ConvolutionSchedulerKernelTest {
 
         for (int w = 0 ; w < numberOfWindows ; w++) {
             for (int p = 0 ; p < outputWindowSize ; p++) {
-                for (int x = 0 ; x < indices.size() ; x++) {
+                for (int x = 0 ; x < loopIterations ; x++) {
                     for (int y = 0 ; y < kernelSize ; y++) {
                         int idx = w * (outputWindowSize * loopIterations * kernelSize)
                                   + p * (loopIterations * kernelSize)
                                   + x * (kernelSize)
                                   + y;
-                        
-                        float expectedWeight = generatedKernels
-                            .get(indices[x].out)
-                            .get(indices[x].in)
-                            [y / kernelDim][y % kernelDim];
 
-                        float delta = Math.abs(weightsOutput[idx] - expectedWeight);
-                        assertTrue(delta < 0.01f);
+                        if (x < indices.size()) {
+                            float expectedWeight = generatedKernels
+                                .get(indices[x].out)
+                                .get(indices[x].in)
+                                [y / kernelDim][y % kernelDim];
+
+                            float delta = Math.abs(weightsOutput[idx] - expectedWeight);
+                            assertTrue(delta < 0.01f);
+
+                        } else {
+                            assertTrue(Math.abs(weightsOutput[idx]) < 0.01f);
+
+                        }
                     }
                 }
             }
@@ -197,11 +284,17 @@ public class ConvolutionSchedulerKernelTest {
                     weightsOutput.size());
 
             checkWeightsOutput(kernel, params, convUnitId, weightsOutput);
+            checkPixelsOutput(kernel, params, convUnitId, pixelsOutput);
         }
     }
 
     @Test
     public void testModerateFoldingFactor() {
         genericTest("testModerateFoldingFactor", 10);
+    }
+
+    @Test
+    public void testNonMultipleFoldingFactor() {
+        genericTest("testNonMultipleFoldingFactor", 9);
     }
 }
