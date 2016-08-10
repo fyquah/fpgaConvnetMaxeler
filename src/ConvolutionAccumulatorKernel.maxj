@@ -1,0 +1,9 @@
+import com.maxeler.maxcompiler.v2.kernelcompiler.KernelParameters;
+
+public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
+    public ConvolutionAccumulatorKernel(
+            KernelParameters kp,
+            ConvolutionParameters params) {
+        super(kp, params);
+    }
+}

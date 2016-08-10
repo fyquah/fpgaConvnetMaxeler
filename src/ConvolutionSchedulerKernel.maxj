@@ -1,7 +1,6 @@
 import java.util.ArrayList;
 import java.util.List;
 
-import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
 import com.maxeler.maxcompiler.v2.kernelcompiler.KernelParameters;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.CounterChain;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
@@ -22,29 +21,26 @@ import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Stream.OffsetExpr;
  *         and the convolution parameters respectively.)
  */
 
-public class ConvolutionSchedulerKernel extends Kernel {
+public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
     private final DFEVectorType<DFEVar> inputVectorType, outputVectorType;
     private final SlidingWindow[] slidingWindows;
     private final DFEVector<DFEVar> input;
     private final List<DFEVector<DFEVar>> output_w, output_y;
     private final Dimension inputDimension;
-    private final int foldingFactor, kernelDim, nOutput, loopIterations;
+    private final int foldingFactor, kernelDim;
     private final DFEVar row, col, iter;
     private final List<List<float[][]>> convolutionWeights;
     private final CounterChain masterChain;
-    private final List<ConvChannelIndex> convChannelIndices;
 
     public ConvolutionSchedulerKernel(
            KernelParameters kp,
            ConvolutionParameters params) {
-        super(kp);
+        super(kp, params);
 
         inputDimension = params.inputDim;
         kernelDim = params.kernelDim;
-        nOutput = params.outputChannels;
         foldingFactor = params.foldingFactor;
         convolutionWeights = params.getKernels();
-        loopIterations = params.loopIterations();
         masterChain = control.count.makeCounterChain();
         inputVectorType = new DFEVectorType<DFEVar>(
                 GlobalConfig.dataType,
@@ -55,8 +51,6 @@ public class ConvolutionSchedulerKernel extends Kernel {
         input = inputVectorType.newInstance(this);
         output_w = new ArrayList<DFEVector<DFEVar>>();
         output_y = new ArrayList<DFEVector<DFEVar>>();;
-        convChannelIndices = ConvChannelIndex.rangeProduct(
-                nOutput, inputDimension.channels());
         slidingWindows = new SlidingWindow[inputDimension.channels()];
 
         for (int i = 0 ; i < foldingFactor; i++) {
@@ -69,7 +63,7 @@ public class ConvolutionSchedulerKernel extends Kernel {
         col = Utils.chainCounterOrZero(
                 this, masterChain, inputDimension.width());
         iter = Utils.chainCounterOrZero(
-                this, masterChain, loopIterations);
+                this, masterChain, getLoopIterations());
 
         initSlidingWindow();
         initOutputs();
@@ -98,22 +92,6 @@ public class ConvolutionSchedulerKernel extends Kernel {
         return "output_x_" + convUnitId;
     }
 
-    public int getLoopIterations() {
-        return loopIterations;
-    }
-
-    public List<ConvChannelIndex> getConvUnitChannelIndices(int convUnitId) {
-        List<ConvChannelIndex> ret = new ArrayList<ConvChannelIndex>();
-
-        for (int i = convUnitId * loopIterations ;
-                i < (convUnitId + 1) * loopIterations && i < convChannelIndices.size();
-                i++) {
-            ret.add(convChannelIndices[i]);
-        }
-
-        return ret;
-    }
-
     protected DFEVar isBorder() {
         DFEVar flag = constant.var(dfeBool(), 0);
         for (int i = 0 ; i < (kernelDim - 1) / 2 ; i++) {
@@ -133,7 +111,7 @@ public class ConvolutionSchedulerKernel extends Kernel {
                 inputDimension.height(),
                 inputDimension.width(),
                 kernelDim,
-                new OffsetExpr(loopIterations));
+                new OffsetExpr(getLoopIterations()));
         }
     }
 
@@ -161,8 +139,8 @@ public class ConvolutionSchedulerKernel extends Kernel {
             DFEVar iter,
             List<ConvChannelIndex> indices) {
 
-        if (loopIterations == 1) {
-            Utils.assertTrue(loopIterations == indices.size());
+        if (getLoopIterations() == 1) {
+            Utils.assertTrue(getLoopIterations() == indices.size());
             return slidingWindows[indices[0].in].output;
         }
 
@@ -172,7 +150,7 @@ public class ConvolutionSchedulerKernel extends Kernel {
             arr.add(slidingWindows[indices[i].in].output);
         }
 
-        while (arr.size() < loopIterations) {
+        while (arr.size() < getLoopIterations()) {
             arr.add(zeroVector(outputVectorType));
         }
 
@@ -198,7 +176,7 @@ public class ConvolutionSchedulerKernel extends Kernel {
             DFEVar iter,
             List<ConvChannelIndex> indices) {
         if (indices.size() == 1) {
-            Utils.assertTrue(indices.size() == loopIterations);
+            Utils.assertTrue(indices.size() == getLoopIterations());
             return getConvWeightsVector(indices[0].out, indices[0].in);
         }
 
@@ -222,7 +200,7 @@ public class ConvolutionSchedulerKernel extends Kernel {
         }
 
         // unnecessary, but for completeness
-        while (choices.size() < loopIterations) {
+        while (choices.size() < getLoopIterations()) {
             choices.add(zeroVector(outputVectorType));
         }
 
