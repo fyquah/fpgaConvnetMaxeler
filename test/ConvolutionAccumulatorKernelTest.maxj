@@ -1,0 +1,129 @@
+import java.util.ArrayList;
+import java.util.List;
+
+import static org.junit.Assert.*;
+import org.junit.Test;
+
+import com.maxeler.maxcompiler.v2.managers.standard.SimulationManager;
+import com.maxeler.maxcompiler.v2.utils.Bits;
+
+public class ConvolutionAccumulatorKernelTest {
+    protected ConvolutionParameters buildConvolutionParams(int foldingFactor) {
+        final int kernelDim = 5;
+        final int outputChannels = 10;
+        final int inputChannels = 20;
+        final Dimension inputDim = new Dimension(
+                30, 30, inputChannels);
+
+        ConvolutionParameters params = new ConvolutionParameters();
+        params.inputDim = inputDim;
+        params.kernelDim = kernelDim;
+        params.outputChannels = outputChannels;
+        params.foldingFactor = foldingFactor;
+
+        return params;
+    }
+
+    /* 
+     * Generates a random 2D list of float[params.foldingFactor][params.loopIterations()]
+     */
+    // TODO(fyq14): support number of examples
+    protected List<List<Float>> generateRandomInput(
+            ConvolutionParameters params, int unusedNumberOfPixels) {
+
+        List<List<Float>> ret = new ArrayList<List<Float>>();
+
+        for (int i = 0 ; i < params.foldingFactor ; i++) {
+            List<Float> x = new ArrayList<Float>();
+
+            for (int j = 0 ; j < params.loopIterations() ; j++) {
+                x.add(TestHelper.rand() * 0.01f);
+            }
+
+            ret.add(x);
+        }
+
+        return ret;
+    }
+
+    /*
+     * Computes and return the expected output.
+     */
+    protected List<Float> computeExpected(
+            ConvolutionParameters params, ConvolutionSchedulerKernel kernel, List<List<Float>> inputData) {
+        // calculate the number of examples supplied
+        final int pixelsPerImage = params.inputDimension().width() * params.inputDimension().height();
+        final int numberOfExamples = inputData[0].size() / pixelsPerImage;
+        final int loopIterations = params.loopIterations();
+
+        // TODO(fyq14): Some assertions to make sure that numberOfExamples
+        // is valid throughout the whole kernel.
+        List<Float> ret = new ArrayList<Float>();
+
+        for (int testCase = 0 ; testCase < numberOfExamples ; testCase++) {
+            // memo will be initialized with 0, because we are in java land.
+            float[] memo = new float[params.outputDimension().channels()];
+
+            for (int convUnitId = 0 ; convUnitId < params.foldingFactor ; convUnitId++) {
+                List<ConvChannelIndex> channelIndices = kernel.getConvUnitChannelIndices(convUnitId);
+
+                for (int i = 0 ; i < channelIndices.size() ; i++) {
+                    float value = inputData[convUnitId][testCase * loopIterations + i];
+                    memo[channelIndices[i].out] += value;
+                }
+            }
+
+            for (int i = 0 ; i < memo.length ; i++) {
+                ret.add(memo[i]);
+            }
+        }
+
+        return ret;
+    }
+
+    protected List<List<Bits>> convert2DFloatToBits(List<List<Float>> dataInput, int inputUnitWidth) {
+        List<List<Bits>> ret = new ArrayList<List<Bits>>();
+
+        for (int i = 0 ; i < dataInput.size() ; i++) {
+            ret.add(TestHelper.toBitsList(dataInput[i], inputUnitWidth));
+        }
+
+        return ret;
+    }
+
+    protected void genericTest(String testName, int foldingFactor) {
+        ConvolutionParameters params = buildConvolutionParams(foldingFactor);
+        final int numberOfPixels = 1;
+
+        SimulationManager manager = new SimulationManager(testName + "Kernel");
+        ConvolutionAccumulatorKernel kernel =
+                new ConvolutionAccumulatorKernel(manager.makeKernelParameters(testName), params);
+        manager.setKernel(kernel);
+        manager.build();
+
+        List<List<Float>> dataInputs = generateRandomInput(params, numberOfPixels);
+        List<List<Bits>> rawInputs = convert2DFloatToBits(dataInputs, numberOfPixels);
+
+        for (int i = 0 ; i < params.foldingFactor ; i++) {
+            manager.setInputDataRaw(kernel.getInputName(i), rawInputs[i]);
+        }
+        manager.setKernelCycles(
+                params.inputDimension().height()
+                * params.inputDimension().width()
+                * kernel.getLoopIterations());
+        manager.run();
+
+        List<Bits> outputBits = manager.getOutputDataRaw(kernel.getOutputName());
+        List<Float> outputData = TestHelper.fromBitsList(
+                outputBits, params.outputDimension().channels());
+
+        // TODO(fyq14): How to test the correctness of the output.
+        // the statement below simply tests for the structural correctness.
+        assertEquals(outputData.size(), numberOfPixels * params.outputDimension().channels());
+    }
+
+    @Test
+    public void testSmallFoldingFactor() {
+        genericTest("testSmallFoldingFactor", 10);
+    }
+}

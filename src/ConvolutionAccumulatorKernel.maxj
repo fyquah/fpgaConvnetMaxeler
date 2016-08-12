@@ -5,32 +5,30 @@ import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVector;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVectorType;
 import com.maxeler.maxcompiler.v2.kernelcompiler.KernelParameters;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Stream.OffsetExpr;
 
 public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
-    private final DFEVectorType outputVectorType;
+    private final DFEVectorType<DFEVar> outputVectorType;
     private final List<MultiSourceAccumulator> accumulators;
     private final List<PartitionedDemux> demuxUnits;
     private final List<DFEVar> inputs;
     private final DFEVector<DFEVar> output;
-    private final int outputChannels;
+    private final int outputChannels, foldingFactor;
 
     public ConvolutionAccumulatorKernel(
             KernelParameters kp,
             ConvolutionParameters params) {
         super(kp, params);
         outputChannels = params.outputDimension().channels();
+        foldingFactor = params.foldingFactor;
         outputVectorType = new DFEVectorType<DFEVar>(
-                GlobalConfig.dataType,
-                params.outputDimension());
+                GlobalConfig.dataType, outputChannels);
         output = outputVectorType.newInstance(this);
         inputs = makeInputPlaceHolders();
         accumulators = new ArrayList<MultiSourceAccumulator>();
         demuxUnits = new ArrayList<PartitionedDemux>();
 
-        demux = new PartitionedDemux(
-                this, counts, new OffsetExpr(1));
-
-        for (int i = 0 ; i < params.outputDimension().channels() ; i++) {
+        for (int i = 0 ; i < outputChannels ; i++) {
             MultiSourceAccumulator newAccumulator = new MultiSourceAccumulator(
                     this,
                     getLoopIterations(),
@@ -41,17 +39,18 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
         }
 
         for (int convUnitId = 0 ; convUnitId < params.foldingFactor ; convUnitId++) {
-            PartitionedDemux demux = new PartitionedDemux(
-                    this, counts, convCyclesRequired);
+            // TODO(fyq14): What should the offsetExpr actually be?
             List<ConvChannelIndex> indices = getConvUnitChannelIndices(convUnitId);
-            List<ChannelFrequency> channelFrequency = getChannelFrequencies(
+            List<ChannelFrequency> channelFrequencies = getChannelFrequencies(
                     indices);
-            int[] counts = unrollFrequencies(channelFrequency);
+            int[] counts = unrollFrequencies(channelFrequencies);
+            PartitionedDemux demux = new PartitionedDemux(
+                    this, counts, new OffsetExpr(1));
 
             demuxUnits.add(demux);
             demux.input <== inputs[convUnitId];
             
-            for (int i = 0 ; i < channelFrequency.size() ; i++) {
+            for (int i = 0 ; i < channelFrequencies.size() ; i++) {
                 accumulators[channelFrequencies[i].channel]
                     .addSource(demux.outputs[i]);
             }
@@ -60,15 +59,23 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
         setExternalIO();
     }
 
+    public String getInputName(int convUnitId) {
+        return "input_" + convUnitId;
+    }
+
+    public String getOutputName() {
+        return "output";
+    }
+
     protected void setExternalIO() {
         // TODO(fyq14): inputControlFlag and outputControlFlag
-        for (int i = 0 ; i < params.foldingFactor ; i++) {
-            inputs[i] <== io.input("input_" + i, GlobalConfig.dataType);
+        for (int i = 0 ; i < foldingFactor ; i++) {
+            inputs[i] <== io.input(getInputName(i), GlobalConfig.dataType);
         }
 
-        io.output("output_" + i, output, GlobalConfig.dataType);
-        for (int i = 0 ; i < params.outputDimension().channels() ; i++) {
-            output[i] <== accumulators.output();
+        io.output(getOutputName(), output, outputVectorType);
+        for (int i = 0 ; i < outputChannels ; i++) {
+            output[i] <== accumulators[i].output();
         }
     }
 
@@ -82,19 +89,19 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
         return ret;
     }
 
-    protected List<ChannelFrequency> getChannelFrequencies(List<ConvChannelIndex indices) {
+    protected List<ChannelFrequency> getChannelFrequencies(List<ConvChannelIndex> indices) {
         List<ChannelFrequency> ret = new ArrayList<ChannelFrequency>();
 
-        if (l.size() == 0) {
+        if (indices.size() == 0) {
             return ret;
         }
         
-        ret.add(new ChannelFrequency(l[0].out, 1));
+        ret.add(new ChannelFrequency(indices[0].out, 1));
 
-        for (int i = 1 ; i < l.size() ; i++) {
+        for (int i = 1 ; i < indices.size() ; i++) {
             int tail = ret.size() - 1;
-            if (ret[tail].channel != l[i].out) {
-                ret.add(new ChannelFrequency(l[i].out, 1));
+            if (ret[tail].channel != indices[i].out) {
+                ret.add(new ChannelFrequency(indices[i].out, 1));
             } else {
                 ret.set(tail, new ChannelFrequency(ret[tail].channel, ret[tail].frequency + 1));
             }
@@ -103,7 +110,7 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
         return ret;
     }
 
-    protected int[] unrollFrequencies(List<Frequency> freqs) {
+    protected int[] unrollFrequencies(List<ChannelFrequency> freqs) {
         int totalCount = 0;
         int[] counts;
 
