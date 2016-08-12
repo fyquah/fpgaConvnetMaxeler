@@ -1,9 +1,127 @@
+import java.util.List;
+import java.util.ArrayList;
+
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVector;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVectorType;
 import com.maxeler.maxcompiler.v2.kernelcompiler.KernelParameters;
 
 public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
+    private final DFEVectorType outputVectorType;
+    private final List<MultiSourceAccumulator> accumulators;
+    private final List<PartitionedDemux> demuxUnits;
+    private final List<DFEVar> inputs;
+    private final DFEVector<DFEVar> output;
+    private final int outputChannels;
+
     public ConvolutionAccumulatorKernel(
             KernelParameters kp,
             ConvolutionParameters params) {
         super(kp, params);
+        outputChannels = params.outputDimension().channels();
+        outputVectorType = new DFEVectorType<DFEVar>(
+                GlobalConfig.dataType,
+                params.outputDimension());
+        output = outputVectorType.newInstance(this);
+        inputs = makeInputPlaceHolders();
+        accumulators = new ArrayList<MultiSourceAccumulator>();
+        demuxUnits = new ArrayList<PartitionedDemux>();
+
+        demux = new PartitionedDemux(
+                this, counts, new OffsetExpr(1));
+
+        for (int i = 0 ; i < params.outputDimension().channels() ; i++) {
+            MultiSourceAccumulator newAccumulator = new MultiSourceAccumulator(
+                    this,
+                    getLoopIterations(),
+                    getLoopIterations(),
+                    new OffsetExpr(1));
+
+            accumulators.add(newAccumulator);
+        }
+
+        for (int convUnitId = 0 ; convUnitId < params.foldingFactor ; convUnitId++) {
+            PartitionedDemux demux = new PartitionedDemux(
+                    this, counts, convCyclesRequired);
+            List<ConvChannelIndex> indices = getConvUnitChannelIndices(convUnitId);
+            List<ChannelFrequency> channelFrequency = getChannelFrequencies(
+                    indices);
+            int[] counts = unrollFrequencies(channelFrequency);
+
+            demuxUnits.add(demux);
+            demux.input <== inputs[convUnitId];
+            
+            for (int i = 0 ; i < channelFrequency.size() ; i++) {
+                accumulators[channelFrequencies[i].channel]
+                    .addSource(demux.outputs[i]);
+            }
+        }
+
+        setExternalIO();
+    }
+
+    protected void setExternalIO() {
+        // TODO(fyq14): inputControlFlag and outputControlFlag
+        for (int i = 0 ; i < params.foldingFactor ; i++) {
+            inputs[i] <== io.input("input_" + i, GlobalConfig.dataType);
+        }
+
+        io.output("output_" + i, output, GlobalConfig.dataType);
+        for (int i = 0 ; i < params.outputDimension().channels() ; i++) {
+            output[i] <== accumulators.output();
+        }
+    }
+
+    protected List<DFEVar> makeInputPlaceHolders() {
+        List<DFEVar> ret = new ArrayList<DFEVar>();
+
+        for (int i = 0 ; i < outputChannels ; i++) {
+            ret.add(GlobalConfig.dataType.newInstance(this));
+        }
+
+        return ret;
+    }
+
+    protected List<ChannelFrequency> getChannelFrequencies(List<ConvChannelIndex indices) {
+        List<ChannelFrequency> ret = new ArrayList<ChannelFrequency>();
+
+        if (l.size() == 0) {
+            return ret;
+        }
+        
+        ret.add(new ChannelFrequency(l[0].out, 1));
+
+        for (int i = 1 ; i < l.size() ; i++) {
+            int tail = ret.size() - 1;
+            if (ret[tail].channel != l[i].out) {
+                ret.add(new ChannelFrequency(l[i].out, 1));
+            } else {
+                ret.set(tail, new ChannelFrequency(ret[tail].channel, ret[tail].frequency + 1));
+            }
+        }
+
+        return ret;
+    }
+
+    protected int[] unrollFrequencies(List<Frequency> freqs) {
+        int totalCount = 0;
+        int[] counts;
+
+        for (int i = 0 ; i < freqs.size() ; i++) {
+            totalCount += freqs[i].frequency;
+        }
+
+        if (totalCount < getLoopIterations()) {
+            counts = new int[freqs.size() + 1];
+            counts[freqs.size()] = getLoopIterations() - totalCount;
+        } else {
+            counts = new int[freqs.size()];
+        }
+
+        for (int i = 0 ; i < freqs.size() ; i++) {
+            counts[i] = freqs[i].frequency;
+        }
+
+        return counts;
     }
 }
