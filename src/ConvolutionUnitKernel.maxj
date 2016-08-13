@@ -50,9 +50,9 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
         pipelineStage = chain.addCounter(pipelineLengthVar, 1);
         cycle = control.count.simpleCounter(32);
 
-        debug.simPrintf("---------------- cycle = %d\n", cycle);
-        debug.simPrintf("convLoopIterations = %d, pipelineLengthVar = %d\n", convLoopIterations, pipelineLengthVar);
-        debug.simPrintf("output = %.5f\n", output);
+        debug.simPrintf(debugFlag(), "---------------- cycle = %d\n", cycle);
+        debug.simPrintf(debugFlag(), "convLoopIterations = %d, pipelineLengthVar = %d\n", convLoopIterations, pipelineLengthVar);
+        debug.simPrintf(debugFlag(), "output = %.5f\n", output);
         initOutput();
 
         DFEVar inputControl = pipelineStage.eq(0) & loopIndex.eq(0);
@@ -91,7 +91,7 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
         for (int i = 0 ; i < kernelFoldingFactor ; i++) {
             DFEVar convWeight = getConvWeight(i);
             DFEVar convPixel = getConvPixel(i);
-            debug.simPrintf("multiplier %d: %.5f %.5f\n", i, convWeight, convPixel);
+            debug.simPrintf(debugFlag(), "multiplier %d: %.5f %.5f\n", i, convWeight, convPixel);
             multiplierOutputs.add(convWeight * convPixel);
         }
 
@@ -102,8 +102,8 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
                     ? constant.var(GlobalConfig.dataType, 0)
                     : stream.offset(output, -pipelineLength);
             DFEVar newSum = Utils.treeReduceAdd(multiplierOutputs);
-            debug.simPrintf("prev = %.5f\n", prev);
-            debug.simPrintf("newSum = %.5f\n", newSum);
+            debug.simPrintf(debugFlag(), "prev = %.5f\n", prev);
+            debug.simPrintf(debugFlag(), "newSum = %.5f\n", newSum);
 
             output <== newSum + prev;
         }

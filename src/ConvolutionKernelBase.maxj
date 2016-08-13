@@ -3,6 +3,7 @@ import java.util.List;
 
 import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
 import com.maxeler.maxcompiler.v2.kernelcompiler.KernelParameters;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
 
 public abstract class ConvolutionKernelBase extends Kernel {
     
@@ -36,4 +37,18 @@ public abstract class ConvolutionKernelBase extends Kernel {
     }
 
     public abstract String getOffsetExprName();
+
+
+    public void setDebugMode(boolean flag) {
+        debugMode = flag;
+    }
+
+    private static boolean debugMode = false;
+    protected DFEVar debugFlag() {
+        if (debugMode) {
+            return constant.var(dfeBool(), 0);
+        } else {
+            return constant.var(dfeBool(), 1);
+        }
+    }
 }
