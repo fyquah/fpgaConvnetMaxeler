@@ -46,9 +46,9 @@ public abstract class ConvolutionKernelBase extends Kernel {
     private static boolean debugMode = false;
     protected DFEVar debugFlag() {
         if (debugMode) {
-            return constant.var(dfeBool(), 0);
-        } else {
             return constant.var(dfeBool(), 1);
+        } else {
+            return constant.var(dfeBool(), 0);
         }
     }
 }
