@@ -1,0 +1,268 @@
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Properties;
+import java.util.Scanner;
+
+import com.maxeler.maxcompiler.v2.build.EngineParameters;
+import com.maxeler.maxcompiler.v2.managers.custom.CustomManager;
+import com.maxeler.maxcompiler.v2.managers.custom.DFELink;
+import com.maxeler.maxcompiler.v2.managers.custom.blocks.KernelBlock;
+import com.maxeler.maxcompiler.v2.managers.engine_interfaces.CPUTypes;
+import com.maxeler.maxcompiler.v2.managers.engine_interfaces.EngineInterface;
+import com.maxeler.maxcompiler.v2.managers.engine_interfaces.InterfaceParam;
+
+
+public class LeNetManager extends CustomManager {
+    private final int inputHeight = 28;
+    private final int inputWidth = 28;
+    private final int inputChannels = 1;
+
+
+    private ConvolutionParameters conv1Params;
+    private ConvolutionParameters conv2Params;
+    private PoolingParameters pool1Params;
+    private PoolingParameters pool2Params;
+    private ConvolutionLayer conv1Layer, conv2Layer;
+    private PoolingLayerKernel pool1Kernel, pool2Kernel;
+    private DfeInputAlligner inputAllignerKernel;
+    private DfeOutputAlligner outputAllignerKernel;
+    
+    public Dimension outputDimension() {
+        return pool2Params.outputDimension;
+    }
+
+    public Dimension inputDimension() {
+        return conv1Params.inputDimension();
+    }
+
+    public PoolingParameters loadPool1Parameters() {
+        conv1Params.outputDimension().print();
+        return new PoolingParameters(
+                conv1Params.outputDimension(),
+                2,
+                PoolingUnit.Type.Max);
+    }
+
+    public PoolingParameters loadPool2Parameters() {
+        return new PoolingParameters(
+                conv2Params.outputDimension(),
+                2,
+                PoolingUnit.Type.Max);
+
+    }
+
+    private static List<Float> getConvBias(int outputChannels, int id) {
+        List<Float> ret = new ArrayList<Float>();
+        String filename = "../lenet_params/conv" + id + "_bias.txt";
+
+        try {
+            Scanner in = new Scanner(new FileInputStream(filename));
+
+            for (int i = 0 ; i < outputChannels ; i++) {
+                ret.add(in.nextFloat());
+            }
+
+            in.close();
+        } catch (FileNotFoundException e) {
+            e.printStackTrace();
+            System.exit(1);
+        }
+
+        return ret;
+    }
+
+    private static List<List<float[][]>> getConvWeights(
+            int outputChannels, int inputChannels, int kernelDim, int id) {
+
+        List<List<float[][]>> ret = new ArrayList<List<float[][]>>();
+        String filename = "../lenet_params/conv" + id + "_weights.txt";
+
+        try {
+            Scanner in = new Scanner(new FileInputStream(filename));
+
+            for (int o = 0 ; o < outputChannels ; o++) {
+                List<float[][]> arr = new ArrayList<float[][]>();
+
+                for (int i = 0 ; i < inputChannels ; i++) {
+                    float[][] weights = new float[kernelDim][kernelDim];
+
+                    for (int r = 0 ; r < kernelDim ; r++) {
+                        for (int c = 0 ; c < kernelDim ; c++) {
+                            weights[r][c] = in.nextFloat();
+                        }
+                    }
+
+                    arr.add(weights);
+                }
+
+                ret.add(arr);
+            }
+
+            in.close();
+        } catch (FileNotFoundException e) {
+            e.printStackTrace();
+            System.exit(1);
+        }
+
+        return ret;
+    }
+
+    public ConvolutionParameters loadConv1Parameters(
+            int convUnitFoldingFactor, int kernelFoldingFactor) {
+
+        int kernelDim = 5;
+        int outputChannels = 20;
+        int inputChannels = 1;
+
+        ConvolutionParameters convParams = new ConvolutionParameters(
+            new Dimension(inputHeight, inputWidth, inputChannels),
+            outputChannels,
+            getConvWeights(outputChannels, inputChannels, kernelDim, 1),
+            getConvBias(outputChannels, 1)
+        );
+
+        // todo 2
+        convParams.kernelFoldingFactor = kernelFoldingFactor;
+        convParams.foldingFactor = convUnitFoldingFactor;
+
+        return convParams;
+    }
+
+    public ConvolutionParameters loadConv2Parameters(
+            int convUnitFoldingFactor, int kernelFoldingFactor) {
+
+        int kernelDim = 5;
+        int outputChannels = 50;
+        int inputChannels = 20;
+
+        ConvolutionParameters convParams = new ConvolutionParameters(
+            pool1Params.outputDimension,
+            50,
+            getConvWeights(outputChannels, inputChannels, kernelDim, 2),
+            getConvBias(outputChannels, 2)
+        );
+
+        // todo 1
+        convParams.kernelFoldingFactor = kernelFoldingFactor;
+        convParams.foldingFactor = convUnitFoldingFactor;
+
+        return convParams;
+    }
+
+    public LeNetManager (EngineParameters engineParameters) {
+        super(engineParameters);
+
+        int conv1Factor = 0;
+        int conv1KernelFactor = 0;
+        int conv2Factor = 0;
+        int conv2KernelFactor = 0;
+        int defaultFrequency = 0;
+
+        try {
+            Properties prop = new Properties();
+            //load a properties file from class path, inside static method
+            InputStream input = new FileInputStream("../lenet_params/config.properties");
+            prop.load(input);
+
+            //get the property value and print it out
+            conv1Factor = Integer.parseInt(prop.getProperty("conv1Factor"));
+            conv1KernelFactor = Integer.parseInt(prop.getProperty("conv1KernelFactor"));
+            conv2Factor = Integer.parseInt(prop.getProperty("conv2Factor"));
+            conv1Factor = Integer.parseInt(prop.getProperty("conv1KernelFactor"));
+            conv2KernelFactor = Integer.parseInt(prop.getProperty("conv2KernelFactor"));
+            defaultFrequency = Integer.parseInt(prop.getProperty("frequency"));
+
+            input.close();
+
+        } catch (IOException e) {
+            e.printStackTrace();
+            System.exit(-1);
+        }
+
+        System.out.println("conv1Factor = " + conv1Factor);
+        System.out.println("conv1KernelFactor = " + conv1KernelFactor);
+        System.out.println("conv2Factor = " + conv2Factor);
+        System.out.println("conv2KernelFactor = " + conv2KernelFactor);
+        System.out.println("Default frequency = " + defaultFrequency);
+
+        config.setDefaultStreamClockFrequency(defaultFrequency);
+
+        conv1Params = loadConv1Parameters(conv1Factor, conv1KernelFactor);
+        pool1Params = loadPool1Parameters();
+        conv2Params = loadConv2Parameters(conv2Factor, conv2KernelFactor);
+        pool2Params = loadPool2Parameters();
+
+        System.out.println("Layer dimensions:");
+        System.out.print("conv1.inputDimension() ");
+        conv1Params.inputDimension().print();
+        System.out.print("conv1.outputDimension() ");
+        conv1Params.outputDimension().print();
+        System.out.print("pool1.inputDimension() ");
+        pool1Params.inputDimension.print();
+        System.out.print("pool1.outputDimension() ");
+        pool1Params.outputDimension.print();
+        System.out.print("conv2.inputDimension() ");
+        conv2Params.inputDimension().print();
+        System.out.print("conv2.outputDimension() ");
+        conv2Params.outputDimension().print();
+        System.out.print("pool2.inputDimension() ");
+        pool2Params.inputDimension.print();
+        System.out.print("pool2.outputDimension() ");
+        pool2Params.outputDimension.print();
+
+        inputAllignerKernel = new DfeInputAlligner(
+            makeKernelParameters("DfeInputAlligner"), inputChannels
+        );
+        conv1Layer = new ConvolutionLayer(conv1Params, this);
+        pool1Kernel = new PoolingLayerKernel (
+            makeKernelParameters("pool1"), pool1Params
+        );
+        conv2Layer = new ConvolutionLayer(conv2Params, this);
+        pool2Kernel = new PoolingLayerKernel (
+            makeKernelParameters("pool2"), pool2Params
+        );
+        outputAllignerKernel = new DfeOutputAlligner(
+            makeKernelParameters("DfeOutputAlligner"), pool2Kernel.outputDimension.channels()
+        );
+
+        // TODO(fyq14): Make PoolingLayer class to wrap around the pooling layers kernel too.
+        KernelBlock inputAllignerBlock = addKernel(inputAllignerKernel);
+        KernelBlock pool1Block = addKernel(pool1Kernel);
+        KernelBlock pool2Block = addKernel(pool2Kernel);
+        KernelBlock outputAllignerBlock = addKernel(outputAllignerKernel);
+
+        DFELink cpuInputLink = addStreamFromCPU("x");
+        DFELink cpuOutputLink = addStreamToCPU("y");
+
+        inputAllignerBlock.getInput("x") <== cpuInputLink;
+        conv1Layer.getInput() <== inputAllignerBlock.getOutput("y");
+        pool1Block.getInput("x") <== conv1Layer.getOutput();
+        conv2Layer.getInput() <== pool1Block.getOutput("y");
+        pool2Block.getInput("x") <== conv2Layer.getOutput();
+        outputAllignerBlock.getInput("x") <== pool2Block.getOutput("y");
+        cpuOutputLink <== outputAllignerBlock.getOutput("y");
+    }
+
+    public EngineInterface interfaceDefault() {
+        EngineInterface ei = new EngineInterface();
+        CPUTypes   type = CPUTypes.FLOAT;
+        int        size = type.sizeInBytes();
+        InterfaceParam  N    = ei.addParam("N", CPUTypes.INT);
+
+        ei.setTicks("DfeInputAlligner", N * inputDimension().totalSize());
+        conv1Layer.setKernelTimings(ei, N);
+        ei.setTicks("pool1", N * pool1Kernel.cyclesPerImage());
+        conv2Layer.setKernelTimings(ei, N);
+        ei.setTicks("pool2", N * pool2Kernel.cyclesPerImage());
+        ei.setTicks("DfeOutputAlligner", N * outputDimension().totalSize());
+
+        ei.setStream("x", type, N * inputDimension().totalSize() * size);
+        ei.setStream("y", type, N * outputDimension().totalSize() * size);
+
+        return ei;
+    }
+}
