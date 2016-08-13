@@ -56,12 +56,12 @@ public class MultiSourceAccumulator extends KernelLib {
         }
     }
 
-    public void debug() {
-        debug.simPrintf("======== start debug ========\n");
-        debug.simPrintf("pipelineIndex = %d\n", pipelineIndex);
-        debug.simPrintf("iter = %d\n", iter);
-        debug.simPrintf("pipelineLength = %d\n", pipelineLengthVar);
-        debug.simPrintf("======== end debug ========\n");
+    public void debug(DFEVar debugFlag) {
+        debug.simPrintf(debugFlag, "======== start debug ========\n");
+        debug.simPrintf(debugFlag, "pipelineIndex = %d\n", pipelineIndex);
+        debug.simPrintf(debugFlag, "iter = %d\n", iter);
+        debug.simPrintf(debugFlag, "pipelineLength = %d\n", pipelineLengthVar);
+        debug.simPrintf(debugFlag, "======== end debug ========\n");
     }
 
     public void addSource(DFEVar x) {
