@@ -20,6 +20,7 @@ public class ConvolutionAccumulatorKernelTest {
         params.kernelDim = kernelDim;
         params.outputChannels = outputChannels;
         params.foldingFactor = foldingFactor;
+        params.bias = TestHelper.randomFloatVector(outputChannels);
 
         return params;
     }
@@ -102,15 +103,13 @@ public class ConvolutionAccumulatorKernelTest {
         manager.build();
 
         List<List<Float>> dataInputs = generateRandomInput(params, numberOfPixels);
-        List<List<Bits>> rawInputs = convert2DFloatToBits(dataInputs, numberOfPixels);
+        List<List<Bits>> rawInputs = convert2DFloatToBits(dataInputs, 1);
 
         for (int i = 0 ; i < params.foldingFactor ; i++) {
             manager.setInputDataRaw(kernel.getInputName(i), rawInputs[i]);
         }
-        manager.setKernelCycles(
-                params.inputDimension().height()
-                * params.inputDimension().width()
-                * kernel.getLoopIterations());
+
+        manager.setKernelCycles(kernel.getLoopIterations() * numberOfPixels);
         manager.run();
 
         List<Bits> outputBits = manager.getOutputDataRaw(kernel.getOutputName());

@@ -9,22 +9,21 @@ import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.CounterChain;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Stream.OffsetExpr;
 
+/*
+ * TODO(fyq14): Is having two arguments (add and hold) really necessary?
+ * Smells every much like a YAGNI scenario ...
+ */
 public class MultiSourceAccumulator extends KernelLib {
-    /*
-     * inputDataRate is the number of cycles that ConvolutionUnit will require
-     * to generate an output. Right now, we do not assume that ConvolutionUnit
-     * is in any sense pipelined.
-     * */
     private DFEVar out;
     private Kernel kernel;
     public List<DFEVar> sources;
     public int addCycles, holdCycles;
-    public OffsetExpr inputDataRate, pipelineLength;
-    public DFEVar inputDataRateVar, iter, cycleStage, pipelineIndex, pipelineLengthVar;
+    public OffsetExpr pipelineLength;
+    public DFEVar iter, pipelineIndex, pipelineLengthVar;
     /* offsetdefaultdict ensures that every kernel has only one offsetexpr, which
      * should be perfectly sensible since there is only one output per kernel */
     public static OffsetExprDefaultDict pipelineLengthCache = new OffsetExprDefaultDict(
-            "MultiSourceAccumulator");
+            "MultiSourceAccumulator", 1, 10);
 
     public OffsetExpr getOffsetAutoLoop() {
         return pipelineLengthCache.get(kernel);
@@ -37,23 +36,19 @@ public class MultiSourceAccumulator extends KernelLib {
     public MultiSourceAccumulator (
             Kernel argKernel,
             int argAddCycles,
-            int argHoldCycles,
-            OffsetExpr argDataRate) {
+            int argHoldCycles) {
         super(argKernel);
         kernel = argKernel;
         addCycles = argAddCycles;
         holdCycles = argHoldCycles;
         sources = new ArrayList<DFEVar>();
         out = GlobalConfig.dataType.newInstance(this);
-        inputDataRate = argDataRate;
-        inputDataRateVar = inputDataRate.getDFEVar(this, dfeUInt(32));
         pipelineLength = getOffsetAutoLoop();
         pipelineLengthVar = pipelineLength.getDFEVar(this, dfeUInt(32));
-        pipelineIndex = Utils.simpleCounter(this, pipelineLengthVar, 1);
 
         CounterChain chain = control.count.makeCounterChain();
         iter = Utils.chainCounterOrZero(argKernel, chain, argHoldCycles);
-        cycleStage = chain.addCounter(inputDataRateVar, 1);
+        pipelineIndex = chain.addCounter(pipelineLengthVar, 1);
 
         if (argAddCycles < argHoldCycles) {
             System.out.println("addCycles cannot be < holdcycles!");
@@ -61,14 +56,26 @@ public class MultiSourceAccumulator extends KernelLib {
         }
     }
 
+    public void debug() {
+        debug.simPrintf("======== start debug ========\n");
+        debug.simPrintf("pipelineIndex = %d\n", pipelineIndex);
+        debug.simPrintf("iter = %d\n", iter);
+        debug.simPrintf("pipelineLength = %d\n", pipelineLengthVar);
+        debug.simPrintf("======== end debug ========\n");
+    }
+
     public void addSource(DFEVar x) {
         sources.add(x);
+    }
+
+    public void generate() {
+        generate(1.0);
     }
 
     public void generate(double pipeliningFactor) {
         // Compute previous (either 0 or output[-1])
         optimization.pushPipeliningFactor(pipeliningFactor);
-        OffsetExpr offset = -(inputDataRate + pipelineLength);
+        OffsetExpr offset = -(pipelineLength);
         DFEVar prev = (iter.eq(0)
                 ? constant.var(GlobalConfig.dataType, 0)
                 : stream.offset(out, offset));
@@ -78,11 +85,11 @@ public class MultiSourceAccumulator extends KernelLib {
 
         // Decide whether to show previous / updated input
         if (addCycles == holdCycles) {
-            out <== (cycleStage.eq(inputDataRateVar - 1)
+            out <== (pipelineIndex.eq(pipelineLengthVar - 1)
                      ? Utils.treeReduceAdd(adderInputs)
                      : prev);
         } else {
-            out <== ((cycleStage.eq(inputDataRateVar - 1) | iter >= addCycles)
+            out <== ((pipelineIndex.eq(pipelineLengthVar - 1) | iter >= addCycles)
                 ? Utils.treeReduceAdd(adderInputs)
                 : prev);
         }

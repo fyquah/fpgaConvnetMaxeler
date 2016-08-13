@@ -130,4 +130,14 @@ public class TestHelper {
         System.out.println("...");
     }
 
+    public static List<Float> randomFloatVector(int length) {
+        List<Float> ret = new ArrayList<Float>();
+
+        for (int i = 0 ; i < length ; i++) {
+            ret.add(rand() * 0.01f);
+        }
+
+        return ret;
+    }
+
 }
