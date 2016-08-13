@@ -59,7 +59,7 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
         }
 
         for (int i = 0 ; i < outputChannels ; i++) {
-            accumulators[i].generate(0.0);
+            accumulators[i].generate();
             output[i] <== accumulators[i].output() + bias[i];
         }
 
