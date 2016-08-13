@@ -60,12 +60,8 @@ public class ConvolutionLayer {
         /*
          * scheduler:
          * Scheduler does not have a loop offset, so we will not need to deal
-         * with ei.getAutoLoopOffset stuff here.
+         * with ei.getAutoLoopOffset here.
          */
-
-        InterfaceParam pipelineLength = ei.getAutoLoopOffset(
-                scheduler.getKernel().getName(),
-                scheduler.getKernel().getOffsetExprName());
         ei.setTicks(scheduler.getKernel().getName(),
                     numberOfImages * scheduler.getKernel().cyclesPerImage());
 
@@ -83,7 +79,7 @@ public class ConvolutionLayer {
         }
 
         /* Accumulator */
-        pipelineLength = ei.getAutoLoopOffset(
+        InterfaceParam pipelineLength = ei.getAutoLoopOffset(
                 accumulator.getKernel().getName(),
                 accumulator.getKernel().getOffsetExprName());
         ei.ignoreAutoLoopOffset(

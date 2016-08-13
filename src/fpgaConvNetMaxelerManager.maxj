@@ -6,6 +6,10 @@ import org.junit.runner.Result;
 import org.junit.runner.notification.Failure;
 import java.util.List;
 
+import com.maxeler.maxcompiler.v2.build.EngineParameters;
+import com.maxeler.maxcompiler.v2.managers.BuildConfig;
+
+
 /*
  * These imports will be usef once resource_bench and le_net goes live
  * Right now, these are commented out to surpress maxjc warnings.
@@ -37,8 +41,6 @@ public class fpgaConvNetMaxelerManager {
     }
     */
 
-    /*
-     * TODO(fyq14): Make this work.
     public static void le_net(String[] args) {
         EngineParameters params = new EngineParameters(args);
         LeNetManager manager = new LeNetManager(params);
@@ -48,12 +50,9 @@ public class fpgaConvNetMaxelerManager {
         buildConfig.setMPPRParallelism(params.getMPPRThreads());
         buildConfig.setMPPRRetryNearMissesThreshold(params.getMPPRRetryThreshold());
 
-        CustomManager.Config config = manager.config;
-
         manager.createSLiCinterface(manager.interfaceDefault());
         manager.build();
     }
-    */
 
     public static void test(String[] args) {
         Class<?>[] klasses;
@@ -63,10 +62,16 @@ public class fpgaConvNetMaxelerManager {
         String[] methodNames = new String[1];  // to make javac happy
 
         if (testKlasses.size() == 0) {
-            klasses = new Class<?>[]{
-                ConvolutionUnitKernelTest.class,
-                ConvolutionSchedulerKernelTest.class
-            };
+            try {
+                klasses = new Class<?>[]{
+                     Class.forName("ConvolutionUnitKernelTest"),
+                    Class.forName("ConvolutionSchedulerKernelTest"),
+                };
+            } catch (ClassNotFoundException e) {
+                klasses = new Class<?>[1];
+                System.out.println(e);
+                System.exit(-1);
+            }
 
             methodNames = new String[klasses.length];
             for (int i =0 ; i < klasses.length ; i++) {
@@ -130,6 +135,7 @@ public class fpgaConvNetMaxelerManager {
         }
 
         if (args[0].equals("test")) test(x);
+        else if (args[0].equals("le_net")) le_net(x);
     }
 
 }
