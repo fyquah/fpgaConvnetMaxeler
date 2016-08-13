@@ -56,7 +56,11 @@ public class ConvolutionUnitKernel extends Kernel {
         DFEVar outputControl = pipelineStage.eq(pipelineLengthVar - 1) & loopIndex.eq(loopIterations - 1);;
         input_weights <== io.input(getInputWeightsName(), inputVectorType, inputControl);
         input_pixels <== io.input(getInputPixelsName(), inputVectorType, inputControl);
-        io.output("output", output, GlobalConfig.dataType, outputControl);
+        io.output(getOutputName(), output, GlobalConfig.dataType, outputControl);
+    }
+
+    public String getOutputName() {
+        return "output";
     }
 
     public String getInputWeightsName() {
