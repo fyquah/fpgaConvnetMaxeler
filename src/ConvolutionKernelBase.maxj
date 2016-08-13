@@ -39,7 +39,7 @@ public abstract class ConvolutionKernelBase extends Kernel {
     public abstract String getOffsetExprName();
 
 
-    public void setDebugMode(boolean flag) {
+    public static void setDebugMode(boolean flag) {
         debugMode = flag;
     }
 

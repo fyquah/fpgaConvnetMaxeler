@@ -43,6 +43,8 @@ public class ConvolutionUnitKernelTest {
         ConvolutionParameters params = new ConvolutionParameters();
         params.kernelFoldingFactor = kernelFoldingFactor;
         params.kernelDim = kernelDim;
+        params.inputDim = new Dimension(28, 28, 2);
+        params.foldingFactor = 10;
 
         List<Float> weights = generateRandomWindow(kernelDim);
         List<Float> pixels = generateRandomWindow(kernelDim);
