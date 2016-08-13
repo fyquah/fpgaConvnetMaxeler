@@ -5,6 +5,8 @@ import com.maxeler.maxcompiler.v2.managers.custom.DFELink;
 import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
 import com.maxeler.maxcompiler.v2.managers.custom.CustomManager;
 import com.maxeler.maxcompiler.v2.managers.custom.blocks.KernelBlock;
+import com.maxeler.maxcompiler.v2.managers.engine_interfaces.EngineInterface;
+import com.maxeler.maxcompiler.v2.managers.engine_interfaces.InterfaceParam;
 
 
 public class ConvolutionLayer {
@@ -39,7 +41,6 @@ public class ConvolutionLayer {
                     params)));
         }
 
-        setKernelTimings();
         joinKernels();
     }
 
@@ -53,8 +54,43 @@ public class ConvolutionLayer {
                 accumulator.getKernel().getOutputName());
     }
 
-    // TODO(fyq14): Complete this function.
-    protected void setKernelTimings() {
+    // TODO(fyq14): Once pipelining is introduced, this function probably needs some
+    //              rewriting w.r.t. the cycles required.
+    protected void setKernelTimings(EngineInterface ei, InterfaceParam numberOfImages) {
+        /*
+         * scheduler:
+         * Scheduler does not have a loop offset, so we will not need to deal
+         * with ei.getAutoLoopOffset stuff here.
+         */
+
+        InterfaceParam pipelineLength = ei.getAutoLoopOffset(
+                scheduler.getKernel().getName(),
+                scheduler.getKernel().getOffsetExprName());
+        ei.setTicks(scheduler.getKernel().getName(),
+                    numberOfImages * scheduler.getKernel().cyclesPerImage());
+
+
+        /* ConvolutionUnits */
+        for (int i = 0 ; i < params.foldingFactor ; i++) {
+            InterfaceParam convPipelineLength = ei.getAutoLoopOffset(
+                    convolutionUnits[i].getKernel().getName(),
+                    convolutionUnits[i].getKernel().getOffsetExprName());
+            ei.ignoreAutoLoopOffset(
+                    convolutionUnits[i].getKernel().getName(),
+                    convolutionUnits[i].getKernel().getOffsetExprName());
+            ei.setTicks(convolutionUnits[i].getKernel().getName(),
+                        numberOfImages * convolutionUnits[i].getKernel().cyclesPerImage(convPipelineLength));
+        }
+
+        /* Accumulator */
+        pipelineLength = ei.getAutoLoopOffset(
+                accumulator.getKernel().getName(),
+                accumulator.getKernel().getOffsetExprName());
+        ei.ignoreAutoLoopOffset(
+                accumulator.getKernel().getName(),
+                accumulator.getKernel().getOffsetExprName());
+        ei.setTicks(accumulator.getKernel().getName(),
+                    numberOfImages * accumulator.getKernel().cyclesPerImage(pipelineLength));
     }
 
     /*

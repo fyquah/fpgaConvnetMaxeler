@@ -34,4 +34,6 @@ public abstract class ConvolutionKernelBase extends Kernel {
 
         return ret;
     }
+
+    public abstract String getOffsetExprName();
 }

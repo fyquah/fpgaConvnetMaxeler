@@ -80,6 +80,13 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
         }
     }
 
+    /* Right now, this is not pipelined, so cyclesPerImage does not take any extra args */
+    public int cyclesPerImage() {
+        return (inputDimension.width()
+                * inputDimension.height()
+                * getLoopIterations());
+    }
+
     public String getInputName() {
         return "input";
     }
@@ -90,6 +97,14 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
 
     public String getPixelOutputName(int convUnitId) {
         return "output_x_" + convUnitId;
+    }
+
+    /*
+     * This is not used, but as the base class is a ConvolutionKernelBase
+     * we will need to implement this.
+     */
+    public String getOffsetExprName() {
+        return "";
     }
 
     protected DFEVar isBorder() {

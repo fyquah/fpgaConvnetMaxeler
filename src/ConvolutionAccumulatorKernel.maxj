@@ -6,6 +6,8 @@ import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVector;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVectorType;
 import com.maxeler.maxcompiler.v2.kernelcompiler.KernelParameters;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Stream.OffsetExpr;
+import com.maxeler.maxcompiler.v2.managers.engine_interfaces.InterfaceParam;
+
 
 public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
     private final DFEVectorType<DFEVar> outputVectorType;
@@ -14,7 +16,8 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
     private final List<DFEVar> inputs;
     private final List<Float> bias;
     private final DFEVector<DFEVar> output;
-    private final int outputChannels, foldingFactor, loopIterations;
+    private final Dimension outputDimension;
+    private final int outputChannels, foldingFactor;
 
     public ConvolutionAccumulatorKernel(
             KernelParameters kp,
@@ -22,8 +25,8 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
         super(kp, params);
         outputChannels = params.outputDimension().channels();
         foldingFactor = params.foldingFactor;
-        loopIterations = params.loopIterations();
         bias = params.bias;
+        outputDimension = params.outputDimension();
 
         outputVectorType = new DFEVectorType<DFEVar>(
                 GlobalConfig.dataType, outputChannels);
@@ -76,12 +79,22 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
         return "output";
     }
 
+    /* It is fine to do this as the values are cached w.r.t. Kernel */
+    public String getOffsetExprName() {
+        return accumulators[0].getOffsetExprName();
+    }
+
+    public InterfaceParam cyclesPerImage(InterfaceParam pipelineLength) {
+        return outputDimension.width() * outputDimension.height()
+                * getLoopIterations() * pipelineLength;
+    }
+
     protected void setExternalIO() {
         // TODO(fyq14): inputControlFlag and outputControlFlag
         DFEVar inputControlFlag = accumulators[0].pipelineIndex.eq(0);
         DFEVar outputControlFlag = 
             accumulators[0].pipelineIndex.eq(accumulators[0].pipelineLengthVar - 1)
-            & accumulators[0].iter.eq(loopIterations - 1);
+            & accumulators[0].iter.eq(getLoopIterations() - 1);
 
         for (int i = 0 ; i < foldingFactor ; i++) {
             inputs[i] <== io.input(getInputName(i),
