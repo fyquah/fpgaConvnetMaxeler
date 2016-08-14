@@ -64,14 +64,16 @@ public class ConvolutionSchedulerKernelTest {
             + channel));
     }
 
-    protected List<Float>  generatePixels(Dimension dim) {
+    protected List<Float>  generatePixels(Dimension dim, int numberOfImages) {
 
         List<Float> ret = new ArrayList<Float>();
 
-        for (int i = 0 ; i < dim.height() ; i++) {
-            for (int j = 0 ; j < dim.width() ; j++) {
-                for (int c = 0 ; c < dim.channels() ; c++) {
-                    ret.add(getPixelValue(dim, i, j, c));
+        for (int t = 0 ; t < numberOfImages ; t++) {
+            for (int i = 0 ; i < dim.height() ; i++) {
+                for (int j = 0 ; j < dim.width() ; j++) {
+                    for (int c = 0 ; c < dim.channels() ; c++) {
+                        ret.add(getPixelValue(dim, i, j, c));
+                    }
                 }
             }
         }
@@ -123,7 +125,7 @@ public class ConvolutionSchedulerKernelTest {
                 for (int x = 0 ; x < loopIterations ; x++) {
                     for (int y = 0 ; y < kernelSize ; y++) {
 
-                        int idx = w * (outputWindowSize * loopIterations * kernelSize)
+                        int idx =  w * (outputWindowSize * loopIterations * kernelSize)
                                   + p * (loopIterations * kernelSize)
                                   + x * (kernelSize)
                                   + y;
@@ -231,6 +233,7 @@ public class ConvolutionSchedulerKernelTest {
     }
 
     protected void genericTest(String testName, final int foldingFactor) {
+        final int numberOfImages = 10;
         final int kernelDim = 5;
         final int outputChannels = 10;
         final int inputChannels = 20;
@@ -256,13 +259,14 @@ public class ConvolutionSchedulerKernelTest {
         manager.setKernel(kernel);
         manager.build();
 
-        List<Float> pixelsInput = generatePixels(inputDim);
+        List<Float> pixelsInput = generatePixels(inputDim, numberOfImages);
         List<Bits> rawPixelsInput = TestHelper.toBitsList(
                 pixelsInput, inputDim.channels());
 
         manager.setInputDataRaw(kernel.getInputName(), rawPixelsInput);
         manager.setKernelCycles(
-                inputDim.height() * inputDim.width() * kernel.getLoopIterations());
+                numberOfImages * inputDim.height()
+                * inputDim.width() * kernel.getLoopIterations());
         manager.run();
 
         for (int convUnitId = 0 ; convUnitId < foldingFactor ; convUnitId++) {
@@ -277,10 +281,10 @@ public class ConvolutionSchedulerKernelTest {
                     rawWeightsOutput, kernelDim * kernelDim);
 
             assertEquals(
-                    outputWindowSize * kernelDim * kernelDim * kernel.getLoopIterations(),
+                    numberOfImages * outputWindowSize * kernelDim * kernelDim * kernel.getLoopIterations(),
                     pixelsOutput.size());
             assertEquals(
-                    outputWindowSize * kernelDim * kernelDim * kernel.getLoopIterations(),
+                    numberOfImages * outputWindowSize * kernelDim * kernelDim * kernel.getLoopIterations(),
                     weightsOutput.size());
 
             checkWeightsOutput(kernel, params, convUnitId, weightsOutput);
