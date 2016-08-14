@@ -65,7 +65,8 @@ public class fpgaConvNetMaxelerManager {
             try {
                 klasses = new Class<?>[]{
                      Class.forName("ConvolutionUnitKernelTest"),
-                    Class.forName("ConvolutionSchedulerKernelTest"),
+                     Class.forName("ConvolutionSchedulerKernelTest"),
+                     Class.forName("ConvolutionAccumulatorKernelTest"),
                 };
             } catch (ClassNotFoundException e) {
                 klasses = new Class<?>[1];

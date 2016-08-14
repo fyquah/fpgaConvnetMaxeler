@@ -92,7 +92,7 @@ public class ConvolutionAccumulatorKernelTest {
 
     protected void genericTest(String testName, int foldingFactor, int estimatedPipelineLength) {
         ConvolutionParameters params = buildConvolutionParams(foldingFactor);
-        final int numberOfPixels = 17;
+        final int numberOfPixels = 1000;
 
         SimulationManager manager = new SimulationManager(testName + "Kernel");
         ConvolutionAccumulatorKernel kernel =
@@ -119,8 +119,8 @@ public class ConvolutionAccumulatorKernelTest {
         assertEquals(expectedOutputData.size(), outputData.size());
 
         for (int i = 0 ; i < outputData.size() ; i++) {
-             float diff = Math.abs(outputData[i] - expectedOutputData[i]);
-             assertTrue(diff < 0.05f);
+            float diff = Math.abs(outputData[i] - expectedOutputData[i]);
+            assertTrue(diff < 0.1f);
         }
     }
 
