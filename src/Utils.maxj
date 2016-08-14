@@ -343,11 +343,11 @@ public class Utils {
     }
 
     public static void assertTrue(boolean flag) {
-        assertTrue(flag, "");
+        assertTrue(flag, "assertion failed!");
     }
 
     public static void assertTrue(boolean flag, String message) {
-        if (flag) {
+        if (!flag) {
             throw new AssertionError(message);
         }
     }
