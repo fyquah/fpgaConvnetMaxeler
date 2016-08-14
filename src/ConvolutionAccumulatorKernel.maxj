@@ -50,7 +50,7 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
                     indices);
             int[] counts = unrollFrequencies(channelFrequencies);
             PartitionedDemux demux = new PartitionedDemux(
-                    this, counts, new OffsetExpr(1));
+                    this, counts, accumulators[0].getOffsetAutoLoop());
 
             demuxUnits.add(demux);
             demux.input <== inputs[convUnitId];
