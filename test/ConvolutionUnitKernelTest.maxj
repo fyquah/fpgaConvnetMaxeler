@@ -8,13 +8,11 @@ import com.maxeler.maxcompiler.v2.utils.Bits;
 
 public class ConvolutionUnitKernelTest {
 
-    protected List<Float> generateRandomWindow(int kernelDim) {
+    protected List<Float> generateRandomWindow(int kernelDim, int count) {
         ArrayList<Float> vec = new ArrayList<Float>();
 
-        for (int i = 0 ; i < kernelDim ; i++) {
-            for (int j = 0 ; j < kernelDim ; j++) {
-                vec.add(TestHelper.rand());
-            }
+        for (int i = 0 ; i < count * kernelDim * kernelDim; i++) {
+            vec.add(TestHelper.rand());
         }
 
         return vec;
@@ -30,6 +28,22 @@ public class ConvolutionUnitKernelTest {
         return ret;
     }
 
+    protected List<Float> computeExpected(List<Float> a, List<Float> b, int kernelDim) {
+        List<Float> ret = new ArrayList<Float>();
+
+        for (int i = 0 ; i < a.size() ; ) {
+            float x = 0.0f;
+
+            for (int j = 0 ; j < kernelDim * kernelDim ; j++, i++) {
+                x += a[i] * b[i];
+            }
+
+            ret.add(x);
+        }
+
+        return ret;
+    }
+
     protected void printVriable(String name, float f) {
         System.out.println(name + " = " + f);
     }
@@ -38,7 +52,7 @@ public class ConvolutionUnitKernelTest {
             String testName,
             int kernelFoldingFactor,
             int kernelDim,
-            int numTicks) {
+            int ticksPerConvolution) {
 
         ConvolutionParameters params = new ConvolutionParameters();
         params.kernelFoldingFactor = kernelFoldingFactor;
@@ -46,9 +60,10 @@ public class ConvolutionUnitKernelTest {
         params.inputDim = new Dimension(28, 28, 2);
         params.foldingFactor = 10;
 
-        List<Float> weights = generateRandomWindow(kernelDim);
-        List<Float> pixels = generateRandomWindow(kernelDim);
-        float expectedOutput = dotProduct(weights, pixels);
+        int convolutionCount = 100;
+        List<Float> weights = generateRandomWindow(kernelDim, convolutionCount);
+        List<Float> pixels = generateRandomWindow(kernelDim, convolutionCount);
+        List<Float> expectedOutput = computeExpected(weights, pixels, kernelDim);
 
         SimulationManager manager = new SimulationManager(testName + "Kernel");
         ConvolutionUnitKernel kernel = new ConvolutionUnitKernel(
@@ -67,19 +82,21 @@ public class ConvolutionUnitKernelTest {
         manager.setInputDataRaw(kernel.getInputWeightsName(), rawWeights);
 
         // TODO(fyq14): A better way to figure compute the cycles on the fly?
-        manager.setKernelCycles(numTicks);
+        manager.setKernelCycles(convolutionCount * ticksPerConvolution);
         manager.run();
         List<Bits> rawOutput = manager.getOutputDataRaw("output");
         List<Float> obtainedOutputList = TestHelper.fromBitsList(rawOutput, 1);
 
         TestHelper.printList("inputWeights", weights, 25);
         TestHelper.printList("inputPixels", pixels, 25);
-        printVriable("expectedOutput", expectedOutput);
 
         // Check if the results are correct.
-        assertEquals(obtainedOutputList.size(), 1);
-        float difference = Math.abs(obtainedOutputList[0] - expectedOutput);
-        assertTrue(difference < 0.05);
+        assertEquals(obtainedOutputList.size(), expectedOutput.size());
+
+        for (int i = 0 ; i < expectedOutput.size() ; i++) {
+            float difference = Math.abs(obtainedOutputList[i] - expectedOutput[i]);
+            assertTrue(difference < 0.05);
+        }
     }
     
     @Test
