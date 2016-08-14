@@ -172,7 +172,6 @@ public class LeNetManager extends CustomManager {
             conv1Factor = Integer.parseInt(prop.getProperty("conv1Factor"));
             conv1KernelFactor = Integer.parseInt(prop.getProperty("conv1KernelFactor"));
             conv2Factor = Integer.parseInt(prop.getProperty("conv2Factor"));
-            conv1Factor = Integer.parseInt(prop.getProperty("conv1KernelFactor"));
             conv2KernelFactor = Integer.parseInt(prop.getProperty("conv2KernelFactor"));
             defaultFrequency = Integer.parseInt(prop.getProperty("frequency"));
 
