@@ -80,7 +80,7 @@ for i in range(testCases):
     dump_test_data(inputData, kernels, bias, i)
 
 # properties
-with open("convolution.properties", "w") as f:
+with open("config.properties", "w") as f:
     f.write("inputHeight=" + str(inputHeight) + "\n")
     f.write("inputWidth=" + str(inputWidth) + "\n")
     f.write("inputChannels=" + str(inputChannels) + "\n")
