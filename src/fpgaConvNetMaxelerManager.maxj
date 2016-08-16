@@ -8,25 +8,16 @@ import java.util.List;
 
 import com.maxeler.maxcompiler.v2.build.EngineParameters;
 import com.maxeler.maxcompiler.v2.managers.BuildConfig;
-
-
-/*
- * These imports will be usef once resource_bench and le_net goes live
- * Right now, these are commented out to surpress maxjc warnings.
-import com.maxeler.maxcompiler.v2.managers.BuildConfig;
 import com.maxeler.maxcompiler.v2.managers.custom.CustomManager;
-*/
+
 
 public class fpgaConvNetMaxelerManager {
-    /*
-     * TODO(fyq14): Make this work.
     public static void resource_bench(String[] args) {
         ResourceBenchmarkParameters params = new ResourceBenchmarkParameters(args);
         ResourceBenchmarkManager manager = new ResourceBenchmarkManager(
             params,
             params.getConvFoldingFactor(),
-            params.getKernelFoldingFactor()
-        );
+            params.getKernelFoldingFactor());
         BuildConfig buildConfig = manager.getBuildConfig();
         buildConfig.setBuildEffort(BuildConfig.Effort.VERY_HIGH);
         buildConfig.setMPPRCostTableSearchRange(params.getMPPRStartCT(), params.getMPPREndCT());
@@ -34,12 +25,11 @@ public class fpgaConvNetMaxelerManager {
         buildConfig.setMPPRRetryNearMissesThreshold(params.getMPPRRetryThreshold());
 
         CustomManager.Config config = manager.config;
-        config.setDefaultStreamClockFrequency(25);
+        config.setDefaultStreamClockFrequency(125);
 
         manager.createSLiCinterface(manager.interfaceDefault());
         manager.build();
     }
-    */
 
     public static void le_net(String[] args) {
         EngineParameters params = new EngineParameters(args);
@@ -137,6 +127,7 @@ public class fpgaConvNetMaxelerManager {
 
         if (args[0].equals("test")) test(x);
         else if (args[0].equals("le_net")) le_net(x);
+        else if (args[0].equals("resource_bench")) resource_bench(x);
     }
 
 }
