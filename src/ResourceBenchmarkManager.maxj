@@ -132,7 +132,7 @@ public class ResourceBenchmarkManager extends CustomManager {
 
         inputAlligner.getInput("x") <== from_cpu;
         layer.getInput() <== inputAlligner.getOutput("y");
-        outputAlligner.getInput("x") <== layer.getOutput();;
+        outputAlligner.getInput("x") <== layer.getOutput();
         to_cpu <== outputAlligner.getOutput("y");
     }
 
@@ -152,9 +152,9 @@ public class ResourceBenchmarkManager extends CustomManager {
         engine_interface.setTicks(
                 "DfeOutputAlligner", N * outputHeight * outputWidth * outputChannels);
         engine_interface.setStream(
-                "x", type, lengthInputStream * size);
+                "x", type, N * lengthInputStream * size);
         engine_interface.setStream(
-                "y", type, lengthOutputStream * size);
+                "y", type, N * lengthOutputStream * size);
         return engine_interface;
     }
 }
