@@ -4,8 +4,8 @@ from scipy import signal
 
 inputHeight = 28
 inputWidth = 28
-inputChannels = 10
-outputChannels = 20
+inputChannels = 20
+outputChannels = 40
 kernelDim = 5
 testCases = 100
 
@@ -80,7 +80,7 @@ for i in range(testCases):
     dump_test_data(inputData, kernels, bias, i)
 
 # properties
-with open("config.properties", "w") as f:
+with open("convolution.properties", "w") as f:
     f.write("inputHeight=" + str(inputHeight) + "\n")
     f.write("inputWidth=" + str(inputWidth) + "\n")
     f.write("inputChannels=" + str(inputChannels) + "\n")
