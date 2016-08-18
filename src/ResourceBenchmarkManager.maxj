@@ -118,14 +118,14 @@ public class ResourceBenchmarkManager extends CustomManager {
         params.foldingFactor = convUnitFoldingFactor;
         layer = new ConvolutionLayer(params, this);
 
-        DfeInputAlligner a = new DfeInputAlligner(
+        DfeInputAlligner outputAllignerKernel = new DfeInputAlligner(
             makeKernelParameters("DfeInputAlligner"), inputChannels);
 
-        DfeOutputAlligner c = new DfeOutputAlligner(
+        DfeOutputAlligner inputAllignerKernel= new DfeOutputAlligner(
             makeKernelParameters("DfeOutputAlligner"), outputChannels);
 
-        KernelBlock inputAlligner = addKernel(a);
-        KernelBlock outputAlligner = addKernel(c);
+        KernelBlock inputAlligner = addKernel(inputAllignerKernel);
+        KernelBlock outputAlligner = addKernel(outputAllignerKernel);
 
         DFELink from_cpu = addStreamFromCPU("x");
         DFELink to_cpu = addStreamToCPU("y");
