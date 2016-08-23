@@ -15,6 +15,8 @@ import com.maxeler.maxcompiler.v2.managers.custom.blocks.KernelBlock;
 import com.maxeler.maxcompiler.v2.managers.engine_interfaces.CPUTypes;
 import com.maxeler.maxcompiler.v2.managers.engine_interfaces.EngineInterface;
 import com.maxeler.maxcompiler.v2.managers.engine_interfaces.InterfaceParam;
+import com.maxeler.maxcompiler.v2.managers.custom.stdlib.DebugLevel;
+
 
 public class ResourceBenchmarkManager extends CustomManager {
 
@@ -118,10 +120,10 @@ public class ResourceBenchmarkManager extends CustomManager {
         params.foldingFactor = convUnitFoldingFactor;
         layer = new ConvolutionLayer(params, this);
 
-        DfeInputAlligner outputAllignerKernel = new DfeInputAlligner(
+        DfeInputAlligner inputAllignerKernel = new DfeInputAlligner(
             makeKernelParameters("DfeInputAlligner"), inputChannels);
 
-        DfeOutputAlligner inputAllignerKernel= new DfeOutputAlligner(
+        DfeOutputAlligner outputAllignerKernel= new DfeOutputAlligner(
             makeKernelParameters("DfeOutputAlligner"), outputChannels);
 
         KernelBlock inputAlligner = addKernel(inputAllignerKernel);
@@ -134,6 +136,7 @@ public class ResourceBenchmarkManager extends CustomManager {
         layer.getInput() <== inputAlligner.getOutput("y");
         outputAlligner.getInput("x") <== layer.getOutput();
         to_cpu <== outputAlligner.getOutput("y");
+        debug.setDebugLevel(new DebugLevel().setHasStreamStatus(true));
     }
 
     public EngineInterface interfaceDefault() {
