@@ -46,6 +46,14 @@ public class ResourceBenchmarkManager extends CustomManager {
         }
     }
 
+    public Dimension inputDimension() {
+        return params.inputDimension();
+    }
+
+    public Dimension outputDimension() {
+        return params.outputDimension();
+    }
+
     private static List<List<float[][]>> getConvolutionKernels (
         int outputChannels,
         int inputChannels,
@@ -140,24 +148,16 @@ public class ResourceBenchmarkManager extends CustomManager {
     }
 
     public EngineInterface interfaceDefault() {
-        EngineInterface engine_interface = new EngineInterface();
+        EngineInterface ei = new EngineInterface();
         CPUTypes   type = CPUTypes.FLOAT;
         int        size = type.sizeInBytes();
-        long outputHeight = inputHeight - (kernelDim  - 1);
-        long outputWidth = inputWidth - (kernelDim  - 1);
-        InterfaceParam  N    = engine_interface.addParam("N", CPUTypes.INT);
-        InterfaceParam lengthInputStream = N * inputHeight * inputWidth * inputChannels;
-        InterfaceParam lengthOutputStream = N * outputHeight * outputWidth * outputChannels;
+        InterfaceParam  N    = ei.addParam("N", CPUTypes.INT);
 
-        layer.setKernelTimings(engine_interface, N);
-        engine_interface.setTicks(
-                "DfeInputAlligner", N * inputHeight * inputWidth * inputChannels);
-        engine_interface.setTicks(
-                "DfeOutputAlligner", N * outputHeight * outputWidth * outputChannels);
-        engine_interface.setStream(
-                "x", type, N * lengthInputStream * size);
-        engine_interface.setStream(
-                "y", type, N * lengthOutputStream * size);
-        return engine_interface;
+        ei.setTicks("DfeInputAlligner", N * inputDimension().totalSize());
+        layer.setKernelTimings(ei, N);
+        ei.setTicks("DfeOutputAlligner", N * outputDimension().totalSize());
+        ei.setStream("x", type, N * inputDimension().totalSize() * size);
+        ei.setStream("y", type, N * outputDimension().totalSize() * size);
+        return ei;
     }
 }
