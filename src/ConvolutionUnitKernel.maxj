@@ -92,7 +92,7 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
             DFEVar convWeight = getConvWeight(i);
             DFEVar convPixel = getConvPixel(i);
             debug.simPrintf(debugFlag(), "multiplier %d: %.5f %.5f\n", i, convWeight, convPixel);
-            multiplierOutputs.add(convWeight * convPixel);
+            multiplierOutputs.add(optimization.pipeline(convWeight * convPixel));
         }
 
         if (convLoopIterations == 1) {
