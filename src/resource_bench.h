@@ -1,6 +1,5 @@
 #ifndef RESOURCE_BENCH_H
-#define RESOURCE_BENCH_H
-
+#define RESOURCE_BENCH_H 
 #include <cstdio>
 #include <cmath>
 #include <cstdlib>
@@ -34,21 +33,18 @@ void resource_benchmark(max_file_t* max_file, void (*run_fnc)(max_engine_t*, act
     const int output_width = input_width - (kernel_dim - 1);
 
 #ifdef __SIM__
-    const int test_cases = 1;
+    const int test_cases = 20;
 #else
     const int test_cases = atoi(m["testCases"].c_str());
 #endif
 
-    /*
-     * debugging output
-     * std::cerr << input_channels << std::endl;
-     * std::cerr << output_channels << std::endl;
-     * std::cerr << input_height << std::endl;
-     * std::cerr << input_width << std::endl;
-     * std::cerr << kernel_dim << std::endl;
-     * std::cerr << output_height << std::endl;
-     * std::cerr << output_width << std::endl;
-     * */
+     std::cerr << "input channels = " << input_channels << std::endl;
+     std::cerr << "output channels = " << output_channels << std::endl;
+     std::cerr << "input height = " << input_height << std::endl;
+     std::cerr << "input width = " << input_width << std::endl;
+     std::cerr << "kernel dim = " << kernel_dim << std::endl;
+     std::cerr << "output height = " << output_height << std::endl;
+     std::cerr << "output width =" << output_width << std::endl;
 
     float* x = new float[test_cases * input_height * input_width * input_channels];
     float* y = new float[test_cases * output_height * output_width * output_channels];
