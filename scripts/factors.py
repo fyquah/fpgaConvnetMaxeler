@@ -1,7 +1,6 @@
 
 # [(int, int)], fst is foldingFactor, snd is kernelFoldingFactor
 factors = [
-    (100, 10),
     (90, 10),
     (80, 10),
     (70, 10),
