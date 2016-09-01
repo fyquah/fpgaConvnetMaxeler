@@ -2,11 +2,12 @@ import java.util.ArrayList;
 import java.util.List;
 
 import com.maxeler.maxcompiler.v2.kernelcompiler.KernelParameters;
-import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.CounterChain;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVector;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVectorType;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.CounterChain;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Stream.OffsetExpr;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.memory.Memory;
 
 /* 
  * io.input:
@@ -77,6 +78,7 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
         for (int i = 0 ; i < foldingFactor ; i++) {
             io.output(getWeightOutputName(i), output_w[i], outputVectorType, outputControlFlag);
             io.output(getPixelOutputName(i), output_y[i], outputVectorType, outputControlFlag);
+            io.forceOutputsTogether(getWeightOutputName(i), getPixelOutputName(i));
         }
     }
 
@@ -195,30 +197,25 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
             return getConvWeightsVector(indices[0].out, indices[0].in);
         }
 
-        ArrayList<DFEVector<DFEVar>> choices = new ArrayList<DFEVector<DFEVar>>();
+        DFEVector<DFEVar> output = outputVectorType.newInstance(this);
 
-        for (int i = 0 ; i < indices.size() ; i++) {
-            int out = indices[i].out;
-            int in = indices[i].in;
-            DFEVector<DFEVar> weightVector = outputVectorType.newInstance(this);
+        for (int i = 0 ; i < kernelDim ; i++) {
+            for (int j = 0 ; j < kernelDim ; j++) {
+                Memory<DFEVar> table = mem.alloc(
+                        GlobalConfig.dataType, getLoopIterations());
+                double[] data = new double[getLoopIterations()];
 
-            for (int r = 0 ; r < kernelDim ; r++) {
-                for (int c = 0 ; c < kernelDim ; c++) {
-                    DFEVar w = constant.var(
-                            GlobalConfig.dataType,
-                            convolutionWeights[out][in][r][c]);
-                    weightVector[r * kernelDim + c] <== w;
+                for (int idx = 0 ; idx < indices.size() ; idx++) {
+                    int outputChannel = indices[idx].out;
+                    int inputChannel = indices[idx].in;
+                    data[idx] = convolutionWeights[outputChannel][inputChannel][i][j];
                 }
+
+                table.setContents(data);
+                output[i * kernelDim + j] <== table.read(iter);
             }
-
-            choices.add(weightVector);
         }
 
-        // unnecessary, but for completeness
-        while (choices.size() < getLoopIterations()) {
-            choices.add(zeroVector(outputVectorType));
-        }
-
-        return control.mux(iter, choices);
+        return output;
     }
 }
