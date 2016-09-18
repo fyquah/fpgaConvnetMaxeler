@@ -15,8 +15,8 @@ import com.maxeler.maxcompiler.v2.managers.engine_interfaces.InterfaceParam;
 
 
 public class SceneAnalysisManager extends CustomManager {
-    private final int inputHeight = 320;
-    private final int inputWidth = 240;
+    private final int inputHeight = 240;
+    private final int inputWidth = 320;
     private final int inputChannels = 3;
 
 
@@ -140,7 +140,7 @@ public class SceneAnalysisManager extends CustomManager {
         int inputChannels = 64;
 
         ConvolutionParameters convParams = new ConvolutionParameters(
-            pool1Params.outputDimension,
+            pool2Params.outputDimension,
             outputChannels,
             getConvWeights(outputChannels, inputChannels, kernelDim),
             getConvBias(outputChannels)
@@ -150,6 +150,17 @@ public class SceneAnalysisManager extends CustomManager {
         convParams.foldingFactor = convUnitFoldingFactor;
 
         return convParams;
+    }
+
+    private void printConvParam(ConvolutionParameters param, String name) {
+        System.out.println("--------- Convolution layer " + name + " ---------");
+        System.out.println("input height = " + param.inputDimension().height());
+        System.out.println("input width = " + param.inputDimension().width());
+        System.out.println("input channels = " + param.inputDimension().channels());
+        System.out.println("output height = " + param.outputDimension().height());
+        System.out.println("output width = " + param.outputDimension().width());
+        System.out.println("output channels = " + param.outputDimension().channels());
+        System.out.println("---------------------------------------------------");
     }
 
     public SceneAnalysisManager (EngineParameters engineParameters) {
@@ -200,6 +211,10 @@ public class SceneAnalysisManager extends CustomManager {
         conv2Params = loadConv2Parameters(conv2Factor, conv2KernelFactor);
         pool2Params = loadPool2Parameters();
         conv3Params = loadConv3Parameters(conv3Factor, conv3KernelFactor);
+
+        printConvParam(conv1Params, "conv1");
+        printConvParam(conv2Params, "conv2");
+        printConvParam(conv3Params, "conv3");
 
         inputAllignerKernel = new DfeInputAlligner(
                 makeKernelParameters("DfeInputAlligner"), inputChannels);
