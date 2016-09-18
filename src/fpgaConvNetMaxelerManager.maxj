@@ -44,6 +44,19 @@ public class fpgaConvNetMaxelerManager {
         manager.build();
     }
 
+    public static void scene_analysis(String[] args) {
+        EngineParameters params = new EngineParameters(args);
+        SceneAnalysisManager manager = new SceneAnalysisManager(params);
+        BuildConfig buildConfig = manager.getBuildConfig();
+        buildConfig.setBuildEffort(BuildConfig.Effort.VERY_HIGH);
+        buildConfig.setMPPRCostTableSearchRange(params.getMPPRStartCT(), params.getMPPREndCT());
+        buildConfig.setMPPRParallelism(params.getMPPRThreads());
+        buildConfig.setMPPRRetryNearMissesThreshold(params.getMPPRRetryThreshold());
+
+        manager.createSLiCinterface(manager.interfaceDefault());
+        manager.build();
+    }
+
     public static void test(String[] args) {
         Class<?>[] klasses;
         TestParameters params = new TestParameters(args);
@@ -128,6 +141,7 @@ public class fpgaConvNetMaxelerManager {
         if (args[0].equals("test")) test(x);
         else if (args[0].equals("le_net")) le_net(x);
         else if (args[0].equals("resource_bench")) resource_bench(x);
+        else if (args[0].equals("scene")) scene_analysis(x);
     }
 
 }
