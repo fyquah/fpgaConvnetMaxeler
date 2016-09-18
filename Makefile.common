@@ -127,7 +127,7 @@ include $(WHEREISROOT)/build/Makefile.resource.benchmark
 include $(WHEREISROOT)/Makefile.lenet
 
 # SceneAnalysis
-incldue $(WHEREISROOT)/Makefile.scene
+include $(WHEREISROOT)/Makefile.scene
 
 # ---- shared ----
 
