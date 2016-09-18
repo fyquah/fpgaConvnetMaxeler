@@ -126,6 +126,9 @@ include $(WHEREISROOT)/build/Makefile.resource.benchmark
 # Lenet
 include $(WHEREISROOT)/Makefile.lenet
 
+# SceneAnalysis
+incldue $(WHEREISROOT)/Makefile.scene
+
 # ---- shared ----
 
 RESOURCE_BENCH_HELPERS=resource_bench_helper.cpp resource_bench_helper.h
