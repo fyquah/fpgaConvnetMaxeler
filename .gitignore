@@ -2,4 +2,3 @@
 *.pyc
 !build/Makefile
 build/
-lenet_params/config.properties
