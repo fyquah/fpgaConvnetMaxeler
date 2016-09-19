@@ -47,6 +47,14 @@ int main() {
         double end = double(t_end.tv_sec) * 1000000 + double(t_end.tv_usec);
         double delta = end - begin;
 	double throughput = double(N) / delta * 1000000;
+        /*
+         * totalGOps calculated by
+         * (234 * 314 * 49 * 16 * 3
+         *  + 111 * 151 * 49 * 64 * 16
+         *  + 49 * 69 * 49 * 256 * 64) * 2.0 / 1e9
+         *  Hardcoding value here just for convenience.
+         */
+        double totalGOps = 7.5663;
 
         std::cout << "t_begin.tv_sec = " << t_begin.tv_sec << std::endl;
         std::cout << "t_begin.tv_usec = " << t_begin.tv_usec << std::endl;
@@ -54,7 +62,7 @@ int main() {
         std::cout << "t_end.tv_usec = " << t_end.tv_usec << std::endl;
         std::cout << "Total time = " << delta << std::endl;
         std::cout << "Throughput (images per second) = " << throughput << std::endl;
-	std::cout << "GOps = " << throughput * 0.0038 << std::endl;
+	std::cout << "GOps = " << throughput * 7.5663 << std::endl;
 
     } catch (const std::string & s) {
         std::cerr << "Caught an error!" << std::endl;
