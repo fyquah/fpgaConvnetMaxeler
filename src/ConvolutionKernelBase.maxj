@@ -8,12 +8,13 @@ import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
 public abstract class ConvolutionKernelBase extends Kernel {
     
     private final List<ConvChannelIndex> convChannelIndices;
-    private final int loopIterations;
+    private final int loopIterations, convLoopIterations;
 
     public ConvolutionKernelBase (
            KernelParameters kp,
            ConvolutionParameters params) {
         super(kp);
+        convLoopIterations = params.convLoopIterations();
         loopIterations = params.loopIterations();
         convChannelIndices = ConvChannelIndex.rangeProduct(
                     params.outputDimension().channels(),
@@ -22,6 +23,10 @@ public abstract class ConvolutionKernelBase extends Kernel {
 
     public int getLoopIterations() {
         return loopIterations;
+    }
+
+    public int getConvLoopIterations() {
+        return convLoopIterations;
     }
 
     public List<ConvChannelIndex> getConvUnitChannelIndices(int convUnitId) {

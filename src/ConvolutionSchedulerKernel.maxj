@@ -13,11 +13,16 @@ import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.memory.Memory;
  * io.input:
  *  x : DFEVector[inputChannels] 
  * io.output:
- *  - y0, y1, y2, ...., y{foldingFactor - 1}
- *  - w0, w1, w2, ...., w{foldingFactor - 1}
+ *  - y0, y1, y2, ...., y{ff - 1}
+ *  - w0, w1, w2, ...., w{ff - 1}
  *  Bias will be handled at a later stage of the pipeline.
  *  where y_i and p_i are both inputs to ConvolutionUnit_i
- *        and are of type DFEVector[kerenlDim]
+ *        and are of type DFEVector[kff]
+ *        (No point streaming other things at this point, as it wastes resources
+ *         and increases multiplexing complexity at ConvolutionUnit).
+ *        (ConvolutionUnit can do at most kff multiplications simultaneously
+ *         anyway, this moves the complexity of scheduling to the place it belongs
+ *         i.e: here)
  *        (they are both sliding windows of the input streams
  *         and the convolution parameters respectively.)
  */
@@ -28,8 +33,8 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
     private final DFEVector<DFEVar> input;
     private final List<DFEVector<DFEVar>> output_w, output_y;
     private final Dimension inputDimension;
-    private final int foldingFactor, kernelDim;
-    private final DFEVar row, col, iter;
+    private final int foldingFactor, kernelFoldingFactor, kernelDim;
+    private final DFEVar row, col, iter, loopIter, convIter;
     private final List<List<float[][]>> convolutionWeights;
     private final CounterChain masterChain;
 
@@ -41,6 +46,7 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
         inputDimension = params.inputDim;
         kernelDim = params.kernelDim;
         foldingFactor = params.foldingFactor;
+        kernelFoldingFactor = params.kernelFoldingFactor;
         convolutionWeights = params.getKernels();
         masterChain = control.count.makeCounterChain();
         inputVectorType = new DFEVectorType<DFEVar>(
@@ -48,7 +54,7 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
                 inputDimension.channels());
         outputVectorType = new DFEVectorType<DFEVar>(
                 GlobalConfig.dataType,
-                kernelDim * kernelDim);
+                kernelFoldingFactor);
         input = inputVectorType.newInstance(this);
         output_w = new ArrayList<DFEVector<DFEVar>>();
         output_y = new ArrayList<DFEVector<DFEVar>>();;
@@ -63,15 +69,20 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
                 this, masterChain, inputDimension.height());
         col = Utils.chainCounterOrZero(
                 this, masterChain, inputDimension.width());
-        iter = Utils.chainCounterOrZero(
+        loopIter = Utils.chainCounterOrZero(
                 this, masterChain, getLoopIterations());
+        convIter = Utils.chainCounterOrZero(
+                this, masterChain, getConvLoopIterations());
+        iter = control.count.simpleCounter(
+                Utils.ceilLog2(getLoopIterations() * getConvLoopIterations()),
+                getLoopIterations() * getConvLoopIterations());
 
         initSlidingWindow();
         initOutputs();
 
         // TODO(fyq14): Optimize border cases
         DFEVar outputControlFlag = ~isBorder();
-        DFEVar inputControlFlag = iter.eq(0);
+        DFEVar inputControlFlag = loopIter.eq(0) & convIter.eq(0);
 
         input <== io.input(getInputName(), inputVectorType, inputControlFlag);
 
@@ -86,7 +97,8 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
     public int cyclesPerImage() {
         return (inputDimension.width()
                 * inputDimension.height()
-                * getLoopIterations());
+                * getLoopIterations()
+                * getConvLoopIterations());
     }
 
     public String getInputName() {
@@ -128,7 +140,7 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
                 inputDimension.height(),
                 inputDimension.width(),
                 kernelDim,
-                new OffsetExpr(getLoopIterations()));
+                new OffsetExpr(getLoopIterations() * getConvLoopIterations()));
         }
     }
 
@@ -136,7 +148,7 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
         for (int i = 0 ; i < foldingFactor ; i++) {
             List<ConvChannelIndex> indices = getConvUnitChannelIndices(i);
             DFEVector<DFEVar> convWeights = toMuxedWeight(iter, indices);
-            DFEVector<DFEVar> convInputs = toMuxedPixel(iter, indices);
+            DFEVector<DFEVar> convInputs = toMuxedPixel(loopIter, convIter, indices);
             output_w[i] <== convWeights;
             output_y[i] <== convInputs;
         }
@@ -153,7 +165,8 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
     }
 
     protected DFEVector<DFEVar> toMuxedPixel(
-            DFEVar iter,
+            DFEVar loopIter,
+            DFEVar convIter,
             List<ConvChannelIndex> indices) {
 
         if (getLoopIterations() == 1) {
@@ -171,7 +184,7 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
             arr.add(zeroVector(outputVectorType));
         }
 
-        return control.mux(iter, arr);
+        return control.mux(loopIter, arr);
     }
 
     protected DFEVector<DFEVar> getConvWeightsVector(
@@ -190,7 +203,7 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
     }
 
     protected DFEVector<DFEVar> toMuxedWeight(
-            DFEVar iter,
+            DFEVar iter,  /* A counter from 0 to (loops * convLoops) - 1 */
             List<ConvChannelIndex> indices) {
         if (indices.size() == 1) {
             Utils.assertTrue(indices.size() == getLoopIterations());
@@ -199,20 +212,40 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
 
         DFEVector<DFEVar> output = outputVectorType.newInstance(this);
 
+        for (int multiplierId = 0 ; multiplierId < kernelFoldingFactor ; multiplierId++) {
+            final int totalSize = getLoopIterations() * getConvLoopIterations();
+            Memory<DFEVar> table = mem.alloc(GlobalConfig.dataType, totalSize);
+            double[] data = new double[totalSize];
+
+            for (int idx = 0 ; idx < indices.size() ; idx++) {
+                /* We want to spend getConvLoopIterations() on each index */
+
+                int outputChannel = indices[idx].out;
+                int inputChannel = indices[idx].in;
+
+                /* Looping through the number of iterations we want to spend on
+                 * multipler {multiplierId}. We spend getConvLoopIterations() here
+                 * per convolution for each multiplier. */
+                for (int i = 0; i < getConvLoopIterations() ; i++) {
+                    int y = multiplierId + i * kernelFoldingFactor;
+                    int x = idx * getConvLoopIteraitons() + convIdx;
+                    float[][] weights = convolutionWeights[outputChannel][inputChannel];
+
+                    if (y < kernelDim * kernelDim) {
+                        data[x] = weights[y / kernelDim][y % kernelDim];
+                    } else {
+                        data[x] = 0.0;
+                    }
+                }
+            }
+
+            table.setContents(data);
+            output[multiplierId] <== table.read(iter);
+        }
+
+        // TODO(fyq14): Rewrite this logic.
         for (int i = 0 ; i < kernelDim ; i++) {
             for (int j = 0 ; j < kernelDim ; j++) {
-                Memory<DFEVar> table = mem.alloc(
-                        GlobalConfig.dataType, getLoopIterations());
-                double[] data = new double[getLoopIterations()];
-
-                for (int idx = 0 ; idx < indices.size() ; idx++) {
-                    int outputChannel = indices[idx].out;
-                    int inputChannel = indices[idx].in;
-                    data[idx] = convolutionWeights[outputChannel][inputChannel][i][j];
-                }
-
-                table.setContents(data);
-                output[i * kernelDim + j] <== table.read(iter);
             }
         }
 
