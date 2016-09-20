@@ -193,7 +193,10 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
                 }
             }
 
-            Utils.assertTrue(totalSize == choices.size());
+            while (choices.size() < totalSize) {
+                choices.add(constant.var(GlobalConfig.dataType, 0.0));
+            }
+
             output[multiplierId] <== control.mux(
                     iter,
                     choices.toArray(new DFEVar[choices.size()]));
