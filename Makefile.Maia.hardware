@@ -1,5 +1,5 @@
 # ---- Available DFE hardware settings ----
 DFEModel=MAIA
 
-MPCX=true
+MPCX=false
 DEVICENUM=MAIA
