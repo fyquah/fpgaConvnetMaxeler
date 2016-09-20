@@ -148,7 +148,6 @@ public class ConvolutionSchedulerKernelTest {
             final int convUnitId,
             final List<Float> pixelsOutput) {
         StreamChecker checker = new StreamChecker() {
-            private List<Float> pixelsOutput;
             private ConvolutionParameters params;
             private List<ConvChannelIndex> indices;
             private int kernelFoldingFactor, kernelDim;
