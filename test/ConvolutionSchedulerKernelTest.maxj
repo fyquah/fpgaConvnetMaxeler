@@ -11,7 +11,7 @@ import com.maxeler.maxcompiler.v2.utils.Bits;
 public class ConvolutionSchedulerKernelTest {
 
     protected interface StreamChecker {
-        public void prepare(ConvolutionParameters params, List<Float> output);
+        public void prepare(ConvolutionParameters params);
         public void check(int w, int p, int x, int c, int y, int idx);
     }
 
@@ -86,11 +86,6 @@ public class ConvolutionSchedulerKernelTest {
         return ret;
     }
 
-    /*
-     * TODO(fyq14): Refactor this and checkWeightsOutput -
-     * the code for both is really similar
-     */
-
     protected void checkStream(
             StreamChecker checker,
             ConvolutionSchedulerKernel kernel,
@@ -121,7 +116,7 @@ public class ConvolutionSchedulerKernelTest {
                 output.size() % denom == 0);
 
         int numberOfWindows = output.size() / denom;
-        checker.prepare(params, output);
+        checker.prepare(params);
 
         for (int w = 0 ; w < numberOfWindows ; w++) {
             for (int p = 0 ; p < outputWindowSize ; p++) {
@@ -159,8 +154,7 @@ public class ConvolutionSchedulerKernelTest {
             private int kernelFoldingFactor, kernelDim;
 
             public void prepare(
-                    ConvolutionParameters argParams, List<Float> argOutput) {
-                pixelsOutput = argOutput;
+                    ConvolutionParameters argParams) {
                 params = argParams;
                 indices = kernel.getConvUnitChannelIndices(convUnitId);
                 kernelFoldingFactor = params.kernelFoldingFactor;
@@ -200,89 +194,44 @@ public class ConvolutionSchedulerKernelTest {
     }
 
     protected void checkWeightsOutput(
-            ConvolutionSchedulerKernel kernel,
-            ConvolutionParameters params,
-            int convUnitId,
-            List<Float> weightsOutput) {
+            final ConvolutionSchedulerKernel kernel,
+            final ConvolutionParameters params,
+            final int convUnitId,
+            final List<Float> weightsOutput) {
 
-        List<ConvChannelIndex> indices = kernel.getConvUnitChannelIndices(convUnitId);
+        StreamChecker checker = new StreamChecker() {
+            private List<List<float[][]>>  generatedKernels;
+            private List<ConvChannelIndex> indices;
+            private int kernelFoldingFactor, kernelDim;
 
-        int numberOfOutputChannels = params.outputDimension().channels();
-        int numberOfInputChannels = params.inputDimension().channels();
-        int outputWindowSize = params.outputDimension().width() * params.outputDimension().height();
-        int kernelDim = params.kernelDim;
-        int kernelFoldingFactor = params.kernelFoldingFactor;
-        int loopIterations = kernel.getLoopIterations();
-        int convLoopIterations = kernel.getConvLoopIterations();
+            public void prepare(ConvolutionParameters params) {
+                indices = kernel.getConvUnitChannelIndices(convUnitId);
+                kernelFoldingFactor = params.kernelFoldingFactor;
+                generatedKernels = generateRandomKernels(
+                        params.outputDimension().channels(),
+                        params.inputDimension().channels(),
+                        params.kernelDim);
+                kernelDim = params.kernelDim;
+            }
 
-        /*
-         * every [kernelDim * kernelDim] elements corresponds to the
-         * slidingWindow that ConvolutionUnit that will receive.
-         * we expect that the number of slidingWindows that we should receive
-         * must be a multiple of denom below.
-         * [indices.size() * convolultionOutputWindow_size * kernelDim * kernelDim]
-         */
+            public void check(int w, int p, int x, int c, int y, int idx) {
+                if (x < indices.size()) {
+                    int i = y + c * kernelFoldingFactor;
+                    float expectedWeight = generatedKernels
+                        .get(indices[x].out)
+                        .get(indices[x].in)
+                        [i / kernelDim][i % kernelDim];
 
-        int denom = (loopIterations * convLoopIterations
-                * outputWindowSize
-                * kernelFoldingFactor);
-        assertTrue(
-                "weightsOutput.size() must be a multiple of " +
-                "(loopIterations * convLoopIterations * outputWindowSize " + 
-                "kernelFoldingFactor)",
-                weightsOutput.size() % denom == 0);
+                    float delta = Math.abs(weightsOutput[idx] - expectedWeight);
+                    assertTrue(delta < 0.01f);
 
-        int numberOfWindows = weightsOutput.size() / denom;
+                } else {
+                    assertTrue(Math.abs(weightsOutput[idx]) < 0.01f);
 
-        /*
-         * w : window unit
-         * p : position of the outputKernel
-         * x : which ConvChannelIndex
-         * y : element index of the slidingWindow
-         */
-
-        /* generatedRandomKernels is deterministic, so we can regenerate
-         * the same values to test.
-         * */
-        List<List<float[][]>> generatedKernels = generateRandomKernels(
-                numberOfOutputChannels,
-                numberOfInputChannels,
-                kernelDim);
-
-        for (int w = 0 ; w < numberOfWindows ; w++) {
-            for (int p = 0 ; p < outputWindowSize ; p++) {
-                for (int x = 0 ; x < loopIterations ; x++) {
-                    for (int c = 0 ; c < convLoopIterations ; c++) {
-                        for (int y = 0 ; y < kernelFoldingFactor ; y++) {
-                            int idx = w * (outputWindowSize * loopIterations
-                                           * convLoopIterations
-                                           * kernelFoldingFactor)
-                                      + p * (loopIterations
-                                              * convLoopIterations
-                                              * kernelFoldingFactor)
-                                      + x * (convLoopIterations * kernelFoldingFactor)
-                                      + c * kernelFoldingFactor
-                                      + y;
-
-                            if (x < indices.size()) {
-                                int i = y + c * kernelFoldingFactor;
-                                float expectedWeight = generatedKernels
-                                    .get(indices[x].out)
-                                    .get(indices[x].in)
-                                    [i / kernelDim][i % kernelDim];
-
-                                float delta = Math.abs(weightsOutput[idx] - expectedWeight);
-                                assertTrue(delta < 0.01f);
-
-                            } else {
-                                assertTrue(Math.abs(weightsOutput[idx]) < 0.01f);
-
-                            }
-                        }
-                    }
                 }
             }
-        }
+        };
+        checkStream(checker, kernel, params, convUnitId, weightsOutput);
     }
 
     protected void genericTest(String testName, final int foldingFactor) {
