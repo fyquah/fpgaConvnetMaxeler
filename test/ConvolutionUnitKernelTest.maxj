@@ -8,10 +8,10 @@ import com.maxeler.maxcompiler.v2.utils.Bits;
 
 public class ConvolutionUnitKernelTest {
 
-    protected List<Float> generateRandomWindow(int kernelDim, int count) {
+    protected List<Float> generateRandomWindow(int length) {
         ArrayList<Float> vec = new ArrayList<Float>();
 
-        for (int i = 0 ; i < count * kernelDim * kernelDim; i++) {
+        for (int i = 0 ; i < length; i++) {
             vec.add(TestHelper.rand());
         }
 
@@ -28,13 +28,18 @@ public class ConvolutionUnitKernelTest {
         return ret;
     }
 
-    protected List<Float> computeExpected(List<Float> a, List<Float> b, int kernelDim) {
-        List<Float> ret = new ArrayList<Float>();
+    protected List<Float> computeExpected(
+            List<Float> a, List<Float> b, int kernelFoldingFactor, int kernelDim) {
+        final List<Float> ret = new ArrayList<Float>();
+        final int convIterations = Utils.divCeil(
+                kernelDim * kernelDim, kernelFoldingFactor);
 
         for (int i = 0 ; i < a.size() ; ) {
             float x = 0.0f;
 
-            for (int j = 0 ; j < kernelDim * kernelDim ; j++, i++) {
+            // We run {convIterations} cycles with {kernelFoldingFactor}
+            // multipliers.
+            for (int j = 0 ; j < convIterations * kernelFoldingFactor; j++, i++) {
                 x += a[i] * b[i];
             }
 
@@ -60,10 +65,17 @@ public class ConvolutionUnitKernelTest {
         params.inputDim = new Dimension(28, 28, 2);
         params.foldingFactor = 10;
 
-        int convolutionCount = 100;
-        List<Float> weights = generateRandomWindow(kernelDim, convolutionCount);
-        List<Float> pixels = generateRandomWindow(kernelDim, convolutionCount);
-        List<Float> expectedOutput = computeExpected(weights, pixels, kernelDim);
+        final int convolutionCount = 1;
+        List<Float> weights = generateRandomWindow(
+                kernelFoldingFactor * params.convLoopIterations());
+        List<Float> pixels = generateRandomWindow(
+                kernelFoldingFactor * params.convLoopIterations());
+        List<Float> expectedOutput = computeExpected(
+                weights, pixels,
+                kernelFoldingFactor, /* kernelFoldingFactor */
+                kernelDim  /* kernelDim */
+            );
+
 
         SimulationManager manager = new SimulationManager(testName + "Kernel");
         ConvolutionUnitKernel kernel = new ConvolutionUnitKernel(
@@ -74,8 +86,8 @@ public class ConvolutionUnitKernelTest {
         manager.setKernel(kernel);
         manager.build();
 
-        List<Bits> rawWeights = TestHelper.toBitsList(weights, kernelDim * kernelDim);
-        List<Bits> rawPixels = TestHelper.toBitsList(pixels, kernelDim * kernelDim);
+        List<Bits> rawWeights = TestHelper.toBitsList(weights, kernelFoldingFactor);
+        List<Bits> rawPixels = TestHelper.toBitsList(pixels, kernelFoldingFactor);
 
         // running the kernel
         manager.setInputDataRaw(kernel.getInputPixelsName(), rawPixels);
@@ -86,9 +98,6 @@ public class ConvolutionUnitKernelTest {
         manager.run();
         List<Bits> rawOutput = manager.getOutputDataRaw("output");
         List<Float> obtainedOutputList = TestHelper.fromBitsList(rawOutput, 1);
-
-        TestHelper.printList("inputWeights", weights, 25);
-        TestHelper.printList("inputPixels", pixels, 25);
 
         // Check if the results are correct.
         assertEquals(obtainedOutputList.size(), expectedOutput.size());
@@ -101,21 +110,37 @@ public class ConvolutionUnitKernelTest {
     
     @Test
     public void testSmallestKernelFoldingFactor() {
-        genericTestConvolution("testSmallestKernelFoldingFactor", 1, 5, 50);
+        genericTestConvolution("testSmallestKernelFoldingFactor",
+                1,  /* kernelFoldingFactor */
+                5,  /* kernelDim */
+                50  /* ticksPerConvolution */
+            );
     }
 
     @Test
     public void testLargestKernelFoldingFactor() {
-        genericTestConvolution("testLargestKernelFoldingFactor", 25, 5, 1);
+        genericTestConvolution("testLargestKernelFoldingFactor",
+                25,  /* kernelFoldingFactor */
+                5,   /* kernelDim */
+                1    /* ticksPerConvolution */
+            );
     }
 
     @Test
     public void testMultipleKernelFoldingFactor() {
-        genericTestConvolution("testMultipleKernelFoldingFactor", 5, 5, 10);
+        genericTestConvolution("testMultipleKernelFoldingFactor",
+                5,   /* kernelFoldingFactor */
+                5,   /* kernelDim */
+                10   /* ticksPerConvolution */
+            );
     }
 
     @Test
     public void testNonMultipleKernelFoldingFactor() {
-        genericTestConvolution("testNonMultipleKernelFoldingFactor", 4, 5, 14);
+        genericTestConvolution("testNonMultipleKernelFoldingFactor",
+                4,  /* kernelFoldingFactor */
+                5,  /* kernelDim */
+                14  /* ticksPerConvolution */
+            );
     }
 }

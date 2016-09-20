@@ -58,8 +58,9 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
         debug.simPrintf(debugFlag(), "output = %.5f\n", output);
         initOutput();
 
-        DFEVar inputControl = pipelineStage.eq(0) & loopIndex.eq(0);
-        DFEVar outputControl = pipelineStage.eq(pipelineLengthVar - 1) & loopIndex.eq(convLoopIterations - 1);;
+        DFEVar inputControl = pipelineStage.eq(0);
+        DFEVar outputControl = (pipelineStage.eq(pipelineLengthVar - 1)
+                & loopIndex.eq(convLoopIterations - 1));
         input_weights <== io.input(getInputWeightsName(), inputVectorType, inputControl);
         input_pixels <== io.input(getInputPixelsName(), inputVectorType, inputControl);
         io.output(getOutputName(), output, GlobalConfig.dataType, outputControl);
@@ -98,7 +99,7 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
                     debugFlag(),
                     "multiplier %d: %.5f %.5f\n",
                     i, convWeight, convPixel);
-            multiplierOutputs.add(optimization.pipeline(convWeight * convPixel));
+            multiplierOutputs.add(convWeight * convPixel);
         }
 
         if (convLoopIterations == 1) {
