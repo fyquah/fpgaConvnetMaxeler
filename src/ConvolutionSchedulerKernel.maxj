@@ -148,7 +148,7 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
         for (int i = 0 ; i < foldingFactor ; i++) {
             List<ConvChannelIndex> indices = getConvUnitChannelIndices(i);
             DFEVector<DFEVar> convWeights = toMuxedWeight(iter, indices);
-            DFEVector<DFEVar> convInputs = toMuxedPixel(loopIter, convIter, indices);
+            DFEVector<DFEVar> convInputs = toMuxedPixel(iter, indices);
             output_w[i] <== convWeights;
             output_y[i] <== convInputs;
         }
@@ -165,51 +165,46 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
     }
 
     protected DFEVector<DFEVar> toMuxedPixel(
-            DFEVar loopIter,
-            DFEVar convIter,
+            DFEVar iter,  /* A counter from 0...convIter * loopIter */
             List<ConvChannelIndex> indices) {
 
-        if (getLoopIterations() == 1) {
-            Utils.assertTrue(getLoopIterations() == indices.size());
-            return slidingWindows[indices[0].in].output;
-        }
+        DFEVector<DFEVar> output = outputVectorType.newInstance(this);
 
-        ArrayList<DFEVector<DFEVar>> arr = new ArrayList<DFEVector<DFEVar>>();
+        for (int multiplierId = 0 ; multiplierId < kernelFoldingFactor ; multiplierId++) {
+            final List<DFEVar>choices = new ArrayList<DFEVar>();
+            final int totalSize = getLoopIterations() * getConvLoopIterations();
 
-        for (int i = 0 ; i < indices.size() ; i++) {
-            arr.add(slidingWindows[indices[i].in].output);
-        }
+            for (int idx = 0 ; idx < indices.size() ; idx++) {
 
-        while (arr.size() < getLoopIterations()) {
-            arr.add(zeroVector(outputVectorType));
-        }
+                // we don't care about the outputChannel here.
+                int inputChannel = indices[idx].in;
 
-        return control.mux(loopIter, arr);
-    }
+                /* Looping through the number of iterations we want to spend on
+                 * multipler {multiplierId}. We spend getConvLoopIterations() here
+                 * per convolution for each multiplier. */
+                for (int i = 0; i < getConvLoopIterations() ; i++) {
+                    int y = multiplierId + i * kernelFoldingFactor;
 
-    protected DFEVector<DFEVar> getConvWeightsVector(
-            int outputChannel, int inputChannel) {
-        DFEVector<DFEVar> vector = outputVectorType.newInstance(this);
-        float[][] weights = convolutionWeights[outputChannel][inputChannel];
-
-        for (int i = 0 ; i < kernelDim ; i++) {
-            for (int j = 0 ; j < kernelDim ; j++) {
-                vector[i * kernelDim + j] <== constant.var(
-                        GlobalConfig.dataType, weights[i][j]);
+                    if (y < kernelDim * kernelDim) {
+                        choices.add(slidingWindows[inputChannel].output[y]);
+                    } else {
+                        choices.add(constant.var(GlobalConfig.dataType, 0.0));
+                    }
+                }
             }
+
+            Utils.assertTrue(totalSize == choices.size());
+            output[multiplierId] <== control.mux(
+                    iter,
+                    choices.toArray(new DFEVar[choices.size()]));
         }
 
-        return vector;
+        return output;
     }
 
     protected DFEVector<DFEVar> toMuxedWeight(
             DFEVar iter,  /* A counter from 0 to (loops * convLoops) - 1 */
             List<ConvChannelIndex> indices) {
-        if (indices.size() == 1) {
-            Utils.assertTrue(indices.size() == getLoopIterations());
-            return getConvWeightsVector(indices[0].out, indices[0].in);
-        }
-
         DFEVector<DFEVar> output = outputVectorType.newInstance(this);
 
         for (int multiplierId = 0 ; multiplierId < kernelFoldingFactor ; multiplierId++) {
@@ -228,7 +223,7 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
                  * per convolution for each multiplier. */
                 for (int i = 0; i < getConvLoopIterations() ; i++) {
                     int y = multiplierId + i * kernelFoldingFactor;
-                    int x = idx * getConvLoopIteraitons() + convIdx;
+                    int x = idx * getConvLoopIterations() + i;
                     float[][] weights = convolutionWeights[outputChannel][inputChannel];
 
                     if (y < kernelDim * kernelDim) {
@@ -241,12 +236,6 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
 
             table.setContents(data);
             output[multiplierId] <== table.read(iter);
-        }
-
-        // TODO(fyq14): Rewrite this logic.
-        for (int i = 0 ; i < kernelDim ; i++) {
-            for (int j = 0 ; j < kernelDim ; j++) {
-            }
         }
 
         return output;
