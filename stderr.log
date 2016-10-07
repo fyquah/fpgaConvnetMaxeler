@@ -1,0 +1,39 @@
+nohup: ignoring input
+Tue 18:03: WARNING: Warning (UNCONNECTED_DESIGN_ELEMENT):
+Tue 18:03: WARNING: Unconnected elements in design 'ConvolutionAccumulator_0'
+Tue 18:03: WARNING: details in : /mnt/data/cccad3/fyq14/runs/low_freq_resoure_bench/build/resource_bench_50_25_MAIA_DFE/scratch/ConvolutionAccumulator_0_graph_warnings.txt
+Tue 18:03: WARNING: Warning (CONSTANT_ENCODING):
+Tue 18:03: WARNING: Precision loss occurred in some constant values.
+Tue 18:03: WARNING: For details see /mnt/data/cccad3/fyq14/runs/low_freq_resoure_bench/build/resource_bench_50_25_MAIA_DFE/scratch/ConvolutionAccumulator_0_constants_report.txt
+Wed 16:51: WARNING: Warning (UNCONNECTED_DESIGN_ELEMENT):
+Wed 16:51: WARNING: Unconnected elements in design 'ConvolutionAccumulator_0'
+Wed 16:51: WARNING: details in : /mnt/data/cccad3/fyq14/runs/low_freq_resoure_bench/build/resource_bench_50_5_MAIA_DFE/scratch/ConvolutionAccumulator_0_graph_warnings.txt
+Wed 16:51: WARNING: Warning (CONSTANT_ENCODING):
+Wed 16:51: WARNING: Precision loss occurred in some constant values.
+Wed 16:51: WARNING: For details see /mnt/data/cccad3/fyq14/runs/low_freq_resoure_bench/build/resource_bench_50_5_MAIA_DFE/scratch/ConvolutionAccumulator_0_constants_report.txt
+Thu 14:47: WARNING: Warning (UNCONNECTED_DESIGN_ELEMENT):
+Thu 14:47: WARNING: Unconnected elements in design 'ConvolutionAccumulator_0'
+Thu 14:47: WARNING: details in : /mnt/data/cccad3/fyq14/runs/low_freq_resoure_bench/build/resource_bench_20_25_MAIA_DFE/scratch/ConvolutionAccumulator_0_graph_warnings.txt
+Thu 14:47: WARNING: Warning (CONSTANT_ENCODING):
+Thu 14:47: WARNING: Precision loss occurred in some constant values.
+Thu 14:47: WARNING: For details see /mnt/data/cccad3/fyq14/runs/low_freq_resoure_bench/build/resource_bench_20_25_MAIA_DFE/scratch/ConvolutionAccumulator_0_constants_report.txt
+Thu 19:55: ERROR: FAILED TO MEET TIMING! Best timing score: 6931. We strongly recommend you do not use this .max file.
+Thu 19:55: ERROR: Please see the timing report for more information and consult the MaxCompiler optimization cheat sheet for ideas on how to improve your design.
+Thu 19:55: ERROR: Timing report: /mnt/data/cccad3/fyq14/runs/low_freq_resoure_bench/build/./resource_bench_20_25_MAIA_DFE/timingreport/index.html
+Thu 19:55: ERROR: MaxCompiler documentation: /vol/cc/opt/maxeler/maxcompiler-2015.2/docs/maxcompiler-optimization-cheat-sheet.pdf
+Thu 19:55: ERROR: ----------------------------
+Thu 19:55: ERROR: Exception in thread "main":
+Thu 19:55: ERROR:  
+Thu 19:55: ERROR:   Build failed to meet timing (best timing score 6931)
+Thu 19:55: ERROR: 
+Thu 19:55: ERROR: Exception Stack Trace com.maxeler.maxdc.BuildFailedTimingException: 
+Thu 19:55: ERROR:    at com.maxeler.maxdc.BuildManager.finalizeBuild(BuildManager.java:1729)
+Thu 19:55: ERROR:    at com.maxeler.maxdc.BuildManager.build(BuildManager.java:1580)
+Thu 19:55: ERROR:    at com.maxeler.maxcompiler.v2.managers.DFEManager.runBuild(DFEManager.java:395)
+Thu 19:55: ERROR:    at com.maxeler.maxcompiler.v2.managers._Managers.runBuild(_Managers.java:16)
+Thu 19:55: ERROR:    at com.maxeler.maxcompiler.v2.managers.custom.CustomManager.realBuild(CustomManager.java:1549)
+Thu 19:55: ERROR:    at com.maxeler.maxcompiler.v2.managers.DFEManager.build(DFEManager.java:373)
+Thu 19:55: ERROR:    at fpgaConvNetMaxelerManager.resource_bench(fpgaConvNetMaxelerManager.maxj:32)
+Thu 19:55: ERROR:    at fpgaConvNetMaxelerManager.main(fpgaConvNetMaxelerManager.maxj:144)
+Thu 19:55: ERROR: ----------------------------
+make: *** [resource_bench_20_25_MAIA_DFE/results/resource_bench_20_25.max] Error 1

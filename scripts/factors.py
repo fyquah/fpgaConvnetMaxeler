@@ -1,15 +1,14 @@
 
 # [(int, int)], fst is foldingFactor, snd is kernelFoldingFactor
 factors = [
-    (50, 1),
-    (20, 1),
-    (10, 1),
-    (50, 5),
-    (20, 5),
-    (10, 5),
     (50, 25),
+    (50, 5),
+    (80, 25),
+    (80, 5),
     (20, 25),
+    (20, 5),
     (10, 25),
+    (10, 5),
 ]
 
 sim_factors = [
