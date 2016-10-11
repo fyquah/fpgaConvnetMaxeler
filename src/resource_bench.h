@@ -70,6 +70,7 @@ void resource_benchmark(max_file_t* max_file, void (*run_fnc)(max_engine_t*, act
     std::cerr << "Starting job:!" << std::endl;
 
     timeval t_begin, t_end;
+	max_set_max_runnable_timing_score(max_file, 10000);  // This is very forgiving.
     max_engine_t *engine = max_load(max_file, "*");
     action_t actions;
     actions.param_N = test_cases;
@@ -83,15 +84,7 @@ void resource_benchmark(max_file_t* max_file, void (*run_fnc)(max_engine_t*, act
     double begin = t_begin.tv_sec * 1000000 + t_begin.tv_usec;
     double end = t_end.tv_sec * 1000000 + t_end.tv_usec;
     double delta = end - begin;
-
-    std::ofstream fout(out_file_name.c_str());
-
-    std::cerr << std::fixed;
-    std::cerr << std::setprecision(7);
-    std::cerr << "It took " << delta << "micro seconds" << std::endl;
-    fout << delta << std::endl;
-    fout.close();
-    std::cerr << "DONE!" << std::endl;
+	double throughput = double(test_cases) / delta * 1000000.0;
 
     for (int t = 0 ; t < test_cases ; t++) {
         bool correct = true;
@@ -110,7 +103,7 @@ void resource_benchmark(max_file_t* max_file, void (*run_fnc)(max_engine_t*, act
                     float v;
 
                     fin >> v;
-                    std::cout << v << " vs " << y[idx] << std::endl;
+                    // std::cout << v << " vs " << y[idx] << std::endl;
                     if (!is_similar(v, y[idx])) {
                         correct = false;
                     } else {
@@ -122,12 +115,21 @@ void resource_benchmark(max_file_t* max_file, void (*run_fnc)(max_engine_t*, act
         fin.close();
 
         if (correct) {
-            std::cerr << "OKAY!" << std::endl;
+            std::cerr << "OKAY! ";
         } else {
-            std::cerr << "WRONG!" << std::endl;
+            std::cerr << "WRONG! ";
         }
         std::cerr << "Correct proportion = " << ((float) num_correct / (float) total) << std::endl;
     }
+
+    std::ofstream fout(out_file_name.c_str());
+    std::cerr << std::fixed;
+    std::cerr << std::setprecision(7);
+	std::cerr << "=========== " << out_file_name << " ================" << std::endl;
+    std::cerr << "It took " << delta << "micro seconds" << std::endl;
+	std::cerr << "Throughput = " << throughput << std::endl;
+    fout << "Throughput = " << throughput << std::endl;
+    fout.close();
 
     max_unload(engine);
 }
