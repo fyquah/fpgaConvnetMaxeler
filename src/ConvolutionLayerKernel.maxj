@@ -2,6 +2,7 @@
 
 import java.util.ArrayList;
 import java.util.List;
+import java.lang.RuntimeException;
 
 import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
 import com.maxeler.maxcompiler.v2.kernelcompiler.KernelParameters;
@@ -188,7 +189,13 @@ public class ConvolutionLayerKernel extends Kernel {
                     arr.add(constant.var(GlobalConfig.dataType, 0));
                 }
 
-                ret[r][c] = control.mux(iter, arr.toArray(new DFEVar[arr.size()]));
+				if (arr.size() == 0) {
+					throw new RuntimeException("arr.size() == 0?");
+				} else if (arr.size() == 1) {
+					ret[r][c] = arr[0];
+				} else {
+					ret[r][c] = control.mux(iter, arr.toArray(new DFEVar[arr.size()]));
+				}
             }
         }
 
