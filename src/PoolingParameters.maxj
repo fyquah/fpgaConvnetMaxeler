@@ -1,19 +1,27 @@
 // package nothing;
 
-public class PoolingParameters {
-    public Dimension inputDimension, outputDimension;
+public class PoolingParameters implements NetworkParameters {
+    public Dimension inputDim, outputDim;
     public int poolingDim;
     public PoolingUnit.Type poolingType;
 
     public PoolingParameters(Dimension argInputDim, int argPoolingDim, PoolingUnit.Type argType) {
-        inputDimension = argInputDim;
+        inputDim = argInputDim;
         poolingDim = argPoolingDim;
 
-        outputDimension = new Dimension(
-            inputDimension.height() / poolingDim,
-            inputDimension.width() / poolingDim,
-            inputDimension.channels()
+        outputDim = new Dimension(
+            inputDim.height() / poolingDim,
+            inputDim.width() / poolingDim,
+            inputDim.channels()
         );
         poolingType = argType;
+    }
+
+    public Dimension inputDimension() {
+        return inputDim;
+    }
+
+    public Dimension outputDimension() {
+        return outputDim;
     }
 }

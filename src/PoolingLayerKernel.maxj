@@ -21,9 +21,9 @@ public class PoolingLayerKernel extends Kernel {
         super(kp);
 
         // Parameters from PoolingParameters
-        inputDimension = pp.inputDimension;
+        inputDimension = pp.inputDimension();
         poolingDim = pp.poolingDim;
-        outputDimension = pp.outputDimension;
+        outputDimension = pp.outputDimension();
         poolingType = pp.poolingType;
         // end of extracted parameters
 
