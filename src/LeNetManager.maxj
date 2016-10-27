@@ -4,17 +4,14 @@ public class LeNetManager extends NetworkManager {
     private final int inputHeight = 28;
     private final int inputWidth = 28;
     private final int inputChannels = 1;
-    private NetworkParameters[] networkParameters = null;
 
     public String getParamsDirectory() {
         return "lenet_params";
     }
 
-    public NetworkParameters[] getParameters() {
-        if (networkParameters != null) {
-            return networkParameters;
-        }
-
+    public NetworkParameters[] getNetworkParameters() {
+        /* Assumes convolution values are in lenet_params/conv1_bias.txt and
+         * lenet_params/conv1_weights.txt */
         ConvolutionParameters conv1 = new ConvolutionParameters(
             new Dimension(inputHeight, inputWidth, inputChannels),
             20, /* outputChannel */
@@ -26,12 +23,17 @@ public class LeNetManager extends NetworkManager {
             getConvBias(20 /* outputChannels */,
                         1 /* convLayerId */)
         );
-        conv1.foldingFactor = 1;
-        conv1.kernelFoldingFactor = 1;
+        conv1.foldingFactor = Integer.parseInt(
+                getConfigProperty("conv1Factor"));
+        conv1.kernelFoldingFactor = Integer.parseInt(
+                getConfigProperty("conv1KernelFactor"));
         PoolingParameters pool1 = new PoolingParameters(
                 conv1.outputDimension(),
                 2, /* poolingDim */
                 PoolingUnit.Type.Max);
+
+        /* Assumes convolution values are in lenet_params/conv2_bias.txt and
+         * lenet_params/conv2_weights.txt */
         ConvolutionParameters conv2 = new ConvolutionParameters(
             pool1.outputDimension(),
             50, /* outputChannel */
@@ -43,15 +45,15 @@ public class LeNetManager extends NetworkManager {
             getConvBias(50 /* outputChannels */,
                         2 /* convLayerId */)
         );
-        conv2.foldingFactor = 1;
-        conv2.kernelFoldingFactor = 1;
+        conv2.foldingFactor = Integer.parseInt(
+                getConfigProperty("conv2Factor"));
+        conv2.kernelFoldingFactor = Integer.parseInt(
+                getConfigProperty("conv2KernelFactor"));
         PoolingParameters pool2 = new PoolingParameters(
                 conv2.outputDimension(),
                 2, /* poolingDim */
                 PoolingUnit.Type.Max);
-        networkParameters = new NetworkParameters[]{
-                conv1, pool1, conv2, pool2};
-        return networkParameters;
+        return new NetworkParameters[]{conv1, pool1, conv2, pool2};
     }
 
     public LeNetManager(EngineParameters engineParameters) {

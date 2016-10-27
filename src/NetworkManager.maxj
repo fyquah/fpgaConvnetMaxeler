@@ -20,6 +20,7 @@ import com.maxeler.maxcompiler.v2.managers.engine_interfaces.InterfaceParam;
 public abstract class NetworkManager extends CustomManager {
 
     private Properties prop;
+    private NetworkParameters[] networkParameters = null;
     private List<ConvolutionLayer> convolutionLayers;
     private List<PoolingLayerKernel> poolingKernels;
     private List<KernelBlock> poolingKernelBlocks;
@@ -27,8 +28,36 @@ public abstract class NetworkManager extends CustomManager {
     private DfeOutputAlligner outputAllignerKernel;
     private KernelBlock inputAllignerBlock, outputAllignerBlock;
 
-    public abstract NetworkParameters[] getParameters();
+    /**
+     * Returns an array of the network parameters.
+     * NetworkParameters are either ConvolutionParameters or PoolingParameters.
+     * The parameters should be in order of the neural network's layers. For a
+     * more an example and a comprehensive description on implementing this
+     * method, see `src/LenetManager.maxj`.
+     *
+     * getNetworkParamters will only be called once, so different calls to this
+     * function should return the same value.
+     *
+     * @return The directory of the params.
+     */
+    public abstract NetworkParameters[] getNetworkParameters();
+
+    /**
+     * Returns the directory of the trained network parameters.
+     * If you do not intend to use trained values (i.e: You want to use
+     * random network parameters), you can simply use and randomized input
+     * and return an arbitary string in this method.
+     *
+     * @return The directory of the params.
+     */
     public abstract String getParamsDirectory();
+
+    private NetworkParameters[] getParameters() {
+        if (networkParameters == null) {
+            networkParameters = getNetworkParameters();
+        }
+        return networkParameters;
+    }
 
     private Dimension inputDimension() {
         NetworkParameters[] paramsArray = getParameters();
@@ -128,14 +157,15 @@ public abstract class NetworkManager extends CustomManager {
         return ei;
     }
 
-    public Properties loadConfigProperties() {
+    protected String getConfigProperty(String name) {
         if (prop != null) {
-            return prop;
+            return prop.getProperty(name);
         }
         prop = new Properties();
         try {
             //load a properties file from class path, inside static method
-            InputStream input = new FileInputStream("../" + getParamsDirectory() + "/config.properties");
+            InputStream input = new FileInputStream(
+                    "../" + getParamsDirectory() + "/config.properties");
             prop.load(input);
 
             input.close();
@@ -143,7 +173,7 @@ public abstract class NetworkManager extends CustomManager {
             e.printStackTrace();
             System.exit(-1);
         }
-        return prop;
+        return prop.getProperty(name);
     }
 
     private void setupKernels() {
@@ -219,7 +249,7 @@ public abstract class NetworkManager extends CustomManager {
         poolingKernelBlocks = new ArrayList<KernelBlock>();
 
         config.setDefaultStreamClockFrequency(
-                Integer.parseInt(loadConfigProperties().getProperty("frequency")));
+                Integer.parseInt(getConfigProperty("frequency")));
         describeNetwork();
         setupKernels();
         // TODO(fyq14): Make PoolingLayer class to wrap around the pooling layers kernel too.

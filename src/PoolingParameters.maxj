@@ -1,5 +1,4 @@
 // package nothing;
-import java.lang.StringBuilder;
 
 public class PoolingParameters implements NetworkParameters {
     public Dimension inputDim, outputDim;
