@@ -1,4 +1,5 @@
 public interface NetworkParameters {
     public Dimension outputDimension();
     public Dimension inputDimension();
+    public void print();
 }

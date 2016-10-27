@@ -42,7 +42,7 @@ public abstract class NetworkManager extends CustomManager {
 
     protected List<Float> getConvBias(int outputChannels, int id) {
         List<Float> ret = new ArrayList<Float>();
-        String filename = "../" + getParamsDirectory()  + "conv" + id + "_bias.txt";
+        String filename = "../" + getParamsDirectory()  + "/conv" + id + "_bias.txt";
 
         try {
             Scanner in = new Scanner(new FileInputStream(filename));
@@ -131,21 +131,18 @@ public abstract class NetworkManager extends CustomManager {
     public Properties loadConfigProperties() {
         if (prop != null) {
             return prop;
-        } else {
-            Properties prop = new Properties();
         }
+        prop = new Properties();
         try {
             //load a properties file from class path, inside static method
-            InputStream input = new FileInputStream("../lenet_params/config.properties");
+            InputStream input = new FileInputStream("../" + getParamsDirectory() + "/config.properties");
             prop.load(input);
 
             input.close();
-
         } catch (IOException e) {
             e.printStackTrace();
             System.exit(-1);
         }
-
         return prop;
     }
 
@@ -202,17 +199,29 @@ public abstract class NetworkManager extends CustomManager {
             }
         }
 
-        outputAllignerBlock.getOutput("y") <== prevOutput;
+        outputAllignerBlock.getInput("x") <== prevOutput;
         cpuOutputLink <== outputAllignerBlock.getOutput("y");
+    }
+
+    public void describeNetwork() {
+        NetworkParameters[] paramsArray = getParameters();
+        for (int i = 0 ; i < paramsArray.length ; i++) {
+            System.out.println("====== Layer " + i + ": =====");
+            paramsArray[i].print();
+            System.out.println("");
+        }
     }
 
     public NetworkManager(EngineParameters engineParameters) {
         super(engineParameters);
+        convolutionLayers = new ArrayList<ConvolutionLayer>();
+        poolingKernels = new ArrayList<PoolingLayerKernel>();
+        poolingKernelBlocks = new ArrayList<KernelBlock>();
 
         config.setDefaultStreamClockFrequency(
                 Integer.parseInt(loadConfigProperties().getProperty("frequency")));
+        describeNetwork();
         setupKernels();
-
         // TODO(fyq14): Make PoolingLayer class to wrap around the pooling layers kernel too.
         inputAllignerBlock = addKernel(inputAllignerKernel);
         outputAllignerBlock = addKernel(outputAllignerKernel);

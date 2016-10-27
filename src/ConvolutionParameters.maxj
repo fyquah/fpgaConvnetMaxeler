@@ -15,6 +15,7 @@ public class ConvolutionParameters implements NetworkParameters {
         // do nothing ...
     }
 
+    // TODO(fyq14) : Support striding
     ConvolutionParameters(
             Dimension argInputDims,
             int fanOut,
@@ -31,7 +32,6 @@ public class ConvolutionParameters implements NetworkParameters {
     }
 
     public Dimension outputDimension() {
-        // TODO : Consider striding
         return new Dimension(
                 inputDim.height() - (kernelDim - 1),
                 inputDim.width()  - (kernelDim - 1),
@@ -39,8 +39,20 @@ public class ConvolutionParameters implements NetworkParameters {
     }
 
     public Dimension inputDimension() {
-        // TODO : Consider striding
         return inputDim;
+    }
+
+    public void print() {
+        System.out.println("Convolution Layer");
+        System.out.print("- InputDimension: ");
+        inputDimension().print();
+        System.out.print("- OutputDimension: ");
+        outputDimension().print();
+        System.out.println("- Kernel dimension: " + kernelDim);
+        System.out.println("- Stide: 1 (Other values not supported yet...)");
+        System.out.println("- foldingFactor: " + foldingFactor);
+        System.out.println("- kernelFoldingFactor: " + kernelFoldingFactor);
+        System.out.println("");
     }
 
     public int loopIterations() {
