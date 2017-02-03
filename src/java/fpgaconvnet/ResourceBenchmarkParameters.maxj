@@ -1,0 +1,25 @@
+package fpgaconvnet;
+import com.maxeler.maxcompiler.v2.build.EngineParameters;
+
+public class ResourceBenchmarkParameters extends EngineParameters {
+    private static final String s_convFoldingFactor = "convFoldingFactor";
+    private static final String s_kernelFoldingFactor = "kernelFoldingFactor";
+
+    public ResourceBenchmarkParameters(String[] args) {
+        super(args);
+    }
+
+    @Override
+    protected void declarations() {
+        declareParam(s_convFoldingFactor, DataType.INT);
+        declareParam(s_kernelFoldingFactor, DataType.INT);
+    }
+
+    public int getConvFoldingFactor() {
+        return getParam(s_convFoldingFactor);
+    }
+
+    public int getKernelFoldingFactor() {
+        return getParam(s_kernelFoldingFactor);
+    }
+}

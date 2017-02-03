@@ -1,0 +1,87 @@
+package fpgaconvnet;
+// TODO(fyquah): Use protocol buffers for this.
+
+import java.util.ArrayList;
+import java.util.List;
+
+
+public class ConvolutionParameters implements NetworkParameters {
+
+    public Dimension inputDim;
+    public List<List<float[][]>> kernels;
+    public List<Float> bias;
+    public int stride, foldingFactor, kernelFoldingFactor, kernelDim, outputChannels;
+
+    ConvolutionParameters() {
+        // do nothing ...
+    }
+
+    // TODO(fyq14) : Support striding
+    ConvolutionParameters(
+            Dimension argInputDims,
+            int fanOut,
+            List<List<float[][]>> argKernels,
+            List<Float> argBias) {
+        inputDim = argInputDims;
+        outputChannels = fanOut;
+        stride = 1;
+        foldingFactor = argInputDims.channels();
+        kernelDim = argKernels.get(0).get(0).length;
+        kernelFoldingFactor = kernelDim * kernelDim;
+        kernels = dupKernelList(argKernels);
+        bias = Utils.dupList(argBias);
+    }
+
+    public Dimension outputDimension() {
+        return new Dimension(
+                inputDim.height() - (kernelDim - 1),
+                inputDim.width()  - (kernelDim - 1),
+                outputChannels);
+    }
+
+    public Dimension inputDimension() {
+        return inputDim;
+    }
+
+    public void print() {
+        System.out.println("Convolution Layer");
+        System.out.print("- InputDimension: ");
+        inputDimension().print();
+        System.out.print("- OutputDimension: ");
+        outputDimension().print();
+        System.out.println("- Kernel dimension: " + kernelDim);
+        System.out.println("- Stide: 1 (Other values not supported yet...)");
+        System.out.println("- foldingFactor: " + foldingFactor);
+        System.out.println("- kernelFoldingFactor: " + kernelFoldingFactor);
+        System.out.println("");
+    }
+
+    public int loopIterations() {
+        return Utils.divCeil(
+                inputDimension().channels() * outputDimension().channels(),
+                foldingFactor);
+    }
+
+    public int convLoopIterations() {
+        return Utils.divCeil(
+                kernelDim * kernelDim,
+                kernelFoldingFactor);
+    }
+
+    public List<List<float[][]>> getKernels() {
+        return dupKernelList(kernels);
+    }
+
+    protected static List<List<float[][]>> dupKernelList(List<List<float[][]>> l) {
+        List<List<float[][]>> ret = new ArrayList<List<float[][]>>();
+
+        for (int i = 0 ; i < l.size() ; i++) {
+            ret.add(new ArrayList<float[][]>());
+            for (int j = 0 ; j < l.get(0).size() ; j++) {
+                ret.get(i).add(Utils.dupMatrix(l.get(i).get(j)));
+            }
+        }
+
+        return ret;
+    }
+}

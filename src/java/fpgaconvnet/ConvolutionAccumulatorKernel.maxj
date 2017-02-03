@@ -1,0 +1,159 @@
+package fpgaconvnet;
+import java.util.List;
+import java.util.ArrayList;
+
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVector;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVectorType;
+import com.maxeler.maxcompiler.v2.kernelcompiler.KernelParameters;
+import com.maxeler.maxcompiler.v2.managers.engine_interfaces.InterfaceParam;
+
+
+public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
+    private final DFEVectorType<DFEVar> outputVectorType;
+    private final List<MultiSourceAccumulator> accumulators;
+    private final List<PartitionedDemux> demuxUnits;
+    private final List<DFEVar> inputs;
+    private final List<Float> bias;
+    private final DFEVector<DFEVar> output;
+    private final Dimension outputDimension;
+    private final int outputChannels, foldingFactor;
+
+    public ConvolutionAccumulatorKernel(
+            KernelParameters kp,
+            ConvolutionParameters params) {
+        super(kp, params);
+        outputChannels = params.outputDimension().channels();
+        foldingFactor = params.foldingFactor;
+        bias = params.bias;
+        outputDimension = params.outputDimension();
+
+        outputVectorType = new DFEVectorType<DFEVar>(
+                GlobalConfig.dataType, outputChannels);
+        output = outputVectorType.newInstance(this);
+        inputs = makeInputPlaceHolders();
+        accumulators = new ArrayList<MultiSourceAccumulator>();
+        demuxUnits = new ArrayList<PartitionedDemux>();
+
+        for (int i = 0 ; i < outputChannels ; i++) {
+            MultiSourceAccumulator newAccumulator = new MultiSourceAccumulator(
+                    this,
+                    getLoopIterations(),
+                    getLoopIterations());
+
+            accumulators.add(newAccumulator);
+        }
+
+        for (int convUnitId = 0 ; convUnitId < params.foldingFactor ; convUnitId++) {
+            List<ConvChannelIndex> indices = getConvUnitChannelIndices(convUnitId);
+            List<ChannelFrequency> channelFrequencies = getChannelFrequencies(
+                    indices);
+            int[] counts = unrollFrequencies(channelFrequencies);
+            PartitionedDemux demux = new PartitionedDemux(
+                    this, counts, accumulators[0].getOffsetAutoLoop());
+
+            demuxUnits.add(demux);
+            demux.input <== inputs[convUnitId];
+            
+            for (int i = 0 ; i < channelFrequencies.size() ; i++) {
+                accumulators[channelFrequencies[i].channel]
+                    .addSource(demux.outputs[i]);
+            }
+        }
+
+        for (int i = 0 ; i < outputChannels ; i++) {
+            accumulators[i].generate();
+            output[i] <== accumulators[i].output() + bias[i];
+        }
+
+        accumulators[0].debug(debugFlag());
+
+        setExternalIO();
+    }
+
+    public String getInputName(int convUnitId) {
+        return "input_" + convUnitId;
+    }
+
+    public String getOutputName() {
+        return "output";
+    }
+
+    /* It is fine to do this as the values are cached w.r.t. Kernel */
+    public String getOffsetExprName() {
+        return accumulators[0].getOffsetExprName();
+    }
+
+    public InterfaceParam cyclesPerImage(InterfaceParam pipelineLength) {
+        return outputDimension.width() * outputDimension.height()
+                * getLoopIterations() * pipelineLength;
+    }
+
+    protected void setExternalIO() {
+        // TODO(fyq14): inputControlFlag and outputControlFlag
+        DFEVar inputControlFlag = accumulators[0].pipelineIndex.eq(0);
+        DFEVar outputControlFlag = 
+            accumulators[0].pipelineIndex.eq(accumulators[0].pipelineLengthVar - 1)
+            & accumulators[0].iter.eq(getLoopIterations() - 1);
+
+        for (int i = 0 ; i < foldingFactor ; i++) {
+            inputs[i] <== io.input(getInputName(i),
+                                   GlobalConfig.dataType, inputControlFlag);
+        }
+
+        io.output(getOutputName(), output, outputVectorType, outputControlFlag);
+    }
+
+    protected List<DFEVar> makeInputPlaceHolders() {
+        List<DFEVar> ret = new ArrayList<DFEVar>();
+
+        for (int i = 0 ; i < foldingFactor ; i++) {
+            ret.add(GlobalConfig.dataType.newInstance(this));
+        }
+
+        return ret;
+    }
+
+    protected List<ChannelFrequency> getChannelFrequencies(List<ConvChannelIndex> indices) {
+        List<ChannelFrequency> ret = new ArrayList<ChannelFrequency>();
+
+        if (indices.size() == 0) {
+            return ret;
+        }
+        
+        ret.add(new ChannelFrequency(indices[0].out, 1));
+
+        for (int i = 1 ; i < indices.size() ; i++) {
+            int tail = ret.size() - 1;
+            if (ret[tail].channel != indices[i].out) {
+                ret.add(new ChannelFrequency(indices[i].out, 1));
+            } else {
+                ret.set(tail, new ChannelFrequency(ret[tail].channel, ret[tail].frequency + 1));
+            }
+        }
+
+        return ret;
+    }
+
+    protected int[] unrollFrequencies(List<ChannelFrequency> freqs) {
+        int totalCount = 0;
+        int[] counts;
+
+        for (int i = 0 ; i < freqs.size() ; i++) {
+            totalCount += freqs[i].frequency;
+        }
+
+        if (totalCount < getLoopIterations()) {
+            counts = new int[freqs.size() + 1];
+            counts[freqs.size()] = getLoopIterations() - totalCount;
+        } else {
+            counts = new int[freqs.size()];
+        }
+
+        for (int i = 0 ; i < freqs.size() ; i++) {
+            counts[i] = freqs[i].frequency;
+        }
+
+        return counts;
+    }
+}

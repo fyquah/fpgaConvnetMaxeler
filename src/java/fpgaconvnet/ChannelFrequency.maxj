@@ -1,0 +1,10 @@
+package fpgaconvnet;
+public class ChannelFrequency {
+    public final int channel;
+    public final int frequency;
+
+    public ChannelFrequency(int argChannel, int argFrequency) {
+        channel = argChannel;
+        frequency = argFrequency;
+    }
+}

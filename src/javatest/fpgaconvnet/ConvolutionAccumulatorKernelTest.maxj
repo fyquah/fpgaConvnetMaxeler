@@ -1,0 +1,138 @@
+package fpgaconvnet;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import static org.junit.Assert.*;
+import org.junit.Test;
+
+import com.maxeler.maxcompiler.v2.managers.standard.SimulationManager;
+import com.maxeler.maxcompiler.v2.utils.Bits;
+
+public class ConvolutionAccumulatorKernelTest {
+    protected ConvolutionParameters buildConvolutionParams(int foldingFactor) {
+        final int kernelDim = 5;
+        final int outputChannels = 10;
+        final int inputChannels = 20;
+        final Dimension inputDim = new Dimension(
+                30, 30, inputChannels);
+
+        ConvolutionParameters params = new ConvolutionParameters();
+        params.inputDim = inputDim;
+        params.kernelDim = kernelDim;
+        params.outputChannels = outputChannels;
+        params.foldingFactor = foldingFactor;
+        params.bias = TestHelper.randomFloatVector(outputChannels);
+
+        return params;
+    }
+
+    /* 
+     * Generates a random 2D list of float[params.foldingFactor][params.loopIterations()]
+     */
+    protected List<List<Float>> generateRandomInput(
+            ConvolutionParameters params, int numberOfPixels) {
+
+        List<List<Float>> ret = new ArrayList<List<Float>>();
+
+        for (int i = 0 ; i < params.foldingFactor ; i++) {
+            List<Float> x = new ArrayList<Float>();
+
+            for (int j = 0 ; j < params.loopIterations() * numberOfPixels ; j++) {
+                x.add(TestHelper.rand() * 0.1f);
+            }
+
+            ret.add(x);
+        }
+
+        return ret;
+    }
+
+    /*
+     * Computes and return the expected output.
+     */
+    protected List<Float> computeExpected(
+            ConvolutionParameters params, ConvolutionAccumulatorKernel kernel, List<List<Float>> inputData) {
+        // calculate the number of examples supplied
+        final int numberOfExamples = inputData[0].size() / params.loopIterations();
+        final int loopIterations = params.loopIterations();
+
+        // TODO(fyq14): Some assertions to make sure that numberOfExamples
+        // is consistent throughout the whole inputData argument provided.
+        List<Float> ret = new ArrayList<Float>();
+
+        for (int testCase = 0 ; testCase < numberOfExamples ; testCase++) {
+            // memo will be initialized with 0, because we are in java land.
+            float[] memo = new float[params.outputDimension().channels()];
+
+            for (int convUnitId = 0 ; convUnitId < params.foldingFactor ; convUnitId++) {
+                List<ConvChannelIndex> channelIndices = kernel.getConvUnitChannelIndices(convUnitId);
+
+                for (int i = 0 ; i < channelIndices.size() ; i++) {
+                    float value = inputData[convUnitId][testCase * loopIterations + i];
+                    memo[channelIndices[i].out] += value;
+                }
+            }
+
+            for (int i = 0 ; i < memo.length ; i++) {
+                ret.add(memo[i]);
+            }
+        }
+
+        return ret;
+    }
+
+    protected List<List<Bits>> convert2DFloatToBits(List<List<Float>> dataInput, int inputUnitWidth) {
+        List<List<Bits>> ret = new ArrayList<List<Bits>>();
+
+        for (int i = 0 ; i < dataInput.size() ; i++) {
+            ret.add(TestHelper.toBitsList(dataInput[i], inputUnitWidth));
+        }
+
+        return ret;
+    }
+
+    protected void genericTest(String testName, int foldingFactor, int estimatedPipelineLength) {
+        ConvolutionParameters params = buildConvolutionParams(foldingFactor);
+        final int numberOfPixels = 1000;
+
+        SimulationManager manager = new SimulationManager(testName + "Kernel");
+        ConvolutionAccumulatorKernel kernel =
+                new ConvolutionAccumulatorKernel(manager.makeKernelParameters(testName), params);
+        manager.setKernel(kernel);
+        manager.build();
+
+        List<List<Float>> dataInputs = generateRandomInput(params, numberOfPixels);
+        List<List<Bits>> rawInputs = convert2DFloatToBits(dataInputs, 1);
+
+        for (int i = 0 ; i < params.foldingFactor ; i++) {
+            manager.setInputDataRaw(kernel.getInputName(i), rawInputs[i]);
+        }
+
+        manager.setKernelCycles(estimatedPipelineLength * kernel.getLoopIterations() * numberOfPixels);
+        manager.run();
+
+        List<Bits> outputBits = manager.getOutputDataRaw(kernel.getOutputName());
+        List<Float> outputData = TestHelper.fromBitsList(
+                outputBits, params.outputDimension().channels());
+        List<Float> expectedOutputData = computeExpected(params, kernel, dataInputs);
+
+        assertEquals(outputData.size(), numberOfPixels * params.outputDimension().channels());
+        assertEquals(expectedOutputData.size(), outputData.size());
+
+        for (int i = 0 ; i < outputData.size() ; i++) {
+            float diff = Math.abs(outputData[i] - expectedOutputData[i]);
+            assertTrue(diff < 0.1f);
+        }
+    }
+
+    @Test
+    public void testSmallFoldingFactor() {
+        genericTest("testSmallFoldingFactor", 10, 3);
+    }
+
+    @Test
+    public void testNonMultipleFoldingFactor() {
+        genericTest("testNonMultipleFoldingFactor", 11, 3);
+    }
+}

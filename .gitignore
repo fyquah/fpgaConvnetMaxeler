@@ -1,5 +1,7 @@
 *.swp
 *.pyc
 !build/Makefile
+!build/java/.gitkeep
+!build/javatest/.gitkeep
 build/
 __pycache__

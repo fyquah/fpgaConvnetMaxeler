@@ -1,0 +1,55 @@
+package fpgaconvnet;
+import java.util.ArrayList;
+import java.util.List;
+
+import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
+import com.maxeler.maxcompiler.v2.kernelcompiler.KernelParameters;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
+
+public abstract class ConvolutionKernelBase extends Kernel {
+    
+    private final List<ConvChannelIndex> convChannelIndices;
+    private final int loopIterations;
+
+    public ConvolutionKernelBase (
+           KernelParameters kp,
+           ConvolutionParameters params) {
+        super(kp);
+        loopIterations = params.loopIterations();
+        convChannelIndices = ConvChannelIndex.rangeProduct(
+                    params.outputDimension().channels(),
+                    params.inputDimension().channels());
+    }
+
+    public int getLoopIterations() {
+        return loopIterations;
+    }
+
+    public List<ConvChannelIndex> getConvUnitChannelIndices(int convUnitId) {
+        List<ConvChannelIndex> ret = new ArrayList<ConvChannelIndex>();
+
+        for (int i = convUnitId * getLoopIterations() ;
+                i < (convUnitId + 1) * getLoopIterations() && i < convChannelIndices.size();
+                i++) {
+            ret.add(convChannelIndices[i]);
+        }
+
+        return ret;
+    }
+
+    public abstract String getOffsetExprName();
+
+
+    public static void setDebugMode(boolean flag) {
+        debugMode = flag;
+    }
+
+    private static boolean debugMode = false;
+    protected DFEVar debugFlag() {
+        if (debugMode) {
+            return constant.var(dfeBool(), 1);
+        } else {
+            return constant.var(dfeBool(), 0);
+        }
+    }
+}

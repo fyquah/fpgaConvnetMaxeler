@@ -1,0 +1,36 @@
+package fpgaconvnet;
+// package nothing;
+
+import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
+import com.maxeler.maxcompiler.v2.kernelcompiler.KernelLib;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
+
+public class OneHotDemux extends KernelLib {
+    public DFEVar input;
+    public DFEVar[] selects;
+    public DFEVar[] outputs;
+    public int size;
+
+    public OneHotDemux(Kernel argKernel, int n) {
+        super(argKernel);
+        optimization.pushPipeliningFactor(0.0);
+        input = GlobalConfig.dataType.newInstance(this);
+        selects = new DFEVar[n];
+        outputs = new DFEVar[n];
+        size = n;
+
+        for (int i = 0 ; i < n ; i++) {
+            selects[i] = dfeBool().newInstance(this);
+            outputs[i] = (selects[i] ? input : constant.var(GlobalConfig.dataType, 0));
+        }
+        optimization.popPipeliningFactor();
+    }
+
+    public void setInput(DFEVar a) {
+        input <== a;
+    }
+
+    public void setSelect(int i, DFEVar a) {
+        selects[i] <== a;
+    }
+}

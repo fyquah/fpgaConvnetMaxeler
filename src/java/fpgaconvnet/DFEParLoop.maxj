@@ -1,0 +1,37 @@
+package fpgaconvnet;
+// package nothing;
+
+import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
+import com.maxeler.maxcompiler.v2.kernelcompiler.KernelLib;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Stream.OffsetExpr;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEType;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
+
+
+class DFEParLoop extends KernelLib {
+    DFEVar feed_in, pipe_len, global_pos, feedback, done, ndone;
+    OffsetExpr loop;
+    int streamLength;
+
+    DFEParLoop(Kernel owner, String loop_name, int argStreamLength) {
+        super(owner);
+        loop = stream.makeOffsetAutoLoop(loop_name);
+        pipe_len = loop.getDFEVar(this,dfeUInt(32));
+        // ParLoop iterates as long as there is data
+        streamLength = argStreamLength;
+
+        global_pos = control.count.simpleCounter(32);
+        done = global_pos >= (streamLength + pipe_len);
+        ndone = global_pos < streamLength;
+    }
+
+    void set_input(DFEType fb_type, double init) {
+        feed_in = fb_type.newInstance(this);
+        DFEVar start_feedback = global_pos < pipe_len;
+        feedback = start_feedback ? feed_in : init;
+    }
+
+    void set_output(DFEVar result) {
+        feed_in <== stream.offset(result, -loop);
+    }
+}

@@ -1,0 +1,49 @@
+package fpgaconvnet;
+// package nothing;
+
+import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
+import com.maxeler.maxcompiler.v2.kernelcompiler.KernelParameters;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVector;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVectorType;
+
+public class DfeInputAlligner extends Kernel {
+    private final DFEVectorType<DFEVar> vectorType;
+    public DfeInputAlligner(KernelParameters parameters, int outSize) {
+        super(parameters);
+
+        vectorType  = new DFEVectorType<DFEVar>(GlobalConfig.dataType, outSize);
+        DFEVector<DFEVar> output = vectorType.newInstance(this);
+
+        if (outSize == 1) {
+            DFEVar x = io.input("x", GlobalConfig.cpuType);
+            output[0] <== x.cast(GlobalConfig.dataType);
+            io.output("y", output, vectorType);
+        } else {
+            DFEVar input = GlobalConfig.cpuType.newInstance(this);
+
+            /*
+            CounterChain chain = control.count.makeCounterChain();
+            DFEVar exampleCtr = chain.addCounter(100, 1);
+            DFEVar rowCtr = chain.addCounter(5, 1);
+            DFEVar colCtr = chain.addCounter(5, 1);
+            DFEVar ctr = chain.addCounter(outSize, 1);
+            debug.simPrintf(
+                "inputAlligner : e = %d row = %d col = %d chan = %d\n",
+                exampleCtr, rowCtr, colCtr, ctr
+            );
+            */
+
+            DFEVar ctr = control.count.simpleCounter(Utils.ceilLog2(outSize), outSize);
+            for (int i = 0 ; i < outSize ; i++) {
+                output[i] <== stream.offset(input, -(outSize - 1 - i)).cast(GlobalConfig.dataType);
+            }
+
+            DFEVar x = io.input("x", GlobalConfig.cpuType);
+            input <== x;
+
+
+            io.output("y", output, vectorType, ctr.eq(outSize - 1));
+        }
+    }
+}

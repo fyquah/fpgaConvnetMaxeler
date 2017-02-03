@@ -1,0 +1,164 @@
+package fpgaconvnet;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Properties;
+import java.util.Scanner;
+
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.InputStream;
+import java.io.IOException;
+
+import com.maxeler.maxcompiler.v2.build.EngineParameters;
+import com.maxeler.maxcompiler.v2.managers.custom.CustomManager;
+import com.maxeler.maxcompiler.v2.managers.custom.DFELink;
+import com.maxeler.maxcompiler.v2.managers.custom.blocks.KernelBlock;
+import com.maxeler.maxcompiler.v2.managers.engine_interfaces.CPUTypes;
+import com.maxeler.maxcompiler.v2.managers.engine_interfaces.EngineInterface;
+import com.maxeler.maxcompiler.v2.managers.engine_interfaces.InterfaceParam;
+import com.maxeler.maxcompiler.v2.managers.custom.stdlib.DebugLevel;
+
+
+public class ResourceBenchmarkManager extends CustomManager {
+
+    protected static int inputHeight, inputWidth, inputChannels, outputChannels, kernelDim;
+    private final ConvolutionParameters params;
+    private final ConvolutionLayer layer;
+
+    static {
+        try {
+            Properties prop = new Properties();
+            //load a properties file from class path, inside static method
+            InputStream input = new FileInputStream("../resource_benchmark/config.properties");
+            prop.load(input);
+
+            //get the property value and print it out
+            inputHeight = Integer.parseInt(prop.getProperty("inputHeight"));
+            inputWidth = Integer.parseInt(prop.getProperty("inputWidth"));
+            inputChannels = Integer.parseInt(prop.getProperty("inputChannels"));
+            outputChannels = Integer.parseInt(prop.getProperty("outputChannels"));
+            kernelDim = Integer.parseInt(prop.getProperty("kernelDim"));
+
+            input.close();
+
+        } catch (IOException e) {
+            e.printStackTrace();
+            System.exit(-1);
+        }
+    }
+
+    public Dimension inputDimension() {
+        return params.inputDimension();
+    }
+
+    public Dimension outputDimension() {
+        return params.outputDimension();
+    }
+
+    private static List<List<float[][]>> getConvolutionKernels (
+        int outputChannels,
+        int inputChannels,
+        int kernelDim
+    ) {
+        List<List<float[][]>> ret = new ArrayList<List<float[][]>>();
+
+        for (int o = 0 ; o < outputChannels ; o++) {
+            List<float[][]> l = new ArrayList<float[][]>();
+
+            for (int i = 0 ; i < inputChannels ; i++) {
+                float mat[][] = new float[kernelDim][kernelDim];
+                String filename = "../resource_benchmark/convolution_kernels/mat_" +
+                    Integer.toString(o) + "_" +
+                    Integer.toString(i) + ".txt";
+
+                try {
+                    Scanner in = new Scanner(new FileInputStream(filename));
+                    for (int r = 0 ; r < kernelDim ; r++) {
+                        for (int c = 0 ; c < kernelDim ; c++) {
+                            mat[r][c] = in.nextFloat();
+                        }
+                    }
+                    in.close();
+                    l.add(mat);
+                } catch (FileNotFoundException e) {
+                    e.printStackTrace();
+                    System.exit(1);
+                }
+            }
+
+            ret.add(l);
+        }
+
+        return ret;
+    }
+
+    public static List<Float> getBias(int outputChannels) {
+        List<Float> ret = new ArrayList<Float>();
+
+        String filename = "../resource_benchmark/convolution_kernels/bias.txt";
+        try {
+            Scanner in = new Scanner(new FileInputStream(filename));
+
+            for (int i = 0 ; i < outputChannels ; i++) {
+                ret.add(in.nextFloat());
+            }
+
+            in.close();
+        } catch (FileNotFoundException e) {
+            e.printStackTrace();
+            System.exit(1);
+        }
+
+        return ret;
+    }
+
+    public ResourceBenchmarkManager(
+        EngineParameters engineParameters,
+        int convUnitFoldingFactor,
+        int kernelFoldingFactor
+    ) {
+        super(engineParameters);
+
+        params = new ConvolutionParameters(
+            new Dimension(inputHeight, inputWidth, inputChannels),
+            outputChannels,
+            getConvolutionKernels(outputChannels, inputChannels, kernelDim),
+            getBias(outputChannels)
+        );
+        params.kernelFoldingFactor = kernelFoldingFactor;
+        params.foldingFactor = convUnitFoldingFactor;
+        layer = new ConvolutionLayer(params, this);
+
+        DfeInputAlligner inputAllignerKernel = new DfeInputAlligner(
+            makeKernelParameters("DfeInputAlligner"), inputChannels);
+
+        DfeOutputAlligner outputAllignerKernel= new DfeOutputAlligner(
+            makeKernelParameters("DfeOutputAlligner"), outputChannels);
+
+        KernelBlock inputAlligner = addKernel(inputAllignerKernel);
+        KernelBlock outputAlligner = addKernel(outputAllignerKernel);
+
+        DFELink from_cpu = addStreamFromCPU("x");
+        DFELink to_cpu = addStreamToCPU("y");
+
+        inputAlligner.getInput("x") <== from_cpu;
+        layer.getInput() <== inputAlligner.getOutput("y");
+        outputAlligner.getInput("x") <== layer.getOutput();
+        to_cpu <== outputAlligner.getOutput("y");
+        debug.setDebugLevel(new DebugLevel().setHasStreamStatus(true));
+    }
+
+    public EngineInterface interfaceDefault() {
+        EngineInterface ei = new EngineInterface();
+        CPUTypes   type = CPUTypes.FLOAT;
+        int        size = type.sizeInBytes();
+        InterfaceParam  N    = ei.addParam("N", CPUTypes.INT);
+
+        ei.setTicks("DfeInputAlligner", N * inputDimension().totalSize());
+        layer.setKernelTimings(ei, N);
+        ei.setTicks("DfeOutputAlligner", N * outputDimension().totalSize());
+        ei.setStream("x", type, N * inputDimension().totalSize() * size);
+        ei.setStream("y", type, N * outputDimension().totalSize() * size);
+        return ei;
+    }
+}

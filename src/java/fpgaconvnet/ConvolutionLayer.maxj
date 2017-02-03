@@ -1,0 +1,141 @@
+package fpgaconvnet;
+import java.util.List;
+import java.util.ArrayList;
+
+import com.maxeler.maxcompiler.v2.managers.custom.DFELink;
+import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
+import com.maxeler.maxcompiler.v2.managers.custom.CustomManager;
+import com.maxeler.maxcompiler.v2.managers.custom.blocks.KernelBlock;
+import com.maxeler.maxcompiler.v2.managers.engine_interfaces.EngineInterface;
+import com.maxeler.maxcompiler.v2.managers.engine_interfaces.InterfaceParam;
+
+
+public class ConvolutionLayer {
+    private static int totalLayersInstantiated = 0;
+
+    private final ConvolutionParameters params;
+    private final int id;
+    private final CustomManager manager;
+    private final BoxedKernelBlock<ConvolutionSchedulerKernel> scheduler;
+    private final List<BoxedKernelBlock<ConvolutionUnitKernel>> convolutionUnits;
+    private final BoxedKernelBlock<ConvolutionAccumulatorKernel> accumulator;
+    
+    ConvolutionLayer(ConvolutionParameters argParams, CustomManager argManager) {
+        params = argParams;
+        manager = argManager;
+        id = totalLayersInstantiated++;
+
+        convolutionUnits = new ArrayList<BoxedKernelBlock<ConvolutionUnitKernel>>();
+
+        scheduler = new BoxedKernelBlock<ConvolutionSchedulerKernel>(
+                new ConvolutionSchedulerKernel(
+                        manager.makeKernelParameters("ConvolutionScheduler_" + id),
+                                                     params));
+        accumulator = new BoxedKernelBlock<ConvolutionAccumulatorKernel>(
+                new ConvolutionAccumulatorKernel(
+                        manager.makeKernelParameters("ConvolutionAccumulator_" + id),
+                                                     params));
+
+        for (int i = 0 ; i < params.foldingFactor ; i++) {
+            convolutionUnits.add(new BoxedKernelBlock<ConvolutionUnitKernel>(new ConvolutionUnitKernel(
+                    manager.makeKernelParameters("ConvolutionUnit_" + id + "_" + i),
+                    params)));
+        }
+
+        joinKernels();
+    }
+
+    public DFELink getInput() {
+        return scheduler.getBlock().getInput(
+                scheduler.getKernel().getInputName());
+    }
+
+    public DFELink getOutput() {
+        return accumulator.getBlock().getOutput(
+                accumulator.getKernel().getOutputName());
+    }
+
+    // TODO(fyq14): Once pipelining is introduced, this function probably needs some
+    //              rewriting w.r.t. the cycles required.
+    protected void setKernelTimings(EngineInterface ei, InterfaceParam numberOfImages) {
+        /*
+         * scheduler:
+         * Scheduler does not have a loop offset, so we will not need to deal
+         * with ei.getAutoLoopOffset here.
+         */
+        ei.setTicks(scheduler.getKernel().getName(),
+                    numberOfImages * scheduler.getKernel().cyclesPerImage());
+
+
+        /* ConvolutionUnits */
+        for (int i = 0 ; i < params.foldingFactor ; i++) {
+            InterfaceParam convPipelineLength = ei.getAutoLoopOffset(
+                    convolutionUnits[i].getKernel().getName(),
+                    convolutionUnits[i].getKernel().getOffsetExprName());
+            ei.ignoreAutoLoopOffset(
+                    convolutionUnits[i].getKernel().getName(),
+                    convolutionUnits[i].getKernel().getOffsetExprName());
+            ei.setTicks(convolutionUnits[i].getKernel().getName(),
+                        numberOfImages * convolutionUnits[i].getKernel().cyclesPerImage(convPipelineLength));
+        }
+
+        /* Accumulator */
+        InterfaceParam pipelineLength = ei.getAutoLoopOffset(
+                accumulator.getKernel().getName(),
+                accumulator.getKernel().getOffsetExprName());
+        ei.ignoreAutoLoopOffset(
+                accumulator.getKernel().getName(),
+                accumulator.getKernel().getOffsetExprName());
+        ei.setTicks(accumulator.getKernel().getName(),
+                    numberOfImages * accumulator.getKernel().cyclesPerImage(pipelineLength));
+    }
+
+    /*
+     * Connects the convolution internal stuff. Meant to be used by the constructor.
+     */
+    protected void joinKernels() {
+
+        /* Configure from scheduler -> convolutionUnits */
+        for (int i = 0 ; i < params.foldingFactor ; i++) {
+            DFELink weightsFrom = scheduler.getBlock().getOutput(
+                        scheduler.getKernel().getWeightOutputName(i));
+            DFELink weightsTo = convolutionUnits[i].getBlock().getInput(
+                        convolutionUnits[i].getKernel().getInputWeightsName());;
+            DFELink pixelsFrom = scheduler.getBlock().getOutput(
+                        scheduler.getKernel().getPixelOutputName(i));
+            DFELink pixelsTo = convolutionUnits[i].getBlock().getInput(
+                        convolutionUnits[i].getKernel().getInputPixelsName());;
+
+            weightsTo <== weightsFrom;
+            pixelsTo <== pixelsFrom;
+        }
+
+        /* Configure from convolutionUnits -> accumulator */
+        for (int i = 0 ; i < params.foldingFactor ; i++) {
+            DFELink from = convolutionUnits[i].getBlock()
+                    .getOutput(convolutionUnits[i].getKernel().getOutputName());;
+            DFELink to = accumulator.getBlock()
+                    .getInput(accumulator.getKernel().getInputName(i));
+
+            to <== from;
+        }
+    }
+
+    public class BoxedKernelBlock<T extends Kernel> {
+        private final KernelBlock block;
+        private final T kernel;
+
+        BoxedKernelBlock(T argKernel) {
+            kernel = argKernel;
+            block = manager.addKernel(kernel);
+        }
+
+        public T getKernel() {
+            return kernel;
+        }
+
+        public KernelBlock getBlock() {
+            return block;
+        }
+    }
+}

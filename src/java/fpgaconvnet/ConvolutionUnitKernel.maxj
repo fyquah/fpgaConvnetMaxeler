@@ -1,0 +1,154 @@
+package fpgaconvnet;
+import java.util.ArrayList;
+
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVector;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVectorType;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Stream.OffsetExpr;
+import com.maxeler.maxcompiler.v2.kernelcompiler.KernelParameters;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.CounterChain;
+import com.maxeler.maxcompiler.v2.managers.engine_interfaces.InterfaceParam;
+
+public class ConvolutionUnitKernel extends ConvolutionKernelBase {
+
+    private final Dimension outputDimension;
+    private final int kernelDim, convLoopIterations, kernelFoldingFactor;
+    private final DFEVectorType<DFEVar> inputVectorType;
+    private final DFEVector<DFEVar> input_weights, input_pixels;
+    private final DFEVar output, cycle, pipelineLengthVar, loopIndex, pipelineStage;
+    private final OffsetExpr pipelineLength;
+    private final ArrayList<DFEVar> multiplierOutputs;
+    private static final OffsetExprDefaultDict pipelineLengthCache =
+        new OffsetExprDefaultDict("ConvolutionUnit", 1, 10);
+
+    private OffsetExpr getOffsetAutoLoop() {
+        return pipelineLengthCache.get(this);
+    }
+
+    public ConvolutionUnitKernel(
+            KernelParameters kp,
+            ConvolutionParameters params) {
+        super(kp, params);
+        kernelFoldingFactor = params.kernelFoldingFactor;
+        kernelDim = params.kernelDim;
+        outputDimension = params.outputDimension();
+
+        convLoopIterations = Utils.divCeil(
+                kernelDim * kernelDim,  kernelFoldingFactor);
+        multiplierOutputs = new ArrayList<DFEVar>();
+
+        inputVectorType = new DFEVectorType<DFEVar>(
+                GlobalConfig.dataType, kernelDim * kernelDim);
+        input_weights = inputVectorType.newInstance(this);
+        input_pixels = inputVectorType.newInstance(this);
+        output = GlobalConfig.dataType.newInstance(this);
+
+        pipelineLength = getOffsetAutoLoop();
+        pipelineLengthVar = pipelineLength.getDFEVar(this, dfeUInt(25));
+
+        CounterChain chain = control.count.makeCounterChain();
+        loopIndex = Utils.chainCounterOrZero(this, chain, convLoopIterations);
+        pipelineStage = chain.addCounter(pipelineLengthVar, 1);
+        cycle = control.count.simpleCounter(32);
+
+        debug.simPrintf(debugFlag(), "---------------- cycle = %d\n", cycle);
+        debug.simPrintf(debugFlag(), "convLoopIterations = %d, pipelineLengthVar = %d\n", convLoopIterations, pipelineLengthVar);
+        debug.simPrintf(debugFlag(), "output = %.5f\n", output);
+        initOutput();
+
+        DFEVar inputControl = pipelineStage.eq(0) & loopIndex.eq(0);
+        DFEVar outputControl = pipelineStage.eq(pipelineLengthVar - 1) & loopIndex.eq(convLoopIterations - 1);;
+        input_weights <== io.input(getInputWeightsName(), inputVectorType, inputControl);
+        input_pixels <== io.input(getInputPixelsName(), inputVectorType, inputControl);
+        io.output(getOutputName(), output, GlobalConfig.dataType, outputControl);
+    }
+
+    public String getOffsetExprName() {
+        return pipelineLengthCache.getOffsetExprName(this);
+    }
+
+    public InterfaceParam cyclesPerImage(InterfaceParam pipelineLength) {
+        int totalOutputPixels = outputDimension.height() * outputDimension.width();
+        return convLoopIterations * getLoopIterations() * totalOutputPixels * pipelineLength;
+    }
+
+    public String getOutputName() {
+        return "output";
+    }
+
+    public String getInputWeightsName() {
+        return "input_weights";
+    }
+
+    public String getInputPixelsName() {
+        return "input_pixels";
+    }
+
+    public int getConvLoopIterations() {
+        return convLoopIterations;
+    }
+
+    private void initOutput() {
+        for (int i = 0 ; i < kernelFoldingFactor ; i++) {
+            DFEVar convWeight = getConvWeight(i);
+            DFEVar convPixel = getConvPixel(i);
+            debug.simPrintf(debugFlag(), "multiplier %d: %.5f %.5f\n", i, convWeight, convPixel);
+            multiplierOutputs.add(optimization.pipeline(convWeight * convPixel));
+        }
+
+        if (convLoopIterations == 1) {
+            output <== Utils.treeReduceAdd(multiplierOutputs);
+        } else {
+            DFEVar prev = (loopIndex.eq(0))
+                    ? constant.var(GlobalConfig.dataType, 0)
+                    : stream.offset(output, -pipelineLength);
+            DFEVar newSum = Utils.treeReduceAdd(multiplierOutputs);
+            debug.simPrintf(debugFlag(), "prev = %.5f\n", prev);
+            debug.simPrintf(debugFlag(), "newSum = %.5f\n", newSum);
+
+            output <== newSum + prev;
+        }
+    }
+
+    private DFEVar getConvWeight(int multiplierNumber) {
+        ArrayList<DFEVar> l = new ArrayList<DFEVar>();
+
+        for (int i = multiplierNumber * convLoopIterations ;
+                (i < (multiplierNumber + 1) * convLoopIterations) && (i < kernelDim * kernelDim);
+                i++) {
+            l.add(input_weights[i]);
+        }
+
+        while (l.size() < convLoopIterations) {
+            l.add(constant.var(GlobalConfig.dataType, 0));
+        }
+
+        if (l.size() == 1) {
+            return l[0];
+        } else {
+            return control.mux(
+                loopIndex,
+                l.toArray(new DFEVar[l.size()]));
+        }
+    }
+
+    private DFEVar getConvPixel(int multiplierNumber) {
+        ArrayList<DFEVar> l = new ArrayList<DFEVar>();
+        for (int i = multiplierNumber * convLoopIterations ;
+                i < (multiplierNumber + 1) * convLoopIterations && i < kernelDim * kernelDim;
+                i++) {
+            l.add(input_pixels[i]);
+        }
+
+        while (l.size() < convLoopIterations) {
+            l.add(constant.var(GlobalConfig.dataType, 0));
+        }
+
+        if (l.size() == 1) {
+            return l[0];
+        } else {
+            return control.mux(loopIndex, l.toArray(new DFEVar[l.size()]));
+        }
+    }
+
+}

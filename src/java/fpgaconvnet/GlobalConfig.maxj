@@ -1,0 +1,13 @@
+package fpgaconvnet;
+// package nothing;
+
+import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEFix.SignMode;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEType;
+
+public class GlobalConfig {
+    public static final int intBits = 6;
+    public static final int fracBits = 12;
+    public static final DFEType dataType = Kernel.dfeFix(intBits, fracBits, SignMode.TWOSCOMPLEMENT);
+    public static final DFEType cpuType = Kernel.dfeFloat(8, 24);
+}
