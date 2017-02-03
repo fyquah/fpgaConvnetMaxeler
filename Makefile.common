@@ -135,6 +135,22 @@ RESOURCE_BENCH_HELPERS=resource_bench_helper.cpp resource_bench_helper.h
 $(RESOURCE_BENCH_HELPERS):
 	python ../scripts/generate_resource_benchmarks.py
 
+
+# Poor man's solution to out-of-source compilation... This is necessary as we
+# Use protos in our source. java get confused when we put different directories
+# separately (We have protos which are generated). A better solution is to use
+# symlinks (as in bazel).
+sync_source:
+	cd ../src/maxj && rsync -R `find . -name "*.maxj"` ../build/java
+	cd ../src/maxj && rsync -R `find . -name "*.java"` ../build/java
+	cd ../src/ && rsync -R `find . -name "*.cpp"` ../build/
+	cd ../src/ && rsync -R `find . -name "*.h"` ../build/
+
+
+protos: ../protos/parameters.proto
+	mkdir -p java/
+	protoc $< -I ../protos --java_out=../src/java/
+
 # ---- tests ----
 
 test:
