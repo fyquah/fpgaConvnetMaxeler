@@ -127,17 +127,17 @@ sync_source:
 	cd ../src/ && rsync -R `find . -name "*.cpp"` ../build/
 	cd ../src/ && rsync -R `find . -name "*.h"` ../build/
 
-
 protos: ../protos/parameters.proto
 	mkdir -p java/
 	protoc $< -I ../protos --java_out=../src/java/
 
 # ---- tests ----
 
-test: sync_source
+unit_tests: sync_source
 	$(MAXJC) $(JFLAGS) $(ENGINEFILES) $(TESTENGINEFILES)
-	MAXAPPJCP='./java/:$(CP)' MAXSOURCEDIRS='./java/:./javatest/' $(MAXJAVARUN) \
-		  -v -m 1800 fpgaconvnet.RunUnitTests DFEModel=$(DFEModel) \
+	MAXAPPJCP='.:$(CP)' MAXSOURCEDIRS='./java/:./javatest/' $(MAXJAVARUN) \
+		  -v -m 1800 fpgaconvnet.RunUnitTests \
+		  DFEModel=$(DFEModel) \
 		  maxFileName=test \
 		  target='DFE_SIM' \
 		  enableMPCX=$(MPCX) \
