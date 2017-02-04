@@ -1,4 +1,5 @@
 package fpgaconvnet;
+
 import java.util.List;
 import java.util.ArrayList;
 
@@ -8,6 +9,8 @@ import com.maxeler.maxcompiler.v2.managers.custom.CustomManager;
 import com.maxeler.maxcompiler.v2.managers.custom.blocks.KernelBlock;
 import com.maxeler.maxcompiler.v2.managers.engine_interfaces.EngineInterface;
 import com.maxeler.maxcompiler.v2.managers.engine_interfaces.InterfaceParam;
+
+import fpgaconvnet.protos.Parameters.ConvolutionParameter;
 
 
 public class ConvolutionLayer {

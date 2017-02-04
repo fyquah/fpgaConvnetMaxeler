@@ -31,7 +31,7 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
     private final Dimension inputDimension;
     private final int foldingFactor, kernelDim;
     private final DFEVar row, col, iter;
-    private final List<List<float[][]>> convolutionWeights;
+    private final Memory<DFEVar> convolutionWeightsRom;
     private final CounterChain masterChain;
 
     public ConvolutionSchedulerKernel(
@@ -42,7 +42,10 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
         inputDimension = params.inputDim;
         kernelDim = params.kernelDim;
         foldingFactor = params.foldingFactor;
-        convolutionWeights = params.getKernels();
+        int numberOfWeights = (kernelDim * kernelDim * inputDimension.channels()
+                * inputDimension.channels());
+        convolutionWeightsRom = mem.alloc(GlobalConfig.dataType, numberOfWeights);
+        convolutionWeightsRom.mapToCPU("mappedRom");
         masterChain = control.count.makeCounterChain();
         inputVectorType = new DFEVectorType<DFEVar>(
                 GlobalConfig.dataType,
@@ -60,12 +63,9 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
             output_y.add(outputVectorType.newInstance(this));
         }
 
-        row = Utils.chainCounterOrZero(
-                this, masterChain, inputDimension.height());
-        col = Utils.chainCounterOrZero(
-                this, masterChain, inputDimension.width());
-        iter = Utils.chainCounterOrZero(
-                this, masterChain, getLoopIterations());
+        row = Utils.chainCounterOrZero(this, masterChain, inputDimension.height());
+        col = Utils.chainCounterOrZero(this, masterChain, inputDimension.width());
+        iter = Utils.chainCounterOrZero(this, masterChain, getLoopIterations());
 
         initSlidingWindow();
         initOutputs();
@@ -175,15 +175,16 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
         return control.mux(iter, arr);
     }
 
-    protected DFEVector<DFEVar> getConvWeightsVector(
-            int outputChannel, int inputChannel) {
+    protected DFEVector<DFEVar> getConvWeightsVector(int outputChannel, int inputChannel) {
         DFEVector<DFEVar> vector = outputVectorType.newInstance(this);
-        float[][] weights = convolutionWeights[outputChannel][inputChannel];
 
         for (int i = 0 ; i < kernelDim ; i++) {
             for (int j = 0 ; j < kernelDim ; j++) {
-                vector[i * kernelDim + j] <== constant.var(
-                        GlobalConfig.dataType, weights[i][j]);
+                int address = j;
+                address += (i * kernelDim);
+                address += (inputChannel * kernelDim * kernelDim);
+                address += (outputChannel * inputDimension.channels() * kernelDim * kernelDim);
+                vector[i * kernelDim + j] <== convolutionWeightsRom.read(constant.var(address));
             }
         }
 
@@ -204,15 +205,7 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
             for (int j = 0 ; j < kernelDim ; j++) {
                 Memory<DFEVar> table = mem.alloc(
                         GlobalConfig.dataType, getLoopIterations());
-                double[] data = new double[getLoopIterations()];
-
-                for (int idx = 0 ; idx < indices.size() ; idx++) {
-                    int outputChannel = indices[idx].out;
-                    int inputChannel = indices[idx].in;
-                    data[idx] = convolutionWeights[outputChannel][inputChannel][i][j];
-                }
-
-                table.setContents(data);
+                table.mapToCPU("mappedRom");
                 output[i * kernelDim + j] <== table.read(iter);
             }
         }
