@@ -1,0 +1,149 @@
+/* Most of the logic of resource alloc should go here. */
+
+package fpgaconvnet;
+
+import java.lang.RuntimeException;
+
+import fpgaconvnet.protos.Parameters;
+import fpgaconvnet.protos.Parameters.Network;
+import fpgaconvnet.protos.Parameters.LayerParameter;
+import fpgaconvnet.protos.Parameters.ConvolutionParameter;
+import fpgaconvnet.protos.Parameters.PoolingParameter;
+
+
+public class ParametersTransformer {
+    private Parameters.Network networkParameters;
+
+    public ParametersTransformer(Parameters.Network networkParametersIn) {
+        networkParameters = networkParametersIn;
+    }
+
+    private void raiseError(int layer_id, String message) throws RuntimeException {
+        throw new RuntimeException(String.format("Invalid layer spec at layer %d => %s",
+                                         layer_id, message));
+    }
+
+    private LayerParameter parseLayer(int layer_id, LayerParameter layerParameter,
+                                      LayerParameter previousLayer) {
+        LayerParameter.Builder builder = LayerParameter.newBuilder();
+        int inputHeight = 0;
+        int inputWidth = 0;
+        int numInputs = 0;
+        int numOutputs = 0;
+        builder.mergeFrom(layerParameter);
+
+        /* Generic parameters (layer-type independent)
+         * - inputHeight
+         * - inputWidth
+         * - numInputs
+         * Layer-Dependent parameters
+         * - outputHeight
+         * - outputWidth
+         * - numOutputs
+         */
+        if (layer_id == 0) {
+            if (!layerParameter.hasInputHeight()
+                    || !layerParameter.hasInputWidth()
+                    || !layerParameter.hasNumInputs()) {
+                raiseError(layer_id,
+                           "First layer must specify the input height, width and num_inputs ("
+                           + "i.e: The number of channels)");
+            }
+            inputHeight = layerParameter.getInputHeight();
+            inputWidth = layerParameter.getInputWidth();
+            numInputs = layerParameter.getNumInputs();
+        } else {
+            if (layer_id - 1 != previousLayer.getLayerId()) {
+                raiseError(layer_id, "previousLayer.getLayerId() != layer_id - 1.");
+            }
+            if (previousLayer == null) {
+                raiseError(layer_id, "previousLayer in layer other than the first layer must not "
+                                     + "be null");
+            }
+            if (layerParameter.hasInputHeight()
+                    && previousLayer.getOutputHeight() != layerParameter.getInputHeight()) {
+                raiseError(layer_id,
+                           String.format("Input height mismatch - expecting %d but got %d instead",
+                                         previousLayer.getOutputHeight(),
+                                         layerParameter.getInputHeight()));
+            }
+            if (layerParameter.hasInputWidth()
+                    && previousLayer.getOutputWidth() != layerParameter.getInputWidth()) {
+                raiseError(layer_id,
+                           String.format("Input Width mismatch - expecting %d but got %d instead",
+                                         previousLayer.getOutputWidth(),
+                                         layerParameter.getInputWidth()));
+            }
+            if (layerParameter.hasNumInputs()
+                    && previousLayer.getNumOutputs() != layerParameter.getNumInputs()) {
+                raiseError(layer_id,
+                           String.format("Num Inputs mismatch - expecting %d but got %d instead",
+                                         previousLayer.getNumOutputs(),
+                                         layerParameter.getNumInputs()));
+            }
+
+            inputHeight = previousLayer.getOutputHeight();
+            inputWidth = previousLayer.getOutputWidth();
+            numInputs = previousLayer.getNumOutputs();
+        }
+
+        /* Calculate the new dimensions based on the data that we have on the ops. */
+        LayerParameter.ParamsCase paramsCase = layerParameter.getParamsCase();
+        int expectedHeight = -1;
+        int expectedWidth = -1;
+        if (paramsCase.equals(LayerParameter.ParamsCase.CONV)) {
+            ConvolutionParameter convParams = layerParameter.getConv();
+            if (!convParams.hasKernelSize() || convParams.getKernelSize() % 2 == 0) {
+                raiseError(layer_id, "Missing /invalid conv kernel_size");
+            }
+            if (!layerParameter.hasNumOutputs() || layerParameter.getNumOutputs() == 0) {
+                raiseError(layer_id, "numOutputs must be a positive integer in conv layers!");
+            }
+            numOutputs = layerParameter.getNumOutputs();
+            expectedHeight = inputHeight + 1 - convParams.getKernelSize();
+            expectedWidth = inputWidth + 1 - convParams.getKernelSize();
+            builder.setConv(convParams);
+        } else if (paramsCase.equals(LayerParameter.ParamsCase.POOL)) {
+            PoolingParameter poolParams = layerParameter.getPool();
+            if (layerParameter.getInputHeight() % poolParams.getDim() != 0 ||
+                        layerParameter.getInputWidth() % poolParams.getDim() != 0) {
+                raiseError(layer_id, "Pool dim doesn't divide the layer height / width.");
+            }
+            if (layerParameter.hasNumOutputs() &&
+                    layerParameter.getNumOutputs() != numInputs) {
+                    raiseError(layer_id,
+                               "num_inputs and num_outputs for pooling layer should be the same");
+            }
+            numOutputs = numInputs;
+            expectedHeight = inputHeight / poolParams.getDim();
+            expectedWidth = inputWidth / poolParams.getDim();
+            builder.setPool(poolParams);
+        } else {
+            raiseError(layer_id, "Either pool of conv has to be set!");
+        }
+
+        builder.setInputHeight(inputHeight);
+        builder.setInputWidth(inputWidth);
+        builder.setNumInputs(numInputs);
+        builder.setOutputHeight(expectedHeight);
+        builder.setOutputWidth(expectedWidth);
+        builder.setNumOutputs(numOutputs);
+        builder.setLayerId(layer_id);
+        return builder.build();
+    }
+
+    public Parameters.Network transform() throws RuntimeException {
+        Parameters.Network.Builder networkBuilder = Parameters.Network.newBuilder();
+        int layerCount = networkParameters.getLayerCount();
+        if (layerCount == 0) {
+            raiseError(0, "Number of layers in networkParameters must be greater than 1");
+        }
+        LayerParameter previousLayer = parseLayer(0, networkParameters.getLayer(0), null);
+        networkBuilder.addLayer(previousLayer);
+        for (int i = 1; i < layerCount ; i++) {
+            previousLayer = parseLayer(i, networkParameters.getLayer(i), previousLayer);
+            networkBuilder.addLayer(previousLayer);
+        }
+        return networkBuilder.build();
+    }
+}

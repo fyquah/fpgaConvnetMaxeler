@@ -9,10 +9,22 @@ message Network
 
 message LayerParameter
 {
+    optional uint32 input_height = 3;
+    optional uint32 input_width = 4;
+    optional uint32 num_inputs = 5;
+    optional uint32 num_outputs = 6;
+
     oneof params {
         ConvolutionParameter conv = 1;
         PoolingParameter pool = 2;
     }
+
+    /* Used internally - users of this function are _not_ expected to complete this,
+     * values here will be ignored by the runtime.
+     */
+    optional uint32 output_height = 9;
+    optional uint32 output_width = 10;
+    optional uint32 layer_id = 11;
 }
 
 
@@ -28,10 +40,6 @@ message ConvolutionParameter
     /* input_height, input_width and num_inputs must be provided at the input layer and are
      * optional at subsequent layers. They will be used for checking if they are provided.
      */
-    optional uint32 input_height = 3;
-    optional uint32 input_width = 4;
-    optional uint32 num_inputs = 5;
-    optional uint32 num_outputs = 6;
     optional uint32 kernel_size = 7;
     optional Activation activation = 8 [default = None];
 }
@@ -48,11 +56,4 @@ message PoolingParameter
     optional PoolingType type = 1 [default = Max];
     /* 2D Pooling supported only */
     optional uint32 dim = 2;
-
-    /* input_height, input_width and num_inputs must be provided at the input layer and are
-     * optional at subsequent layers. They will be used for checking if they are provided.
-     */
-    optional uint32 input_height = 3;
-    optional uint32 input_width = 4;
-    optional uint32 num_inputs = 5;
 }

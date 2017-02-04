@@ -12,6 +12,7 @@ import com.maxeler.maxcompiler.v2.managers.BuildConfig;
 import com.maxeler.maxcompiler.v2.managers.custom.CustomManager;
 
 import fpgaconvnet.protos.Parameters;
+import fpgaconvnet.protos.Parameters.Network;
 import fpgaconvnet.protos.Parameters.LayerParameter;
 import fpgaconvnet.protos.Parameters.ConvolutionParameter;
 import fpgaconvnet.protos.Parameters.PoolingParameter;
@@ -91,9 +92,9 @@ public class GenericNetworkBuilder {
             String protoText = readFile(descriptorFileName);
             Parameters.Network.Builder networkParamsBuilder = Parameters.Network.newBuilder();
             TextFormat.getParser().merge(protoText, networkParamsBuilder);
-            Parameters.Network networkParameters = networkParamsBuilder.build();
+            Parameters.Network networkParameters = new ParametersTransformer(
+                    networkParamsBuilder.build()).transform();
             System.out.println(networkParameters.toString());
-
         } catch (IOException e) {
             System.out.println(e.toString());
             System.out.println("Invalid file name " + descriptorFileName);
