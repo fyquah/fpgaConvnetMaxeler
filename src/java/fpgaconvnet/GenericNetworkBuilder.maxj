@@ -12,7 +12,20 @@ import com.maxeler.maxcompiler.v2.managers.BuildConfig;
 import com.maxeler.maxcompiler.v2.managers.custom.CustomManager;
 
 
-public class fpgaConvNetMaxelerManager {
+public class GenericNetworkBuilder {
+    public static class NetworkEngineParameters extends EngineParameters {
+        private final String s_descriptor = "descriptor";
+
+        @Override
+        protected void declarations() {
+            declareParam(s_descriptor, DataType.STRING, "");
+        }
+
+        public String getDescriptor() {
+            return getParam(s_testKlass);
+        }
+    }
+
     public static void resource_bench(String[] args) {
         ResourceBenchmarkParameters params = new ResourceBenchmarkParameters(args);
         ResourceBenchmarkManager manager = new ResourceBenchmarkManager(
@@ -61,16 +74,8 @@ public class fpgaConvNetMaxelerManager {
     // }
 
     public static void main(String[] args) {
-        String[] x = new String[args.length - 1];
-
-        for (int i = 1 ; i < args.length ; i++) {
-            x[i-1] = args[i];
-        }
-
-        if (args[0].equals("le_net")) le_net(x);
-        else if (args[0].equals("resource_bench")) resource_bench(x);
-        // TODO(ADD_NETWORK): Add additional network here
-        // else if(args[0].equals("my_new_network")) my_new_network(x);
+        NetworkEngineParameters params = new NetworkEngineParameters(args);
+        System.out.println(params.getDescriptor());
     }
 
 }

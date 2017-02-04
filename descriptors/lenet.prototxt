@@ -1,0 +1,13 @@
+LayerParameter {
+    type: "Convolution"
+
+    foldingFactor: 5
+    kernelFoldingFactor: 5
+
+    input_height: 28
+    input_width: 28
+    num_inputs: 1
+    num_outputs: 20
+    kernel_size: 5
+    activation: "Relu"
+}

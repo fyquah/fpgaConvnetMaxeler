@@ -150,5 +150,4 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
             return control.mux(loopIndex, l.toArray(new DFEVar[l.size()]));
         }
     }
-
 }

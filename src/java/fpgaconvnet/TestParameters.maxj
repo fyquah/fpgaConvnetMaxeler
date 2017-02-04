@@ -6,25 +6,27 @@ import java.util.ArrayList;
 public class TestParameters extends EngineParameters {
     private static final String s_testKlass = "testKlass";
 
-
     public static class Arg {
-        public final String klass;
-        public final String method;
+        private final String klass;
+        private final String method;
 
         public Arg(String a, String b) {
             klass = a;
             method = b;
         }
+
+        public String getKlass() {
+            return klass;
+        }
+
+        public String getMethod() {
+            return method;
+        }
     }
 
     public static List<Arg> parseKlassArg(String s) {
         ArrayList<Arg> ret = new ArrayList<Arg>();
-
-        if (s.equals( "~")) {
-            return ret;
-        }
-
-        String[] klasses = s.substring(1).split(";");
+        String[] klasses = s.replaceAll("\\s+", " ").split(" ");
 
         for (int i = 0 ; i < klasses.length ; i++) {
             String[] x = klasses[i].split("#");
@@ -40,7 +42,6 @@ public class TestParameters extends EngineParameters {
 
         return ret;
     }
-
 
     public TestParameters(String[] args) {
         super(args);
