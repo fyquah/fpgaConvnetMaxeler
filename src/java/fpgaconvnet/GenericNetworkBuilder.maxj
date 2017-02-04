@@ -1,15 +1,20 @@
 package fpgaconvnet;
-// package nothing;
 
-import org.junit.runner.JUnitCore;
-import org.junit.runner.Request;
-import org.junit.runner.Result;
-import org.junit.runner.notification.Failure;
+import java.io.BufferedReader;
+import java.io.FileReader;
+import java.io.IOException;
 import java.util.List;
+
+import com.google.protobuf.TextFormat;
 
 import com.maxeler.maxcompiler.v2.build.EngineParameters;
 import com.maxeler.maxcompiler.v2.managers.BuildConfig;
 import com.maxeler.maxcompiler.v2.managers.custom.CustomManager;
+
+import fpgaconvnet.protos.Parameters;
+import fpgaconvnet.protos.Parameters.LayerParameter;
+import fpgaconvnet.protos.Parameters.ConvolutionParameter;
+import fpgaconvnet.protos.Parameters.PoolingParameter;
 
 
 public class GenericNetworkBuilder {
@@ -22,7 +27,11 @@ public class GenericNetworkBuilder {
         }
 
         public String getDescriptor() {
-            return getParam(s_testKlass);
+            return getParam(s_descriptor);
+        }
+
+        public NetworkEngineParameters(String[] args) {
+            super(args);
         }
     }
 
@@ -54,29 +63,40 @@ public class GenericNetworkBuilder {
         buildConfig.setMPPRCostTableSearchRange(params.getMPPRStartCT(), params.getMPPREndCT());
         buildConfig.setMPPRParallelism(params.getMPPRThreads());
         buildConfig.setMPPRRetryNearMissesThreshold(params.getMPPRRetryThreshold());
-
         manager.createSLiCinterface(manager.interfaceDefault());
         manager.build();
     }
 
-    // TODO(ADD_NETWORK): Adding a new work should look something like this:
-    // public static void le_net(String[] args) {
-    //     EngineParameters params = new EngineParameters(args);
-    //     MyNewNetworkManager manager = new MyNewNetworkManager(params);
-    //     BuildConfig buildConfig = manager.getBuildConfig();
-    //     buildConfig.setBuildEffort(BuildConfig.Effort.VERY_HIGH);
-    //     buildConfig.setMPPRCostTableSearchRange(params.getMPPRStartCT(), params.getMPPREndCT());
-    //     buildConfig.setMPPRParallelism(params.getMPPRThreads());
-    //     buildConfig.setMPPRRetryNearMissesThreshold(params.getMPPRRetryThreshold());
+    private static String readFile(String fileName) throws IOException {
+        BufferedReader br = new BufferedReader(new FileReader(fileName));
+        try {
+            StringBuilder sb = new StringBuilder();
+            String line = br.readLine();
 
-    //     manager.createSLiCinterface(manager.interfaceDefault());
-    //     manager.build();
-    // }
+            while (line != null) {
+                sb.append(line);
+                sb.append("\n");
+                line = br.readLine();
+            }
+            return sb.toString();
+        } finally {
+            br.close();
+        }
+    }
 
     public static void main(String[] args) {
         NetworkEngineParameters params = new NetworkEngineParameters(args);
-        System.out.println(params.getDescriptor());
-    }
+        String descriptorFileName = params.getDescriptor();
+        try {
+            String protoText = readFile(descriptorFileName);
+            Parameters.Network.Builder paramsBuilder = Parameters.Network.newBuilder();
+            TextFormat.getParser().merge(protoText, paramsBuilder);
+            Parameters.Network networkParameters = paramsBuilder.build();
 
+        } catch (IOException e) {
+            System.out.println(e.toString());
+            System.out.println("Invalid file name " + descriptorFileName);
+        }
+    }
 }
 

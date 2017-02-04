@@ -3,9 +3,6 @@ package fpgaconvnet;
 import java.util.List;
 
 import org.junit.runner.JUnitCore;
-import org.junit.runner.Request;
-import org.junit.runner.Result;
-import org.junit.runner.notification.Failure;
 
 
 /* Class to run all the unit tests in javatests/ */
@@ -24,7 +21,7 @@ public class RunUnitTests {
                 klasses[i] = Class.forName(testKlasses[i].getKlass());
             }
 
-            Result result = JUnitCore.runClasses(klasses);
+            JUnitCore.runClasses(klasses); /* Take the results ? */
         } catch (ClassNotFoundException e) {
             System.out.println("UnitTestClass not found - are you sure you are using the right class?");
         }

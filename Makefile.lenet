@@ -14,7 +14,7 @@ $(LENET_SIM_MAXFILE): $(ENGINEFILES) sync_source
 		  DFEModel=$(DFEModel) \
 		  maxFileName=$(LENET_NAME) \
 		  target="DFE_SIM" \
-		  descriptor="../descriptor/lenet.prototxt" \
+		  descriptor="../descriptors/lenet.prototxt" \
 		  enableMPCX=$(MPCX)
 
 lenet_sim: $(LENET_SIM_MAXFILE)
