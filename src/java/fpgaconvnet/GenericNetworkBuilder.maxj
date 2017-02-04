@@ -96,8 +96,7 @@ public class GenericNetworkBuilder {
                     networkParamsBuilder.build()).transform();
             System.out.println(networkParameters.toString());
         } catch (IOException e) {
-            System.out.println(e.toString());
-            System.out.println("Invalid file name " + descriptorFileName);
+            e.printStackTrace();
         }
     }
 }
