@@ -1,7 +1,38 @@
 layer {
     conv: {
-        foldingFactor: 1
-        kernelFoldingFactor: 23
+        foldingFactor: 500
+        kernelFoldingFactor: 5
+
+        input_height: 28
+        input_width: 28
+        num_inputs: 1
+        num_outputs: 20
+        kernel_size: 5
         activation: Relu
+    }
+}
+layer {
+    pool: {
+        type: Max
+        dim: 2
+    }
+}
+layer {
+    conv: {
+        foldingFactor: 20
+        kernelFoldingFactor: 25
+
+        input_height: 12
+        input_width: 12
+        num_inputs: 20
+        num_outputs: 50
+        kernel_size: 5
+        activation: Relu
+    }
+}
+layer {
+    pool: {
+        type: Max
+        dim: 2
     }
 }

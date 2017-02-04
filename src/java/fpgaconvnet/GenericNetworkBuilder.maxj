@@ -89,9 +89,10 @@ public class GenericNetworkBuilder {
         String descriptorFileName = params.getDescriptor();
         try {
             String protoText = readFile(descriptorFileName);
-            Parameters.Network.Builder paramsBuilder = Parameters.Network.newBuilder();
-            TextFormat.getParser().merge(protoText, paramsBuilder);
-            Parameters.Network networkParameters = paramsBuilder.build();
+            Parameters.Network.Builder networkParamsBuilder = Parameters.Network.newBuilder();
+            TextFormat.getParser().merge(protoText, networkParamsBuilder);
+            Parameters.Network networkParameters = networkParamsBuilder.build();
+            System.out.println(networkParameters.toString());
 
         } catch (IOException e) {
             System.out.println(e.toString());

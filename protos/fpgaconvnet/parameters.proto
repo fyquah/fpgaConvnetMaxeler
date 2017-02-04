@@ -46,4 +46,13 @@ message PoolingParameter
     }
 
     optional PoolingType type = 1 [default = Max];
+    /* 2D Pooling supported only */
+    optional uint32 dim = 2;
+
+    /* input_height, input_width and num_inputs must be provided at the input layer and are
+     * optional at subsequent layers. They will be used for checking if they are provided.
+     */
+    optional uint32 input_height = 3;
+    optional uint32 input_width = 4;
+    optional uint32 num_inputs = 5;
 }
