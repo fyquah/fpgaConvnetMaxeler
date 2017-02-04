@@ -1,62 +1,49 @@
 syntax = "proto2";
 package fpgaconvnet.protos;
 
-message CompilationTarget
+message Network
 {
-  repeated LayerParameter layer = 1;
+    repeated LayerParameter layer = 1;
 }
 
 
 message LayerParameter
 {
-  extensions 100 to max;
-
-  enum Type
-  {
-    Convolution = 1;
-    Pooling = 2;
-  }
-
-  required Type type = 1;
+    oneof params {
+        ConvolutionParameter conv = 1;
+        PoolingParameter pool = 2;
+    }
 }
 
 
 message ConvolutionParameter
 {
-  extend LayerParameter {
-    optional ConvolutionParameter layerParameter = 100;
-  }
-
-  enum Activation
-  {
-    None = 1;
-    Relu = 2;
-  }
-  optional uint32 foldingFactor = 1;    // The number of Conv units to use.
-  optional uint32 kernelFoldingFactor = 2;   // the number of multipliers per conv units to use.
-  /* input_height, input_width and num_inputs must be provided at the input layer and are
-   * optional at subsequent layers. They will be used for checking if they are provided.
-   */
-  optional uint32 input_height = 3;
-  optional uint32 input_width = 4;
-  optional uint32 num_inputs = 5;
-  optional uint32 num_outputs = 6;
-  optional uint32 kernel_size = 7;
-  optional Activation activation = 8 [default = None];
+    enum Activation
+    {
+        None = 1;
+        Relu = 2;
+    }
+    optional uint32 foldingFactor = 1;        // The number of Conv units to use.
+    optional uint32 kernelFoldingFactor = 2;     // the number of multipliers per conv units to use.
+    /* input_height, input_width and num_inputs must be provided at the input layer and are
+     * optional at subsequent layers. They will be used for checking if they are provided.
+     */
+    optional uint32 input_height = 3;
+    optional uint32 input_width = 4;
+    optional uint32 num_inputs = 5;
+    optional uint32 num_outputs = 6;
+    optional uint32 kernel_size = 7;
+    optional Activation activation = 8 [default = None];
 }
 
 
 message PoolingParameter
 {
-  extend LayerParameter {
-    optional PoolingParameter layerParameter = 101;
-  }
+    enum PoolingType
+    {
+        Max = 1;
+        Average = 2;
+    }
 
-  enum PoolingType
-  {
-    Max = 1;
-    Average = 2;
-  }
-
-  optional PoolingType type = 1 [default = Max];
+    optional PoolingType type = 1 [default = Max];
 }
