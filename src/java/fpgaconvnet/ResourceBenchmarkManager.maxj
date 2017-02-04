@@ -17,6 +17,8 @@ import com.maxeler.maxcompiler.v2.managers.engine_interfaces.CPUTypes;
 import com.maxeler.maxcompiler.v2.managers.engine_interfaces.EngineInterface;
 import com.maxeler.maxcompiler.v2.managers.engine_interfaces.InterfaceParam;
 import com.maxeler.maxcompiler.v2.managers.custom.stdlib.DebugLevel;
+import com.maxeler.maxcompiler.v2.managers.BuildConfig;
+import com.maxeler.maxcompiler.v2.managers.custom.CustomManager;
 
 
 public class ResourceBenchmarkManager extends CustomManager {
@@ -160,5 +162,26 @@ public class ResourceBenchmarkManager extends CustomManager {
         ei.setStream("x", type, N * inputDimension().totalSize() * size);
         ei.setStream("y", type, N * outputDimension().totalSize() * size);
         return ei;
+    }
+
+    /* TODO(fyquah): Move this to another class / target! */
+    public static void main(String[] args) {
+        ResourceBenchmarkParameters params = new ResourceBenchmarkParameters(args);
+        ResourceBenchmarkManager manager = new ResourceBenchmarkManager(
+            params,
+            params.getConvFoldingFactor(),
+            params.getKernelFoldingFactor());
+        BuildConfig buildConfig = manager.getBuildConfig();
+        buildConfig.setBuildEffort(BuildConfig.Effort.VERY_HIGH);
+        buildConfig.setMPPRCostTableSearchRange(params.getMPPRStartCT(), params.getMPPREndCT());
+        buildConfig.setMPPRParallelism(params.getMPPRThreads());
+        buildConfig.setMPPRRetryNearMissesThreshold(params.getMPPRRetryThreshold());
+
+        CustomManager.Config config = manager.config;
+		// was previously 125 (didn't work due to failed timing)
+        config.setDefaultStreamClockFrequency(75);
+
+        manager.createSLiCinterface(manager.interfaceDefault());
+        manager.build();
     }
 }

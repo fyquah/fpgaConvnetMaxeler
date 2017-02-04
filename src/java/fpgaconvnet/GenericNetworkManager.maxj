@@ -1,0 +1,62 @@
+package fpgaconvnet;
+
+import java.io.IOException;
+import java.util.List;
+
+import com.google.protobuf.TextFormat;
+
+import com.maxeler.maxcompiler.v2.build.EngineParameters;
+import com.maxeler.maxcompiler.v2.managers.BuildConfig;
+import com.maxeler.maxcompiler.v2.managers.custom.CustomManager;
+
+import fpgaconvnet.protos.Parameters;
+import fpgaconvnet.protos.Parameters.Network;
+import fpgaconvnet.protos.Parameters.LayerParameter;
+import fpgaconvnet.protos.Parameters.ConvolutionParameter;
+import fpgaconvnet.protos.Parameters.PoolingParameter;
+
+
+public class GenericNetworkManager extends CustomManager {
+    public static class NetworkEngineParameters extends EngineParameters {
+        private final String s_descriptor = "descriptor";
+
+        @Override
+        protected void declarations() {
+            declareParam(s_descriptor, DataType.STRING, "");
+        }
+
+        public String getDescriptor() {
+            return getParam(s_descriptor);
+        }
+
+        public NetworkEngineParameters(String[] args) {
+            super(args);
+        }
+    }
+
+    private final Parameters.Network networkParameters;
+
+    public GenericNetworkManager(NetworkEngineParameters engineParameters)
+            throws IOException, TextFormat.ParseException {
+        super(engineParameters);
+        String descriptorFileName = engineParameters.getDescriptor();
+        String protoText = Utils.readFile(descriptorFileName);
+        Parameters.Network.Builder networkParamsBuilder = Parameters.Network.newBuilder();
+        TextFormat.getParser().merge(protoText, networkParamsBuilder);
+        networkParameters = new ParametersTransformer(networkParamsBuilder.build()).transform();
+    }
+
+    /* TODO(fyq14): Change to a better name. This name is terrible. */
+    public void compile() {
+
+    }
+
+    public static void main(String[] args) {
+        try {
+            new GenericNetworkManager(new NetworkEngineParameters(args)).compile();
+        } catch (Exception e) {
+            e.printStackTrace();
+            System.exit(-1);
+        }
+    }
+}
