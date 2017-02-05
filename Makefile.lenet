@@ -8,6 +8,9 @@ LENET_MAXFILE=$(MAXCOMPILER_BUILD_DIR)/$(LENET_NAME)_$(DFEModel)_DFE/results/$(L
 fpgaconvnet/mnist.o: fpgaconvnet/mnist.cpp
 	$(CPUCOMPILER) $< -c -o $@
 
+fpgaconvnet/convnet.o: fpgaconvnet/convnet.cpp
+	$(CPUCOMPILER) $< -c -o $@
+
 # ==============================
 #           Simulation
 # ==============================
@@ -33,9 +36,8 @@ fpgaconvnet/lenet_main_sim.o: fpgaconvnet/lenet_main.cpp $(LENET_SIM_MAXFILE)
 		-D__SIM__ -DDESIGN_NAME=$(LENET_NAME) -c -o $@
 
 
-lenet_sim: fpgaconvnet/lenet_main_sim.o fpgaconvnet/mnist.o \
-	    fpgaconvnet/feedforward.o fgaconvnet/convnet.o \
-	    lenet_simc.o
+lenet_sim: fpgaconvnet/mnist.o fpgaconvnet/feedforward.o fpgaconvnet/convnet.o \
+	    fpgaconvnet/lenet_sim.o fpgaconvnet/lenet_main_sim.o
 	$(CPUCOMPILER) $(ALL_FLAGS) -o $@ $^ $(LFLAGS)
 
 

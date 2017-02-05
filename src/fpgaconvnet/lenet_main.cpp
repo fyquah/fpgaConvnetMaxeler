@@ -8,9 +8,9 @@
 
 
 #ifdef __SIM__
-    const unsigned N = 10;
+    static const unsigned N = 10;
 #else
-    const unsigned N = 10000;
+    static const unsigned N = 10000;
 #endif
 
 
@@ -64,31 +64,48 @@ void report_conv_performance(timeval t_begin, timeval t_end)
 }
 
 
-void run_feature_extraction(const double *images, double *conv_out)
+void run_feature_extraction(const float *images, float *conv_out)
 {
     max_file_t *max_file = lenet_init();
     max_engine_t *dfe = max_load(max_file, "*");
     lenet_actions_t action;
     timeval t_begin, t_end;
-    const convnet::conv_layer_t conv0_layer =
-            {.kernel_size = 5, .num_inputs = 1, .num_outputs = 20};
-    const convnet::conv_layer_t conv2_layer =
-            {.kernel_size = 5, .num_inputs = 20, .num_outputs = 50};
-    double *conv0_kernels = new double[total_kernel_weights(conv_layer0)];
-    double *conv0_bias = new double[conv_layer0.num_outputs];
-    double *conv2_kernels = new double[total_kernel_weights(conv_layer2)];
-    double *conv2_bias = new double[conv_layer2.num_outputs];
+    convnet::conv_layer_t conv0_layer;
+    convnet::conv_layer_t conv2_layer;
+    double *conv0_kernels;
+    double *conv0_bias;
+    double *conv2_kernels;
+    double *conv2_bias;
 
-    convnet::load_conv_kernels(conv0_layer, conv0_kernels);
-    convnet::load_conv_bias(conv0_layer, conv0_bias);
-    convnet::load_conv_kernels(conv2_layer, conv2_kernels);
-    convnet::load_conv_bias(conv2_layer, conv2_bias);
+    conv0_layer.kernel_size = 5;
+    conv0_layer.num_inputs = 1;
+    conv0_layer.num_outputs = 20;
+    conv2_layer.kernel_size = 5;
+    conv2_layer.num_inputs = 20;
+    conv2_layer.num_outputs = 50;
+    conv0_kernels = new double[convnet::total_kernel_weights(conv0_layer)];
+    conv0_bias = new double[conv0_layer.num_outputs];
+    conv2_kernels = new double[convnet::total_kernel_weights(conv2_layer)];
+    conv2_bias = new double[conv2_layer.num_outputs];
+
+    convnet::load_kernels_from_file(
+            std::string("../test_data/lenet/weights/conv0_kernels.txt"),
+            conv0_layer, conv0_kernels);
+    convnet::load_bias_from_file(
+            std::string("../test_data/lenet/weights/conv0_bias.txt"),
+            conv0_layer, conv0_bias);
+    convnet::load_kernels_from_file(
+            std::string("../test_data/lenet/weights/conv2_kernels.txt"),
+            conv2_layer, conv2_kernels);
+    convnet::load_bias_from_file(
+            std::string("../test_data/lenet/weights/conv2_bias.txt"),
+            conv2_layer, conv2_bias);
     action.inmem_ConvolutionScheduler_0_mappedRom = conv0_kernels;
     action.inmem_ConvolutionAccumulator_0_bias_layer_0 = conv0_bias;
     action.inmem_ConvolutionScheduler_1_mappedRom = conv2_kernels;
     action.inmem_ConvolutionAccumulator_1_bias_layer_2 = conv2_bias;
     action.param_N = N;
-    action.instream_x = x;
+    action.instream_x = images;
     action.outstream_y = conv_out;
 
     std::cout << "Running Feature Extraction ... " << std::endl;
@@ -116,8 +133,8 @@ int main() {
         std::cout << "Reading images ..." << std::endl;
         read_mnist_images(images, "./mnist/t10k-images-idx3-ubyte");
         read_mnist_labels(labels, "./mnist/t10k-labels-idx1-ubyte");
-        for (int i = 0 ; i < N ; i++) {
-            for (int j = 0 ; j < 784 ; j++) {
+        for (unsigned i = 0 ; i < N ; i++) {
+            for (unsigned j = 0 ; j < 784 ; j++) {
                 x[i * 784 + j] = (float) images[i][j];
             }
         } 
@@ -133,7 +150,7 @@ int main() {
 
         int *klasses = get_row_max_index(N, 10, c);
         int total_correct = 0;
-        for (int i = 0 ; i < N ; i++) {
+        for (unsigned i = 0 ; i < N ; i++) {
             if (klasses[i] == labels[i]) {
                 total_correct++;
             }

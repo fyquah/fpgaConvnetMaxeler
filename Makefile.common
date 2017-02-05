@@ -85,8 +85,11 @@ MAXOS_SIM=$(MAXELEROSDIR_SIM)/lib/libmaxeleros.so
 
 CP='../lib/maxpower.jar:../lib/junit-4.12.jar:../lib/hamcrest-core-1.3.jar:../lib/protobuf-java-3.0.0.jar'
 JFLAGS=-cp '$(MAXCOMPILERDIR)/lib/MaxCompiler.jar:$(CP)' -1.6 -d . -nowarn
-CFLAGS= $(COMPILER_CFLAGS) $(OPT_FLAGS) -Wall -I${MAXCOMPILERDIR}/include -I${MAXCOMPILERDIR}/include/slic -I${MAXELEROSDIR}/include -D_XOPEN_SOURCE=600
-LFLAGS=-L${MAXCOMPILERDIR}/lib -L${MAXELEROSDIR}/lib -lmaxeleros -lslic -lm -lpthread
+INCFLAGS =  -I../src/ -I${MAXCOMPILERDIR}/include \
+	-I${MAXCOMPILERDIR}/include/slic -I${MAXELEROSDIR}/include 
+CFLAGS= $(COMPILER_CFLAGS) $(OPT_FLAGS) -Wall -D_XOPEN_SOURCE=600 $(INCFLAGS)
+LFLAGS=-L${MAXCOMPILERDIR}/lib -L${MAXELEROSDIR}/lib -lmaxeleros \
+       -lslic -lm -lpthread -lstdc++
 
 # Add this on the command line to pass to make when compiling
 # Useful for debug/optimization flags
