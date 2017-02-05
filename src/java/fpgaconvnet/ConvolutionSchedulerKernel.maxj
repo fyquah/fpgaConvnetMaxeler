@@ -45,8 +45,7 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
         inputDimension = Utils.layerInputDimension(params);
         kernelDim = params.getConv().getKernelSize();
         foldingFactor = params.getConv().getFoldingFactor();
-        numberOfWeights = (kernelDim * kernelDim * inputDimension.channels()
-                * inputDimension.channels());
+        numberOfWeights = (params.getNumOutputs() * params.getNumInputs() * kernelDim * kernelDim);
         convolutionWeightsRom = mem.alloc(GlobalConfig.dataType, numberOfWeights);
         convolutionWeightsRom.mapToCPU("mappedRom");
         masterChain = control.count.makeCounterChain();
