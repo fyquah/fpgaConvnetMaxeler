@@ -11,6 +11,7 @@ import java.util.Scanner;
 import java.lang.RuntimeException;
 
 import com.maxeler.maxcompiler.v2.build.EngineParameters;
+import com.maxeler.maxcompiler.v2.kernelcompiler.KernelParameters;
 import com.maxeler.maxcompiler.v2.managers.custom.CustomManager;
 import com.maxeler.maxcompiler.v2.managers.custom.DFELink;
 import com.maxeler.maxcompiler.v2.managers.custom.blocks.KernelBlock;
@@ -30,20 +31,28 @@ public class NetworkManager extends CustomManager {
     private DfeInputAlligner inputAllignerKernel;
     private DfeOutputAlligner outputAllignerKernel;
     private KernelBlock inputAllignerBlock, outputAllignerBlock;
+    /* NetworkParameters here are completely filled, (ie: earlier stages of the compilation process
+     * has populated the parameters appropriately.
+     */
     private Parameters.Network networkParameters;
 
-    private NetworkParameters[] getParameters() {
-        return null;
+    private static boolean isConvLayer(Parameters.LayerParameter layer) {
+        return layer.getParamsCase().equals(Parameters.LayerParameter.ParamsCase.CONV);
+    }
+
+    private static boolean isPoolLayer(Parameters.LayerParameter layer) {
+        return layer.getParamsCase().equals(Parameters.LayerParameter.ParamsCase.POOL);
     }
 
     private Dimension inputDimension() {
-        NetworkParameters[] paramsArray = getParameters();
-        return paramsArray[0].inputDimension();
+        Parameters.LayerParameter layer = networkParameters.getLayer(0);
+        return new Dimension(layer.getInputHeight(), layer.getInputWidth(), layer.getNumInputs());
     }
 
     private Dimension outputDimension() {
-        NetworkParameters[] paramsArray = getParameters();
-        return paramsArray[paramsArray.length - 1].inputDimension();
+        Parameters.LayerParameter layer = networkParameters.getLayer(
+                networkParameters.getLayerCount() - 1);
+        return new Dimension(layer.getOutputHeight(), layer.getOutputWidth(), layer.getNumOutputs());
     }
 
     public EngineInterface interfaceDefault() {
@@ -53,95 +62,64 @@ public class NetworkManager extends CustomManager {
         InterfaceParam  N    = ei.addParam("N", CPUTypes.INT);
 
         ei.setTicks("DfeInputAlligner", N * inputDimension().totalSize());
-        NetworkParameters[] paramsArray = getParameters();
         int poolCount = 1;
         int convCount = 1;
-        for (int i = 0 ; i < paramsArray.length ; i++) {
-            if (paramsArray[i] instanceof ConvolutionParameters) {
+        for (int i = 0 ; i < networkParameters.getLayerCount() ; i++) {
+            Parameters.LayerParameter layer = networkParameters.getLayer(i);
+            if (isConvLayer(layer)) {
                 convolutionLayers[convCount-1].setKernelTimings(ei, N);
                 convCount++;
-            } else if (paramsArray[i] instanceof PoolingParameters) {
+            } else if (isPoolLayer(layer)) {
                 ei.setTicks("pool" + poolCount, N * poolingKernels[poolCount - 1].cyclesPerImage());
                 poolCount++;
-            } else {
-                // Code execution should not come here ...
-                throw new RuntimeException("Unknown params type");
             }
         }
-        ei.setStream(
-                "x", type,
-                N * inputDimension().totalSize() * size);
-        ei.setStream(
-                "y", type,
-                N * outputDimension().totalSize() * size);
+        ei.setStream("x", type, N * inputDimension().totalSize() * size);
+        ei.setStream("y", type, N * outputDimension().totalSize() * size);
 
         return ei;
     }
 
     private void setupKernels() {
-        NetworkParameters[] paramsArray = getParameters();
         int poolCount = 1;
-
         inputAllignerKernel = new DfeInputAlligner(
-            makeKernelParameters("DfeInputAlligner"),
-            paramsArray[0].inputDimension().channels()
-        );
-        for (int i = 0 ; i < paramsArray.length ; i++) {
-            if (paramsArray[i] instanceof ConvolutionParameters) {
-                convolutionLayers.add(
-                        new ConvolutionLayer((ConvolutionParameters) paramsArray[i], this));
-            } else if (paramsArray[i] instanceof PoolingParameters) {
-                poolingKernels.add(
-                        new PoolingLayerKernel(
-                        makeKernelParameters("pool" + poolCount),
-                        (PoolingParameters) paramsArray[i]));
+            makeKernelParameters("DfeInputAlligner"), inputDimension().channels());
+        for (int i = 0 ; i < networkParameters.getLayerCount() ; i++) {
+            Parameters.LayerParameter layer = networkParameters.getLayer(i);
+            if (isConvLayer(layer)) {
+                convolutionLayers.add(new ConvolutionLayer(layer, this));
+            } else if (isPoolLayer(layer)) {
+                KernelParameters kernelParameters = makeKernelParameters("pool" + poolCount);
+                poolingKernels.add(new PoolingLayerKernel(kernelParameters , layer));
                 poolCount++;
-            } else {
-                // Code execution should not come here ...
-                throw new RuntimeException("Unknown params type");
             }
         }
         outputAllignerKernel = new DfeOutputAlligner(
-            makeKernelParameters("DfeOutputAlligner"),
-            paramsArray[paramsArray.length - 1].outputDimension().channels()
-        );
+            makeKernelParameters("DfeOutputAlligner"), outputDimension().channels());
     }
 
     private void linkKernels() {
         DFELink cpuInputLink = addStreamFromCPU("x");
         DFELink cpuOutputLink = addStreamToCPU("y");
-        NetworkParameters[] paramsArray = getParameters();
         int poolingUnitId = 0;
         int convLayerId = 0;
 
         inputAllignerBlock.getInput("x") <== cpuInputLink;
         DFELink prevOutput = inputAllignerBlock.getOutput("y");
-
-        for (int i = 0 ; i < paramsArray.length ; i++) {
-            if (paramsArray[i] instanceof PoolingParameters) {
-                poolingKernelBlocks[poolingUnitId].getInput("x") <== prevOutput;
-                prevOutput = poolingKernelBlocks[poolingUnitId].getOutput("y");
-                poolingUnitId++;
-            } else if (paramsArray[i] instanceof ConvolutionParameters) {
+        for (int i = 0 ; i < networkParameters.getLayerCount() ; i++) {
+            Parameters.LayerParameter layer = networkParameters.getLayer(i);
+            if (isConvLayer(layer)) {
                 convolutionLayers[convLayerId].getInput() <== prevOutput;
                 prevOutput = convolutionLayers[convLayerId].getOutput();
                 convLayerId++;
-            } else {
-                throw new RuntimeException("Unknown Params type");
+            } else if (isPoolLayer(layer)) {
+                poolingKernelBlocks[poolingUnitId].getInput("x") <== prevOutput;
+                prevOutput = poolingKernelBlocks[poolingUnitId].getOutput("y");
+                poolingUnitId++;
             }
         }
-
         outputAllignerBlock.getInput("x") <== prevOutput;
         cpuOutputLink <== outputAllignerBlock.getOutput("y");
-    }
-
-    public void describeNetwork() {
-        NetworkParameters[] paramsArray = getParameters();
-        for (int i = 0 ; i < paramsArray.length ; i++) {
-            System.out.println("====== Layer " + i + ": =====");
-            paramsArray[i].print();
-            System.out.println("");
-        }
     }
 
     public NetworkManager(EngineParameters engineParameters, Parameters.Network networkParametersIn) {
@@ -152,7 +130,8 @@ public class NetworkManager extends CustomManager {
         poolingKernelBlocks = new ArrayList<KernelBlock>();
 
         config.setDefaultStreamClockFrequency(networkParameters.getFrequency());
-        describeNetwork();
+        System.out.println("Network compilation target:");
+        System.out.println(networkParameters.toString());
         setupKernels();
         // TODO(fyq14): Make PoolingLayer class to wrap around the pooling layers kernel too.
         inputAllignerBlock = addKernel(inputAllignerKernel);
