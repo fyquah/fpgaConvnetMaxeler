@@ -36,6 +36,7 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
     private final DFEVar row, col, iter;
     private final Memory<DFEVar> convolutionWeightsRom;
     private final CounterChain masterChain;
+    private final int numberOfWeights;
 
     public ConvolutionSchedulerKernel(KernelParameters kp, LayerParameter params) {
         super(kp, params);
@@ -43,7 +44,7 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
         inputDimension = Utils.layerInputDimension(params);
         kernelDim = params.getConv().getKernelSize();
         foldingFactor = params.getConv().getFoldingFactor();
-        int numberOfWeights = (kernelDim * kernelDim * inputDimension.channels()
+        numberOfWeights = (kernelDim * kernelDim * inputDimension.channels()
                 * inputDimension.channels());
         convolutionWeightsRom = mem.alloc(GlobalConfig.dataType, numberOfWeights);
         convolutionWeightsRom.mapToCPU("mappedRom");
@@ -154,9 +155,7 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
         return newVector;
     }
 
-    protected DFEVector<DFEVar> toMuxedPixel(
-            DFEVar iter,
-            List<ConvChannelIndex> indices) {
+    protected DFEVector<DFEVar> toMuxedPixel(DFEVar iter, List<ConvChannelIndex> indices) {
 
         if (getLoopIterations() == 1) {
             Utils.assertTrue(getLoopIterations() == indices.size());
@@ -185,16 +184,15 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
                 address += (i * kernelDim);
                 address += (inputChannel * kernelDim * kernelDim);
                 address += (outputChannel * inputDimension.channels() * kernelDim * kernelDim);
-                vector[i * kernelDim + j] <== convolutionWeightsRom.read(constant.var(address));
+                vector[i * kernelDim + j] <== convolutionWeightsRom.read(
+                        constant.var(address).cast(dfeUInt(Utils.ceilLog2(numberOfWeights))));
             }
         }
 
         return vector;
     }
 
-    protected DFEVector<DFEVar> toMuxedWeight(
-            DFEVar iter,
-            List<ConvChannelIndex> indices) {
+    protected DFEVector<DFEVar> toMuxedWeight(DFEVar iter, List<ConvChannelIndex> indices) {
         if (indices.size() == 1) {
             Utils.assertTrue(indices.size() == getLoopIterations());
             return getConvWeightsVector(indices[0].out, indices[0].in);

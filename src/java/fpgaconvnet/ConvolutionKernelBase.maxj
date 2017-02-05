@@ -15,13 +15,11 @@ public abstract class ConvolutionKernelBase extends Kernel {
     private final List<ConvChannelIndex> convChannelIndices;
     private final int loopIterations;
 
-    public ConvolutionKernelBase (
-           KernelParameters kp,
-           Parameters.LayerParameter params) {
+    public ConvolutionKernelBase (KernelParameters kp, Parameters.LayerParameter params) {
         super(kp);
         loopIterations = ConvolutionLayer.calcOuterLoopIterations(params);
         convChannelIndices = ConvChannelIndex.rangeProduct(
-                params.getNumInputs(), params.getNumOutputs());
+                params.getNumOutputs(), params.getNumInputs());
     }
 
     public int getLoopIterations() {

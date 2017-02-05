@@ -11,6 +11,11 @@ public class ConvChannelIndex {
         out = o;
     }
 
+    @Override
+    public String toString() {
+        return String.format("[ConvChannelIndex out=%d in=%d]", out, in);
+    }
+
     public static List<ConvChannelIndex> rangeProduct(
             int outputChannels, int inputChannels) {
         ArrayList<ConvChannelIndex> ret = new ArrayList<ConvChannelIndex>();
