@@ -11,20 +11,21 @@ import com.maxeler.maxcompiler.v2.managers.engine_interfaces.EngineInterface;
 import com.maxeler.maxcompiler.v2.managers.engine_interfaces.InterfaceParam;
 
 import fpgaconvnet.protos.Parameters.ConvolutionParameter;
+import fpgaconvnet.protos.Parameters.LayerParameter;
 
 
 public class ConvolutionLayer {
     private static int totalLayersInstantiated = 0;
 
-    private final ConvolutionParameters params;
+    private final LayerParameter layer;
     private final int id;
     private final CustomManager manager;
     private final BoxedKernelBlock<ConvolutionSchedulerKernel> scheduler;
     private final List<BoxedKernelBlock<ConvolutionUnitKernel>> convolutionUnits;
     private final BoxedKernelBlock<ConvolutionAccumulatorKernel> accumulator;
     
-    ConvolutionLayer(ConvolutionParameters argParams, CustomManager argManager) {
-        params = argParams;
+    ConvolutionLayer(LayerParameter argLayer, CustomManager argManager) {
+        layer = argLayer;
         manager = argManager;
         id = totalLayersInstantiated++;
 
@@ -33,16 +34,16 @@ public class ConvolutionLayer {
         scheduler = new BoxedKernelBlock<ConvolutionSchedulerKernel>(
                 new ConvolutionSchedulerKernel(
                         manager.makeKernelParameters("ConvolutionScheduler_" + id),
-                                                     params));
+                                                     layer));
         accumulator = new BoxedKernelBlock<ConvolutionAccumulatorKernel>(
                 new ConvolutionAccumulatorKernel(
                         manager.makeKernelParameters("ConvolutionAccumulator_" + id),
-                                                     params));
+                                                     layer));
 
-        for (int i = 0 ; i < params.foldingFactor ; i++) {
+        for (int i = 0 ; i < layer.getConv().getFoldingFactor() ; i++) {
             convolutionUnits.add(new BoxedKernelBlock<ConvolutionUnitKernel>(new ConvolutionUnitKernel(
                     manager.makeKernelParameters("ConvolutionUnit_" + id + "_" + i),
-                    params)));
+                    layer)));
         }
 
         joinKernels();
@@ -71,7 +72,7 @@ public class ConvolutionLayer {
 
 
         /* ConvolutionUnits */
-        for (int i = 0 ; i < params.foldingFactor ; i++) {
+        for (int i = 0 ; i < layer.getConv().getFoldingFactor() ; i++) {
             InterfaceParam convPipelineLength = ei.getAutoLoopOffset(
                     convolutionUnits[i].getKernel().getName(),
                     convolutionUnits[i].getKernel().getOffsetExprName());
@@ -99,7 +100,7 @@ public class ConvolutionLayer {
     protected void joinKernels() {
 
         /* Configure from scheduler -> convolutionUnits */
-        for (int i = 0 ; i < params.foldingFactor ; i++) {
+        for (int i = 0 ; i < layer.getConv().getFoldingFactor() ; i++) {
             DFELink weightsFrom = scheduler.getBlock().getOutput(
                         scheduler.getKernel().getWeightOutputName(i));
             DFELink weightsTo = convolutionUnits[i].getBlock().getInput(
@@ -114,7 +115,7 @@ public class ConvolutionLayer {
         }
 
         /* Configure from convolutionUnits -> accumulator */
-        for (int i = 0 ; i < params.foldingFactor ; i++) {
+        for (int i = 0 ; i < layer.getConv().getFoldingFactor() ; i++) {
             DFELink from = convolutionUnits[i].getBlock()
                     .getOutput(convolutionUnits[i].getKernel().getOutputName());;
             DFELink to = accumulator.getBlock()

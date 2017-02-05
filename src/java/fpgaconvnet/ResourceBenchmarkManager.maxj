@@ -20,11 +20,14 @@ import com.maxeler.maxcompiler.v2.managers.custom.stdlib.DebugLevel;
 import com.maxeler.maxcompiler.v2.managers.BuildConfig;
 import com.maxeler.maxcompiler.v2.managers.custom.CustomManager;
 
+import fpgaconvnet.protos.Parameters.ConvolutionParameter;
+import fpgaconvnet.protos.Parameters.LayerParameter;
+
 
 public class ResourceBenchmarkManager extends CustomManager {
 
     protected static int inputHeight, inputWidth, inputChannels, outputChannels, kernelDim;
-    private final ConvolutionParameters params;
+    private final LayerParameter params;
     private final ConvolutionLayer layer;
 
     static {
@@ -50,11 +53,13 @@ public class ResourceBenchmarkManager extends CustomManager {
     }
 
     public Dimension inputDimension() {
-        return params.inputDimension();
+        return new Dimension(params.getInputHeight(), params.getInputWidth(),
+                             params.getNumInputs());
     }
 
     public Dimension outputDimension() {
-        return params.outputDimension();
+        return new Dimension(params.getOutputHeight(), params.getOutputWidth(),
+                             params.getNumOutputs());
     }
 
     private static List<List<float[][]>> getConvolutionKernels (
@@ -120,15 +125,19 @@ public class ResourceBenchmarkManager extends CustomManager {
         int kernelFoldingFactor
     ) {
         super(engineParameters);
-
-        params = new ConvolutionParameters(
-            new Dimension(inputHeight, inputWidth, inputChannels),
-            outputChannels,
-            getConvolutionKernels(outputChannels, inputChannels, kernelDim),
-            getBias(outputChannels)
-        );
-        params.kernelFoldingFactor = kernelFoldingFactor;
-        params.foldingFactor = convUnitFoldingFactor;
+        params = LayerParameter.newBuilder()
+                .setInputHeight(inputHeight)
+                .setInputWidth(inputWidth)
+                .setNumInputs(inputChannels)
+                .setOutputHeight(inputHeight - kernelDim + 1)
+                .setOutputWidth(inputWidth - kernelDim + 1)
+                .setNumOutputs(outputChannels)
+                .setConv(ConvolutionParameter.newBuilder()
+                         .setKernelSize(kernelDim)
+                         .setFoldingFactor(convUnitFoldingFactor)
+                         .setKernelFoldingFactor(kernelFoldingFactor)
+                         .build())
+                .build();
         layer = new ConvolutionLayer(params, this);
 
         DfeInputAlligner inputAllignerKernel = new DfeInputAlligner(
