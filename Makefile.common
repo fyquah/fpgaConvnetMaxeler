@@ -118,7 +118,7 @@ $(RESOURCE_BENCH_HELPERS):
 # Use protos in our source. java get confused when we put different directories
 # separately (We have protos which are generated). A better solution is to use
 # symlinks (as in bazel).
-protos: ../protos/fpgaconvnet/protos/parameters.proto
+fpgaconvnet/protos/parameters.proto: ../protos/fpgaconvnet/protos/parameters.proto
 	mkdir -p java/
 	$(PROTOC) $< -I ../protos --java_out=./java/ --python_out=./
 
