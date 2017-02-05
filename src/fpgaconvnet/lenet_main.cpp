@@ -8,7 +8,7 @@
 
 
 #ifdef __SIM__
-    static const unsigned N = 10;
+    static const unsigned N = 1;
 #else
     static const unsigned N = 10000;
 #endif
@@ -105,6 +105,7 @@ void run_feature_extraction(const float *images, float *conv_out)
     action.inmem_ConvolutionScheduler_1_mappedRom = conv2_kernels;
     action.inmem_ConvolutionAccumulator_1_bias_layer_2 = conv2_bias;
     action.param_N = N;
+    action.ticks_DfeOutputAlligner = N * 800;
     action.instream_x = images;
     action.outstream_y = conv_out;
 
