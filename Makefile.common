@@ -25,9 +25,15 @@ DFEMAXDIR=$(MAXCOMPILER_BUILD_DIR)/$(PRJ)_$(DFEModel)_DFE/results
 MAXELEROSDIR_SIM:=$(MAXCOMPILERDIR)/lib/maxeleros-sim
 
 # ---- Source files ----
-ENGINEFILES=$(shell find ./java -name "*.maxj") $(shell find ./java -name "*.java")
-TESTENGINEFILES=$(shell find ./javatest -name "*.maxj")
-CPUFILES=$(shell find . -name "*.cpp")
+SOURCE_DIRS="../src/java/:../src/javatest/:./java/"
+PROTOS=fpgaconvnet/protos/parameters.proto
+JAVA_PROTOS=java/fpgaconvnet/protos/Parameters.java
+PYTHON_PROTOS=fpgaconvnet/protos/parameters_pb2.py
+ALL_GENERATED_PROTOS=$(JAVA_PROTOS) $(PYTHON_PROTOS)
+ENGINEFILES=$(shell cd ../src && find ./java -name "*.maxj")
+TESTENGINEFILES=$(shell cd ../src && find ./javatest -name "*.maxj")
+CPUFILES=$(shell cd ../src && find . -name "*.cpp")
+VPATH=../src:../protos:.
 
 # ---- Compiler settings ----
 
@@ -110,25 +116,15 @@ include $(WHEREISROOT)/Makefile.scene
 # ---- shared ----
 
 RESOURCE_BENCH_HELPERS=resource_bench_helper.cpp resource_bench_helper.h
+
 $(RESOURCE_BENCH_HELPERS):
 	python ../scripts/generate_resource_benchmarks.py
 
-
-# Poor man's solution to out-of-source compilation... This is necessary as we
-# Use protos in our source. java get confused when we put different directories
-# separately (We have protos which are generated). A better solution is to use
-# symlinks (as in bazel).
-fpgaconvnet/protos/parameters.proto: ../protos/fpgaconvnet/protos/parameters.proto
+$(ALL_GENERATED_PROTOS): $(PROTOS)
 	mkdir -p java/
-	$(PROTOC) $< -I ../protos --java_out=./java/ --python_out=./
+	$(PROTOC) $< -I ../protos --java_out=./java --python_out=./
 
-sync_source: protos
-	cd ../src/java && rsync -R `find . -name "*.maxj"` ../../build/java/
-	cd ../src/javatest && rsync -R `find . -name "*.maxj"` ../../build/javatest/
-	cd ../src/ && rsync -R `find . -name "*.cpp"` ../build/
-	cd ../src/ && rsync -R `find . -name "*.h"` ../build/
-	echo $(JFLAGS)
-	$(MAXJC) $(JFLAGS) $(ENGINEFILES) $(TESTENGINEFILES)
+protos: $(ALL_GENERATED_PROTOS)
 
 # ---- tests ----
 ## Kernel unit tests
@@ -137,9 +133,10 @@ UNIT_TESTS = \
 	fpgaconvnet.ConvolutionSchedulerKernelTest \
 	fpgaconvnet.ConvolutionUnitKernelTest
 
-unit_tests: sync_source
-	MAXAPPJCP='.:$(CP)' MAXSOURCEDIRS='./java/:./javatest/' $(MAXJAVARUN) \
-		  fpgaconvnet.RunUnitTests  \
+unit_tests: $(ENGINEFILES) $(TESTENGINEFILES) $(JAVA_PROTOS)
+	$(MAXJC) $(JFLAGS) $^
+	MAXAPPJCP='.:$(CP)' MAXSOURCEDIRS=$(SOURCE_DIRS) \
+		  $(MAXJAVARUN) fpgaconvnet.RunUnitTests  \
 		  testKlass="$(UNIT_TESTS)" \
 		  DFEModel=$(DFEModel) \
 		  maxFileName=test \
@@ -207,7 +204,7 @@ cleandfe:
 
 clean:
 	# deleting everything except the Makefile in the build/ directory
-	find . ! -name 'Makefile' -type f -exec rm -f {} + 
+	find ./* ! -name "Makefile" -exec rm -rf {} +
 
 distcleansim: cleansim
 	rm -rf $(DIST_TRASH) $(PRJ)_$(DFEModel)_DFE_SIM

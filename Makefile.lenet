@@ -12,8 +12,9 @@ fpgaconvnet/mnist.o: fpgaconvnet/mnist.cpp
 #           Simulation
 # ==============================
 
-$(LENET_SIM_MAXFILE): $(ENGINEFILES) sync_source
-	MAXAPPJCP='.:$(CP)' MAXSOURCEDIRS="./java:./javatest" \
+$(LENET_SIM_MAXFILE): $(ENGINEFILES) $(JAVA_PROTOS)
+	$(MAXJC) $(JFLAGS) $^
+	MAXAPPJCP='.:$(CP)' MAXSOURCEDIRS=$(SOURCE_DIRS) \
 		  $(MAXJAVARUN) fpgaconvnet.GenericNetworkBuilder \
 		  DFEModel=$(DFEModel) \
 		  maxFileName=$(LENET_NAME) \
