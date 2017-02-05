@@ -21,13 +21,15 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
     private final Memory<DFEVar> biasRom;
     private final DFEVector<DFEVar> output;
     private final Dimension outputDimension;
-    private final int outputChannels, foldingFactor;
+    private final int outputChannels;
+    private final int foldingFactor;
 
     public ConvolutionAccumulatorKernel(KernelParameters kp, LayerParameter params) {
         super(kp, params);
         outputChannels = params.getNumOutputs();
         foldingFactor = params.getConv().getFoldingFactor();
         biasRom = mem.alloc(GlobalConfig.dataType, outputChannels);
+        biasRom.mapToCPU(String.format("bias_layer_%d", params.getLayerId()));
         outputDimension = Utils.layerOutputDimension(params);
 
         outputVectorType = new DFEVectorType<DFEVar>(
@@ -65,7 +67,8 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
 
         for (int i = 0 ; i < outputChannels ; i++) {
             accumulators[i].generate();
-            output[i] <== accumulators[i].output() + biasRom.read(constant.var(i));
+            DFEVar address = constant.var(dfeUInt(Utils.ceilLog2(outputChannels)), i);
+            output[i] <== accumulators[i].output() + biasRom.read(address);
         }
 
         accumulators[0].debug(debugFlag());

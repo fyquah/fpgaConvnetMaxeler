@@ -3,6 +3,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import com.maxeler.maxcompiler.v2.kernelcompiler.KernelParameters;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEType;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVector;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVectorType;
@@ -59,12 +60,10 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
         output_w = new ArrayList<DFEVector<DFEVar>>();
         output_y = new ArrayList<DFEVector<DFEVar>>();;
         slidingWindows = new SlidingWindow[inputDimension.channels()];
-
         for (int i = 0 ; i < foldingFactor; i++) {
             output_w.add(outputVectorType.newInstance(this));
             output_y.add(outputVectorType.newInstance(this));
         }
-
         row = Utils.chainCounterOrZero(this, masterChain, inputDimension.height());
         col = Utils.chainCounterOrZero(this, masterChain, inputDimension.width());
         iter = Utils.chainCounterOrZero(this, masterChain, getLoopIterations());
@@ -200,12 +199,27 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
 
         DFEVector<DFEVar> output = outputVectorType.newInstance(this);
 
+        /* We must verify that the kernels are in fact in consecutive chunks of the memory
+         * as we are going to exploit this to speed up address calculation.
+         */
+        for (int i = 1 ; i < indices.size() ; i++) {
+            boolean cond1 = (indices[i].out == indices[i - 1].out
+                             && indices[i].in == indices[i - 1].in + 1);
+            boolean cond2 = (indices[i].out == indices[i-1].out + 1
+                             && indices[i].in == 0
+                             && indices[i - 1].in == inputDimension.channels() - 1);
+            Utils.assertTrue(cond1 || cond2);
+        }
+
+        /* Here we exploit the fact that the weights is in consecutive chunks of memory. */
+        final int baseAddress = (
+                indices[0].in * kernelDim * kernelDim
+                + indices[0].out * inputDimension.channels() * kernelDim * kernelDim);
         for (int i = 0 ; i < kernelDim ; i++) {
             for (int j = 0 ; j < kernelDim ; j++) {
-                Memory<DFEVar> table = mem.alloc(
-                        GlobalConfig.dataType, getLoopIterations());
-                table.mapToCPU("mappedRom");
-                output[i * kernelDim + j] <== table.read(iter);
+                DFEType addressType = dfeUInt(Utils.ceilLog2(numberOfWeights));
+                DFEVar address = baseAddress + iter * kernelDim * kernelDim + i * kernelDim + j;
+                output[i * kernelDim + j] <== convolutionWeightsRom.read(address.cast(addressType));
             }
         }
 

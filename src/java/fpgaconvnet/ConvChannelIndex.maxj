@@ -16,8 +16,7 @@ public class ConvChannelIndex {
         return String.format("[ConvChannelIndex out=%d in=%d]", out, in);
     }
 
-    public static List<ConvChannelIndex> rangeProduct(
-            int outputChannels, int inputChannels) {
+    public static List<ConvChannelIndex> rangeProduct(int outputChannels, int inputChannels) {
         ArrayList<ConvChannelIndex> ret = new ArrayList<ConvChannelIndex>();
 
         for (int o = 0 ; o < outputChannels ; o++) {
