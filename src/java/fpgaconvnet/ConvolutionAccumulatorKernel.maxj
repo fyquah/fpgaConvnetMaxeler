@@ -1,12 +1,16 @@
 package fpgaconvnet;
+
 import java.util.List;
 import java.util.ArrayList;
 
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.memory.Memory;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVector;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVectorType;
 import com.maxeler.maxcompiler.v2.kernelcompiler.KernelParameters;
 import com.maxeler.maxcompiler.v2.managers.engine_interfaces.InterfaceParam;
+
+import fpgaconvnet.protos.Parameters.LayerParameter;
 
 
 public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
@@ -14,19 +18,17 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
     private final List<MultiSourceAccumulator> accumulators;
     private final List<PartitionedDemux> demuxUnits;
     private final List<DFEVar> inputs;
-    private final List<Float> bias;
+    private final Memory<DFEVar> biasRom;
     private final DFEVector<DFEVar> output;
     private final Dimension outputDimension;
     private final int outputChannels, foldingFactor;
 
-    public ConvolutionAccumulatorKernel(
-            KernelParameters kp,
-            ConvolutionParameters params) {
+    public ConvolutionAccumulatorKernel(KernelParameters kp, LayerParameter params) {
         super(kp, params);
-        outputChannels = params.outputDimension().channels();
-        foldingFactor = params.foldingFactor;
-        bias = params.bias;
-        outputDimension = params.outputDimension();
+        outputChannels = params.getNumOutputs();
+        foldingFactor = params.getConv().getFoldingFactor();
+        biasRom = mem.alloc(GlobalConfig.dataType, outputChannels);
+        outputDimension = Utils.layerOutputDimension(params);
 
         outputVectorType = new DFEVectorType<DFEVar>(
                 GlobalConfig.dataType, outputChannels);
@@ -44,7 +46,7 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
             accumulators.add(newAccumulator);
         }
 
-        for (int convUnitId = 0 ; convUnitId < params.foldingFactor ; convUnitId++) {
+        for (int convUnitId = 0 ; convUnitId < params.getConv().getFoldingFactor() ; convUnitId++) {
             List<ConvChannelIndex> indices = getConvUnitChannelIndices(convUnitId);
             List<ChannelFrequency> channelFrequencies = getChannelFrequencies(
                     indices);
@@ -63,7 +65,7 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
 
         for (int i = 0 ; i < outputChannels ; i++) {
             accumulators[i].generate();
-            output[i] <== accumulators[i].output() + bias[i];
+            output[i] <== accumulators[i].output() + biasRom.read(constant.var(i));
         }
 
         accumulators[0].debug(debugFlag());

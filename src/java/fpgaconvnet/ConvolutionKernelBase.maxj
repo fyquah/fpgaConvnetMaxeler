@@ -19,9 +19,7 @@ public abstract class ConvolutionKernelBase extends Kernel {
            KernelParameters kp,
            Parameters.LayerParameter params) {
         super(kp);
-        loopIterations = Utils.divCeil(
-                params.getNumInputs() * params.getNumOutputs(),
-                params.getConv().getFoldingFactor());
+        loopIterations = ConvolutionLayer.calcOuterLoopIterations(params);
         convChannelIndices = ConvChannelIndex.rangeProduct(
                 params.getNumInputs(), params.getNumOutputs());
     }

@@ -17,6 +17,11 @@ import fpgaconvnet.protos.Parameters.LayerParameter;
 public class ConvolutionLayer {
     private static int totalLayersInstantiated = 0;
 
+    public static int calcOuterLoopIterations(LayerParameter params) {
+        return Utils.divCeil(params.getNumInputs() * params.getNumOutputs(),
+                             params.getConv().getFoldingFactor()); 
+    }
+
     private final LayerParameter layer;
     private final int id;
     private final CustomManager manager;
