@@ -68,7 +68,7 @@ MAXFILECOMPILE=maxfilecompile
 SLICCOMPILE=sliccompile
 MAXGUESSBUILDDIR=maxGuessBuildDir
 MAXFILESTITCH=maxfilestitch
-MAXJAVARUN=maxJavaRun
+MAXJAVARUN=maxJavaRun -v -m 16384
 MAXJC=maxjc
 MAXDEBUG=maxdebug
 MAXRENDERGRAPHS=maxRenderGraphs
@@ -118,7 +118,7 @@ $(RESOURCE_BENCH_HELPERS):
 # Use protos in our source. java get confused when we put different directories
 # separately (We have protos which are generated). A better solution is to use
 # symlinks (as in bazel).
-protos: ../protos/fpgaconvnet/parameters.proto
+protos: ../protos/fpgaconvnet/protos/parameters.proto
 	mkdir -p java/
 	$(PROTOC) $< -I ../protos --java_out=./java/ --python_out=./
 
@@ -139,7 +139,7 @@ UNIT_TESTS = \
 
 unit_tests: sync_source
 	MAXAPPJCP='.:$(CP)' MAXSOURCEDIRS='./java/:./javatest/' $(MAXJAVARUN) \
-		  -v -m 8192 fpgaconvnet.RunUnitTests  \
+		  fpgaconvnet.RunUnitTests  \
 		  testKlass="$(UNIT_TESTS)" \
 		  DFEModel=$(DFEModel) \
 		  maxFileName=test \
