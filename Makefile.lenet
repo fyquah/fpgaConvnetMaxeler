@@ -3,6 +3,8 @@ LENET_SIMMAXDIR=$(MAXCOMPILER_BUILD_DIR)/$(LENET_NAME)_$(DFEModel)_DFE_SIM/resul
 LENET_DFEMAXDIR=$(MAXCOMPILER_BUILD_DIR)/$(LENET_NAME)_$(DFEModel)_DFE/results
 LENET_SIM_MAXFILE=$(MAXCOMPILER_BUILD_DIR)/$(LENET_NAME)_$(DFEModel)_DFE_SIM/results/$(LENET_NAME).max
 LENET_MAXFILE=$(MAXCOMPILER_BUILD_DIR)/$(LENET_NAME)_$(DFEModel)_DFE/results/$(LENET_NAME).max
+LENET_DATA=train-images-idx3-ubyte train-labels-idx1-ubyte \
+	   t10k-images-idx3-ubyte t10k-labels-idx1-ubyte
 
 
 fpgaconvnet/mnist.o: fpgaconvnet/mnist.cpp
@@ -40,10 +42,14 @@ lenet_sim: fpgaconvnet/mnist.o fpgaconvnet/feedforward.o fpgaconvnet/convnet.o \
 	    fpgaconvnet/lenet_sim.o fpgaconvnet/lenet_main_sim.o
 	$(CPUCOMPILER) $(ALL_FLAGS) -o $@ $^ $(LFLAGS)
 
+$(LENET_DATA):
+	wget "http://yann.lecun.com/exdb/mnist/$@.gz"
+	gzip -d $@
 
-run_lenet_sim: lenet_sim
+run_lenet_sim: lenet_sim $(LENET_DATA)
 	$(MAXCOMPILERSIM) -n $(USER)a -c$(DEVICENUM) -d$(NUMDEVICES) restart
-	SLIC_CONF+="use_simulation=$(USER)a" LD_PRELOAD=$(MAXOS_SIM) ./$< $(USER)a0:$(USER)a
+	SLIC_CONF+="use_simulation=$(USER)a" LD_PRELOAD=$(MAXOS_SIM) \
+		   ./$< $(USER)a0:$(USER)a
 	make stopsim
 
 # ==============================

@@ -122,7 +122,8 @@ void run_feature_extraction(const float *images, float *conv_out)
     report_conv_performance(t_begin, t_end);
 }
 
-int main() {
+int main()
+{
     float *x = new float[N * 784];
     float *conv_out = new float[N * 800];
     std::vector<std::vector<double> > images;
@@ -131,8 +132,8 @@ int main() {
 
     try {
         std::cout << "Reading images ..." << std::endl;
-        read_mnist_images(images, "./mnist/t10k-images-idx3-ubyte");
-        read_mnist_labels(labels, "./mnist/t10k-labels-idx1-ubyte");
+        read_mnist_images(images, "mnist/t10k-images-idx3-ubyte");
+        read_mnist_labels(labels, "mnist/t10k-labels-idx1-ubyte");
         for (unsigned i = 0 ; i < N ; i++) {
             for (unsigned j = 0 ; j < 784 ; j++) {
                 x[i * 784 + j] = (float) images[i][j];
