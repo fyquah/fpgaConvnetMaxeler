@@ -1,4 +1,5 @@
 package fpgaconvnet;
+
 import org.junit.Test;
 import static org.junit.Assert.*;
 import java.util.List;
@@ -7,10 +8,14 @@ import java.util.ArrayList;
 import com.maxeler.maxcompiler.v2.managers.standard.SimulationManager;
 import com.maxeler.maxcompiler.v2.utils.Bits;
 
+import fpgaconvnet.protos.Parameters.PoolingParameter;
+import fpgaconvnet.protos.Parameters.LayerParameter;
+
+
 public class TestPoolingLayerKernel {
     
     public List<Double> computeExpected(ArrayList<Double> ori_x, Dimension inputDimension,
-            int kernelDim, PoolingUnit.Type poolingType) {
+            int kernelDim, PoolingParameter.PoolingType poolingType) {
         List<Double> ey = new ArrayList<Double>();
         int inputHeight = inputDimension.height();
         int inputWidth = inputDimension.width();
@@ -22,7 +27,7 @@ public class TestPoolingLayerKernel {
                         (c - kernelDim / 2) % kernelDim == 0) {
 
                     for (int chan = 0 ; chan < channels ; chan++) {
-                        double m = poolingType == PoolingUnit.Type.Max ? Double.NEGATIVE_INFINITY : 0.0;
+                        double m = poolingType == PoolingParameter.PoolingType.Max ? Double.NEGATIVE_INFINITY : 0.0;
                         int upper_bound = 0;
                         if (kernelDim % 2 == 0) {
                             upper_bound = kernelDim / 2;
@@ -34,9 +39,9 @@ public class TestPoolingLayerKernel {
                             for (int j = -kernelDim / 2 ; j < upper_bound; j++) {
                                 int idx = chan + (c + j) * channels + (r + i) * (inputWidth * channels);
 
-                                if (poolingType == PoolingUnit.Type.Max) {
+                                if (poolingType == PoolingParameter.PoolingType.Max) {
                                     m = Math.max(ori_x[idx], m);
-                                } else if (poolingType == PoolingUnit.Type.Average) {
+                                } else if (poolingType == PoolingParameter.PoolingType.Average) {
                                     m = m + ori_x[idx] / (kernelDim * kernelDim);
                                 }
                             }
@@ -125,12 +130,22 @@ public class TestPoolingLayerKernel {
         }
     }
 
-    public void runSingleTest(Dimension inputDimension, int kernelDim, PoolingUnit.Type type) {
+    public void runSingleTest(Dimension inputDimension, int kernelDim,
+            PoolingParameter.PoolingType type) {
         SimulationManager manager = new SimulationManager("PoolingTest");
-        PoolingParameters poolingParams = new PoolingParameters(
-                inputDimension, kernelDim, type);
-        PoolingLayerKernel kernel = new PoolingLayerKernel(
-                manager.makeKernelParameters(), poolingParams);
+        LayerParameter layer = LayerParameter.newBuilder()
+                .setInputHeight(inputDimension.height())
+                .setInputWidth(inputDimension.width())
+                .setNumInputs(inputDimension.channels())
+                .setOutputHeight(inputDimension.height() / kernelDim)
+                .setOutputWidth(inputDimension.height() / kernelDim)
+                .setNumOutputs(inputDimension.channels())
+                .setPool(PoolingParameter.newBuilder()
+                         .setDim(kernelDim)
+                         .setType(type)
+                         .build())
+                .build();
+        PoolingLayerKernel kernel = new PoolingLayerKernel(manager.makeKernelParameters(), layer);
         Dimension outputDimension = new Dimension(inputDimension.height() / kernelDim,
                                                   inputDimension.width() / kernelDim ,
                                                   inputDimension.channels());
@@ -157,20 +172,20 @@ public class TestPoolingLayerKernel {
     public void testMultipleChannels() {
         int[] arr = new int[]{2, 4, 7};
         for (int kernelDim : arr) {
-            runSingleTest(new Dimension(28, 28, 20), kernelDim, PoolingUnit.Type.Max);
+            runSingleTest(new Dimension(28, 28, 20), kernelDim, PoolingParameter.PoolingType.Max);
         }
     }
 
     @Test
     public void testEvenDim() {
-        runSingleTest(new Dimension(28, 28, 1), 2, PoolingUnit.Type.Max);
-        runSingleTest(new Dimension(28, 28, 1), 4, PoolingUnit.Type.Max);
+        runSingleTest(new Dimension(28, 28, 1), 2, PoolingParameter.PoolingType.Max);
+        runSingleTest(new Dimension(28, 28, 1), 4, PoolingParameter.PoolingType.Max);
     }
 
     @Test
     public void testOddDim() {
-        runSingleTest(new Dimension(36, 36, 1), 3, PoolingUnit.Type.Average);
-        runSingleTest(new Dimension(35, 35, 1), 7, PoolingUnit.Type.Max);
+        runSingleTest(new Dimension(36, 36, 1), 3, PoolingParameter.PoolingType.Average);
+        runSingleTest(new Dimension(35, 35, 1), 7, PoolingParameter.PoolingType.Max);
     }
 }
 

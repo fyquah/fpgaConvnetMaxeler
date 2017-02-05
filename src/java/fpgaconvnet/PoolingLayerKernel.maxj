@@ -1,5 +1,4 @@
 package fpgaconvnet;
-// package nothing;
 
 import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
 import com.maxeler.maxcompiler.v2.kernelcompiler.KernelParameters;
@@ -7,10 +6,15 @@ import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVector;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVectorType;
 
+import fpgaconvnet.protos.Parameters;
+import fpgaconvnet.protos.Parameters.LayerParameter;
+import fpgaconvnet.protos.Parameters.PoolingParameter;
+
+
 public class PoolingLayerKernel extends Kernel {
     Dimension inputDimension, outputDimension;
     int poolingDim;
-    PoolingUnit.Type poolingType;
+    PoolingParameter.PoolingType poolingType;
     PoolingUnit[] poolingUnits;
     DFEVectorType<DFEVar> inputType, outputType;
 
@@ -18,18 +22,17 @@ public class PoolingLayerKernel extends Kernel {
         return inputDimension.height() * inputDimension.width();
     }
 
-    public PoolingLayerKernel(KernelParameters kp, PoolingParameters pp) {
+    public PoolingLayerKernel(KernelParameters kp, LayerParameter layer) {
         super(kp);
 
         // Parameters from PoolingParameters
-        inputDimension = pp.inputDimension();
-        poolingDim = pp.poolingDim;
-        outputDimension = pp.outputDimension();
-        poolingType = pp.poolingType;
+        inputDimension = new Dimension(
+                layer.getInputHeight(), layer.getInputWidth(), layer.getNumInputs());
+        poolingDim = layer.getPool().getDim();
+        outputDimension = new Dimension(
+                layer.getOutputHeight(), layer.getOutputWidth(), layer.getNumOutputs());
+        poolingType = layer.getPool().getType();
         // end of extracted parameters
-
-        // assume that inputHeight % poolingDim == 0
-        // && inputWidth % poolingDim == 0
 
         // derived properties
         int nChannels = inputDimension.channels();

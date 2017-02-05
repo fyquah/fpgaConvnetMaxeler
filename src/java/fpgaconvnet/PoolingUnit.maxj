@@ -1,9 +1,7 @@
 package fpgaconvnet;
-// package nothing;
 
-import maxpower.ops.AssociativeOp;
-import maxpower.utils.TreeReduce;
 import java.util.List;
+import java.lang.RuntimeException;
 
 import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
 import com.maxeler.maxcompiler.v2.kernelcompiler.KernelLib;
@@ -12,12 +10,13 @@ import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Count.Counter;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.CounterChain;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Stream.OffsetExpr;
+import maxpower.ops.AssociativeOp;
+import maxpower.utils.TreeReduce;
+
+import fpgaconvnet.protos.Parameters.PoolingParameter;
+
 
 public class PoolingUnit extends KernelLib {
-    public enum Type {
-        Max, Average
-    }
-
     private final DFEVar output_;
     private final DFEVar row, col, rowStride, colStride;
     private final DFEVar input;
@@ -34,7 +33,8 @@ public class PoolingUnit extends KernelLib {
         public DFEVar op(DFEVar a, DFEVar b) { return a + b; }
     };
 
-    public PoolingUnit (Kernel argKernel, Type type, int argInputHeight, int argInputWidth, int argKernelDim) {
+    public PoolingUnit (Kernel argKernel, PoolingParameter.PoolingType poolingType,
+                        int argInputHeight, int argInputWidth, int argKernelDim) {
         super(argKernel);
 
         kernel = argKernel;
@@ -72,16 +72,14 @@ public class PoolingUnit extends KernelLib {
         );
         rowStride = rowStrideCtr.getCount();
 
-        switch (type) {
-        case Average:
+        if (poolingType.equals(PoolingParameter.PoolingType.Max)) {
             op = dfeSumOp;
             output_ = TreeReduce.reduce(op, slidingWindow.asList()) / (kernelDim * kernelDim);
-            break;
-        case Max:
-        default:
+        } else if (poolingType.equals(PoolingParameter.PoolingType.Average)) {
             op = dfeMaxOp;
             output_ = TreeReduce.reduce(op, slidingWindow.asList());
-            break;
+        } else {
+            throw new RuntimeException("Unknown Pooling type!");
         }
     }
 
