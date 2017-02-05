@@ -5,7 +5,7 @@ layer {
     num_outputs: 20
 
     conv: {
-        foldingFactor: 500
+        foldingFactor: 20
         kernelFoldingFactor: 5
 
         kernel_size: 5
