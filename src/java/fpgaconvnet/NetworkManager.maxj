@@ -62,6 +62,7 @@ public class NetworkManager extends CustomManager {
         InterfaceParam  N    = ei.addParam("N", CPUTypes.INT);
 
         ei.setTicks("DfeInputAlligner", N * inputDimension().totalSize());
+        ei.setTicks("DfeOutputAlligner", N * outputDimension().totalSize());
         int poolCount = 1;
         int convCount = 1;
         for (int i = 0 ; i < networkParameters.getLayerCount() ; i++) {
