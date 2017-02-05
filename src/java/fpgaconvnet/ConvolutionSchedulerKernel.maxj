@@ -10,6 +10,9 @@ import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.CounterChain;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Stream.OffsetExpr;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.memory.Memory;
 
+import fpgaconvnet.protos.Parameters.LayerParameter;
+import fpgaconvnet.protos.Parameters.ConvolutionParameter;
+
 /* 
  * io.input:
  *  x : DFEVector[inputChannels] 
@@ -34,14 +37,12 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
     private final Memory<DFEVar> convolutionWeightsRom;
     private final CounterChain masterChain;
 
-    public ConvolutionSchedulerKernel(
-           KernelParameters kp,
-           ConvolutionParameters params) {
+    public ConvolutionSchedulerKernel(KernelParameters kp, LayerParameter params) {
         super(kp, params);
 
-        inputDimension = params.inputDim;
-        kernelDim = params.kernelDim;
-        foldingFactor = params.foldingFactor;
+        inputDimension = Utils.layerInputDimension(params);
+        kernelDim = params.getConv().getKernelSize();
+        foldingFactor = params.getConv().getFoldingFactor();
         int numberOfWeights = (kernelDim * kernelDim * inputDimension.channels()
                 * inputDimension.channels());
         convolutionWeightsRom = mem.alloc(GlobalConfig.dataType, numberOfWeights);

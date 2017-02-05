@@ -9,6 +9,9 @@ import org.junit.Test;
 import com.maxeler.maxcompiler.v2.managers.standard.SimulationManager;
 import com.maxeler.maxcompiler.v2.utils.Bits;
 
+import fpgaconvnet.protos.Parameters.ConvolutionParameter;
+import fpgaconvnet.protos.Parameters.LayerParameter;
+
 
 public class ConvolutionSchedulerKernelTest {
 
@@ -88,14 +91,12 @@ public class ConvolutionSchedulerKernelTest {
      * the code for both is really similar
      */
     protected void checkPixelsOutput(
-            ConvolutionSchedulerKernel kernel,
-            ConvolutionParameters params,
-            int convUnitId,
+            ConvolutionSchedulerKernel kernel, LayerParameter params, int convUnitId,
             List<Float> pixelsOutput) {
         List<ConvChannelIndex> indices = kernel.getConvUnitChannelIndices(convUnitId);
 
-        int outputWindowSize = params.outputDimension().width() * params.outputDimension().height();
-        int kernelDim = params.kernelDim;
+        int outputWindowSize = params.getOutputWidth() * params.getOutputHeight();
+        int kernelDim = params.getConv().getKernelSize();
         int loopIterations = kernel.getLoopIterations();
         final int kernelSize = kernelDim * kernelDim;
 
@@ -133,13 +134,13 @@ public class ConvolutionSchedulerKernelTest {
                                   + y;
       
                         if (x < indices.size()) {
-                            int width = params.outputDimension().width();
+                            int width = params.getOutputWidth();
                             int row = (p / width) + (y / kernelDim);
                             int col = (p % width) + (y % kernelDim);
                             int channel = indices[x].in;
 
                             float expectedPixel = getPixelValue(
-                                    params.inputDimension(), row, col, channel);
+                                    Utils.layerInputDimension(params), row, col, channel);
 
                             float delta = Math.abs(pixelsOutput[idx] - expectedPixel);
                             assertTrue(delta < 0.01f);
@@ -164,17 +165,15 @@ public class ConvolutionSchedulerKernelTest {
     }
 
     protected void checkWeightsOutput(
-            ConvolutionSchedulerKernel kernel,
-            ConvolutionParameters params,
-            int convUnitId,
+            ConvolutionSchedulerKernel kernel, LayerParameter params, int convUnitId,
             List<Float> weightsOutput) {
 
         List<ConvChannelIndex> indices = kernel.getConvUnitChannelIndices(convUnitId);
 
-        int numberOfOutputChannels = params.outputDimension().channels();
-        int numberOfInputChannels = params.inputDimension().channels();
-        int outputWindowSize = params.outputDimension().width() * params.outputDimension().height();
-        int kernelDim = params.kernelDim;
+        int numberOfOutputChannels = params.getNumOutputs();
+        int numberOfInputChannels = params.getNumInputs();
+        int outputWindowSize = params.getOutputWidth() * params.getInputHeight();
+        int kernelDim = params.getConv().getKernelSize();
         int loopIterations = kernel.getLoopIterations();
         final int kernelSize = kernelDim * kernelDim;
 
@@ -245,14 +244,18 @@ public class ConvolutionSchedulerKernelTest {
             (inputDim.height() - (kernelDim - 1))
             * (inputDim.width() - (kernelDim - 1));
 
-        ConvolutionParameters params = new ConvolutionParameters();
-        params.inputDim = inputDim;
-        params.kernelDim = kernelDim;
-        params.outputChannels = outputChannels;
-        params.foldingFactor = foldingFactor;
-        params.kernels = generateRandomKernels(
-                outputChannels, inputChannels, kernelDim);
-
+        LayerParameter params = LayerParameter.newBuilder()
+            .setInputHeight(inputDim.height())
+            .setInputWidth(inputDim.width())
+            .setNumInputs(inputDim.channels())
+            .setOutputHeight(inputDim.height() + 1 - kernelDim)
+            .setOutputWidth(inputDim.width() + 1 - kernelDim)
+            .setNumOutputs(outputChannels)
+            .setConv(ConvolutionParameter.newBuilder()
+                     .setKernelSize(kernelDim)
+                     .setFoldingFactor(foldingFactor)
+                     .build())
+            .build();
         SimulationManager manager = new SimulationManager(testName + "Kernel");
         ConvolutionSchedulerKernel kernel =
             new ConvolutionSchedulerKernel(
