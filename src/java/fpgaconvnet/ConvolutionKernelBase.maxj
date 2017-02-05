@@ -1,10 +1,14 @@
 package fpgaconvnet;
+
 import java.util.ArrayList;
 import java.util.List;
 
 import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
 import com.maxeler.maxcompiler.v2.kernelcompiler.KernelParameters;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
+
+import fpgaconvnet.protos.Parameters;
+
 
 public abstract class ConvolutionKernelBase extends Kernel {
     
@@ -13,12 +17,13 @@ public abstract class ConvolutionKernelBase extends Kernel {
 
     public ConvolutionKernelBase (
            KernelParameters kp,
-           ConvolutionParameters params) {
+           Parameters.LayerParameter params) {
         super(kp);
-        loopIterations = params.loopIterations();
+        loopIterations = Utils.divCeil(
+                params.getNumInputs() * params.getNumOutputs(),
+                params.getConv().getFoldingFactor());
         convChannelIndices = ConvChannelIndex.rangeProduct(
-                    params.outputDimension().channels(),
-                    params.inputDimension().channels());
+                params.getNumInputs(), params.getNumOutputs());
     }
 
     public int getLoopIterations() {

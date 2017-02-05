@@ -8,6 +8,10 @@ import org.junit.Test;
 import com.maxeler.maxcompiler.v2.managers.standard.SimulationManager;
 import com.maxeler.maxcompiler.v2.utils.Bits;
 
+import fpgaconvnet.protos.Parameters.LayerParameter;
+import fpgaconvnet.protos.Parameters.ConvolutionParameter;
+
+
 public class ConvolutionUnitKernelTest {
 
     protected List<Float> generateRandomWindow(int kernelDim, int count) {
@@ -56,12 +60,14 @@ public class ConvolutionUnitKernelTest {
             int kernelDim,
             int ticksPerConvolution) {
 
-        ConvolutionParameters params = new ConvolutionParameters();
-        params.kernelFoldingFactor = kernelFoldingFactor;
-        params.kernelDim = kernelDim;
-        params.inputDim = new Dimension(28, 28, 2);
-        params.foldingFactor = 10;
-
+        LayerParameter params = LayerParameter.newBuilder()
+                .setInputHeight(28)
+                .setInputWidth(28)
+                .setNumInputs(2)
+                .setConv(ConvolutionParameter.newBuilder()
+                         .setFoldingFactor(10)
+                         .setKernelFoldingFactor(kernelFoldingFactor))
+                .build();
         int convolutionCount = 100;
         List<Float> weights = generateRandomWindow(kernelDim, convolutionCount);
         List<Float> pixels = generateRandomWindow(kernelDim, convolutionCount);

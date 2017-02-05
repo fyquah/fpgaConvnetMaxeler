@@ -17,6 +17,8 @@ import com.maxeler.maxcompiler.v2.utils.Bits;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.CounterChain;
 
+import fpgaconvnet.protos.Parameters;
+
 
 public class Utils {
     public static int divCeil(int a, int b) {
@@ -373,4 +375,11 @@ public class Utils {
         }
     }
 
+    public static Dimension layerOutputDimension(Parameters.LayerParameter layer) {
+        return new Dimension(layer.getOutputHeight(), layer.getOutputWidth(), layer.getNumOutputs());
+    }
+
+    public static Dimension layerInputDimension(Parameters.LayerParameter layer) {
+        return new Dimension(layer.getInputHeight(), layer.getInputWidth(), layer.getNumInputs());
+    }
 }
