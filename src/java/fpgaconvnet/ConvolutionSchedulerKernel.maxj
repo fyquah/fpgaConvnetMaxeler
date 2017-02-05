@@ -217,7 +217,10 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
         for (int i = 0 ; i < kernelDim ; i++) {
             for (int j = 0 ; j < kernelDim ; j++) {
                 DFEType addressType = dfeUInt(Utils.ceilLog2(numberOfWeights));
-                DFEVar address = baseAddress + iter * kernelDim * kernelDim + i * kernelDim + j;
+                DFEVar address = (baseAddress
+                                  + iter.cast(addressType) * (kernelDim * kernelDim)
+                                  + i * kernelDim
+                                  + j);
                 output[i * kernelDim + j] <== convolutionWeightsRom.read(address.cast(addressType));
             }
         }
