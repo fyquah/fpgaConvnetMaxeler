@@ -3,6 +3,8 @@ package fpgaconvnet.protos;
 
 message Network
 {
+    /* Frequency of design in MHz. Note that all kernels will run at the same frequency. */
+    optional uint32 frequency = 2 [default = 100];
     repeated LayerParameter layer = 1;
 }
 

@@ -9,7 +9,7 @@ LENET_MAXFILE=$(MAXCOMPILER_BUILD_DIR)/$(LENET_NAME)_$(DFEModel)_DFE/results/$(L
 # ==============================
 
 $(LENET_SIM_MAXFILE): $(ENGINEFILES) sync_source
-	MAXAPPJCP='.:$(CP)' MAXSOURCEDIRS="./java:./javatests" \
+	MAXAPPJCP='.:$(CP)' MAXSOURCEDIRS="./java:./javatest" \
 		  $(MAXJAVARUN) -v -m 8193 fpgaconvnet.GenericNetworkBuilder \
 		  DFEModel=$(DFEModel) \
 		  maxFileName=$(LENET_NAME) \

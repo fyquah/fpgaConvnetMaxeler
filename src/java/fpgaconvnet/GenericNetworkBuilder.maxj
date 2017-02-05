@@ -1,0 +1,62 @@
+package fpgaconvnet;
+
+import java.io.IOException;
+import java.util.List;
+
+import com.google.protobuf.TextFormat;
+
+import com.maxeler.maxcompiler.v2.build.EngineParameters;
+import com.maxeler.maxcompiler.v2.managers.BuildConfig;
+import com.maxeler.maxcompiler.v2.managers.custom.CustomManager;
+
+import fpgaconvnet.protos.Parameters;
+import fpgaconvnet.protos.Parameters.Network;
+import fpgaconvnet.protos.Parameters.LayerParameter;
+import fpgaconvnet.protos.Parameters.ConvolutionParameter;
+import fpgaconvnet.protos.Parameters.PoolingParameter;
+
+
+public class GenericNetworkBuilder {
+    public static class NetworkEngineParameters extends EngineParameters {
+        private final String s_descriptor = "descriptor";
+
+        @Override
+        protected void declarations() {
+            declareParam(s_descriptor, DataType.STRING, "");
+        }
+
+        public String getDescriptor() {
+            return getParam(s_descriptor);
+        }
+
+        public NetworkEngineParameters(String[] args) {
+            super(args);
+        }
+    }
+
+    public static void main(String[] args) {
+        try {
+            NetworkEngineParameters engineParameters = new NetworkEngineParameters(args);
+            String descriptorFileName = engineParameters.getDescriptor();
+            String protoText = Utils.readFile(descriptorFileName);
+            Parameters.Network.Builder networkParamsBuilder = Parameters.Network.newBuilder();
+            TextFormat.getParser().merge(protoText, networkParamsBuilder);
+            Parameters.Network networkParameters = new ParametersTransformer(
+                    networkParamsBuilder.build()).transform();
+
+            NetworkManager manager = new NetworkManager(engineParameters, networkParameters);
+            BuildConfig buildConfig = manager.getBuildConfig();
+            buildConfig.setBuildEffort(BuildConfig.Effort.VERY_HIGH);
+            buildConfig.setMPPRCostTableSearchRange(
+                    engineParameters.getMPPRStartCT(), engineParameters.getMPPREndCT());
+            buildConfig.setMPPRParallelism(engineParameters.getMPPRThreads());
+            buildConfig.setMPPRRetryNearMissesThreshold(engineParameters.getMPPRRetryThreshold());
+            manager.createSLiCinterface(manager.interfaceDefault());
+            manager.build();
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            System.exit(-1);
+        }
+    }
+}
