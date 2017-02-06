@@ -38,14 +38,16 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
     private final Memory<DFEVar> convolutionWeightsRom;
     private final CounterChain masterChain;
     private final int numberOfWeights;
+    private final LayerParameter layerParams;
 
-    public ConvolutionSchedulerKernel(KernelParameters kp, LayerParameter params) {
-        super(kp, params);
+    public ConvolutionSchedulerKernel(KernelParameters kp, LayerParameter argLayerParams) {
+        super(kp, argLayerParams);
 
-        inputDimension = Utils.layerInputDimension(params);
-        kernelDim = params.getConv().getKernelSize();
-        foldingFactor = params.getConv().getFoldingFactor();
-        numberOfWeights = (params.getNumOutputs() * params.getNumInputs() * kernelDim * kernelDim);
+        layerParams = argLayerParams;
+        inputDimension = Utils.layerInputDimension(layerParams);
+        kernelDim = layerParams.getConv().getKernelSize();
+        foldingFactor = layerParams.getConv().getFoldingFactor();
+        numberOfWeights = (layerParams.getNumOutputs() * layerParams.getNumInputs() * kernelDim * kernelDim);
         convolutionWeightsRom = mem.alloc(GlobalConfig.dataType, numberOfWeights);
         convolutionWeightsRom.mapToCPU("mappedRom");
         masterChain = control.count.makeCounterChain();
