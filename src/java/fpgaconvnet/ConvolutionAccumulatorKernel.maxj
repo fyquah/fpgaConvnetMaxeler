@@ -110,7 +110,8 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
                                    GlobalConfig.dataType, inputControlFlag);
         }
 
-        io.output(getOutputName(), output, outputVectorType, outputControlFlag);
+        /* TODO(fyq14): RELU assumed  */
+        io.output(getOutputName(), (output > 0 ? output : constant.var(GlobalConfig.dataType, 0)), outputVectorType, outputControlFlag);
     }
 
     protected List<DFEVar> makeInputPlaceHolders() {

@@ -1,5 +1,6 @@
-#include <iostream>
+#include <algorithm>
 #include <fstream>
+#include <iostream>
 
 #include "mnist.h"
 #include "lenet.h"
@@ -63,6 +64,26 @@ void report_conv_performance(timeval t_begin, timeval t_end)
     std::cout << "GOps = " << throughput * 0.0038 << std::endl;
 }
 
+void verify_output(float *conv_out, std::string filename)
+{
+    std::ifstream fin(filename.c_str());
+    uint32_t total_pixels = 0;
+    float total_error = 0.0;
+
+    for (uint32_t i = 0 ; i < std::min(N, 10u) ; i++) {
+        for (uint32_t j = 0 ; j < 784 ; j++) {
+            float expected;
+            float obtained = conv_out[784 * i + j];
+            fin >> expected;
+            std::cout << "Obtained = " << obtained << ", expected = " <<  expected << "\n";
+            total_error += std::abs(obtained  - expected);
+            total_pixels += 1;
+        }
+    }
+    std::cout << "Average pixel error = " << float(total_error) / float(total_pixels) << std::endl;
+    fin.close();
+}
+
 
 void run_feature_extraction(const float *images, float *conv_out)
 {
@@ -120,6 +141,7 @@ void run_feature_extraction(const float *images, float *conv_out)
 
     std::cout << "Completed feature extraction!" << std::endl;
     report_conv_performance(t_begin, t_end);
+    verify_output(conv_out, "../test_data/lenet/output.txt");
 }
 
 int main()
