@@ -52,9 +52,6 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
         pipelineStage = chain.addCounter(pipelineLengthVar, 1);
         cycle = control.count.simpleCounter(32);
 
-        debug.simPrintf(debugFlag(), "---------------- cycle = %d\n", cycle);
-        debug.simPrintf(debugFlag(), "convLoopIterations = %d, pipelineLengthVar = %d\n", convLoopIterations, pipelineLengthVar);
-        debug.simPrintf(debugFlag(), "output = %.5f\n", output);
         initOutput();
 
         DFEVar inputControl = pipelineStage.eq(0) & loopIndex.eq(0);
@@ -62,6 +59,31 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
         input_weights <== io.input(getInputWeightsName(), inputVectorType, inputControl);
         input_pixels <== io.input(getInputPixelsName(), inputVectorType, inputControl);
         io.output(getOutputName(), output, GlobalConfig.dataType, outputControl);
+
+        // debugging
+        String s_kernel = "[\n";
+        for (int i = 0 ; i < kernelDim ; i++) {
+            s_kernel += "[";
+            for (int j = 0; j < kernelDim ; j++) {
+                s_kernel += "%.3f, "; 
+            }
+            s_kernel += "],\n";
+        }
+        s_kernel += "]\n";
+        DFEVar[] debugValues = new DFEVar[3 + 2 * kernelDim * kernelDim] ;
+        debugValues[0] = loopIndex;
+        debugValues[1] = pipelineStage;
+        debugValues[2] = output;
+        for (int j = 0 ; j < kernelDim * kernelDim ; j++) {
+            debugValues[3 + j] = input_weights[j];
+        }
+        for (int j = 0 ; j < kernelDim * kernelDim ; j++) {
+            debugValues[3 + kernelDim * kernelDim + j] = input_weights[j];
+        }
+        debug.simPrintf("ConvolutionUnitKernel[layer = " + params.getLayerId()
+                        + "] loopIndex = %d pipelineState = %d output = %.3f\n"
+                        + "weights = " + s_kernel + "pixels = " + s_kernel,
+                        debugValues);
     }
 
     public String getOffsetExprName() {
@@ -104,9 +126,6 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
                     ? constant.var(GlobalConfig.dataType, 0)
                     : stream.offset(output, -pipelineLength);
             DFEVar newSum = Utils.treeReduceAdd(multiplierOutputs);
-            debug.simPrintf(debugFlag(), "prev = %.5f\n", prev);
-            debug.simPrintf(debugFlag(), "newSum = %.5f\n", newSum);
-
             output <== newSum + prev;
         }
     }

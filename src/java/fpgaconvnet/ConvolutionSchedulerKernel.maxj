@@ -78,10 +78,36 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
 
         input <== io.input(getInputName(), inputVectorType, inputControlFlag);
 
+        String s_kernel = "[\n";
+        for (int i = 0 ; i < kernelDim ; i++) {
+            s_kernel += "[";
+            for (int j = 0; j < kernelDim ; j++) {
+                s_kernel += "%.3f, "; 
+            }
+            s_kernel += "],\n";
+        }
+        s_kernel += "]\n";
+
         for (int i = 0 ; i < foldingFactor ; i++) {
             io.output(getWeightOutputName(i), output_w[i], outputVectorType, outputControlFlag);
             io.output(getPixelOutputName(i), output_y[i], outputVectorType, outputControlFlag);
             io.forceOutputsTogether(getWeightOutputName(i), getPixelOutputName(i));
+            
+            // debugging
+            DFEVar[] debugValues = new DFEVar[3 + 2 * kernelDim * kernelDim] ;
+            debugValues[0] = row;
+            debugValues[1] = col;
+            debugValues[2] = iter;
+            for (int j = 0 ; j < kernelDim * kernelDim ; j++) {
+                debugValues[3 + j] = output_w[i][j];
+            }
+            for (int j = 0 ; j < kernelDim * kernelDim ; j++) {
+                debugValues[3 + kernelDim * kernelDim + j] = output_y[i][j];
+            }
+            debug.simPrintf("ConvolutionScheduler[layer = " + layerParams.getLayerId() + "] "
+                            + "row = %d col = %d iter = %d convUnitIndex = " + i + "\n"
+                            + "weights =" + s_kernel + "pixel_window = " + s_kernel,
+                            debugValues);
         }
     }
 

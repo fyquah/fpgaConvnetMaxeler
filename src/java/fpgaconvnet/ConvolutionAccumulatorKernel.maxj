@@ -111,7 +111,42 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
         }
 
         /* TODO(fyq14): RELU assumed  */
-        io.output(getOutputName(), (output > 0 ? output : constant.var(GlobalConfig.dataType, 0)), outputVectorType, outputControlFlag);
+        DFEVector<DFEVar> actualOutput = outputVectorType.newInstance(this);
+        for (int i = 0 ; i < outputChannels ; i++) {
+            actualOutput[i] <== (output[i] > 0 ? output[i] : constant.var(GlobalConfig.dataType, 0));
+        }
+        io.output(getOutputName(), actualOutput, outputVectorType, outputControlFlag);
+        DFEVar[] debugValues = new DFEVar[2 + foldingFactor + outputChannels + outputChannels];
+
+        String s_input = "[\n";
+        String s_output = "[\n";
+        for (int i = 0 ; i < foldingFactor ; i++) {
+            s_input += "%.3f, ";
+        }
+        for (int i = 0 ; i < outputChannels ; i++) {
+            s_output += "%.3f, ";
+        }
+        s_input += "]\n";
+        s_output += "]\n";
+
+        debugValues[0] = accumulators[0].pipelineIndex;
+        debugValues[1] = accumulators[0].iter;
+        for (int i = 0 ; i < foldingFactor ; i++) {
+            debugValues[2 + i] = inputs[i];
+        }
+        for (int i = 0 ; i < outputChannels ; i++) {
+            debugValues[2 + foldingFactor + i] = actualOutput[i];
+        }
+        for (int i = 0 ; i < outputChannels ; i++) {
+            debugValues[2 + foldingFactor + outputChannels + i] = output[i];
+        }
+
+        debug.simPrintf("AccumulatorKernel[layer = " + layerParams.getLayerId() + "]"
+                        + "pipelineIndex = %d iter = %d"
+                        + "input = " + s_input
+                        + "actualOutput = " + s_output
+                        + "output = " + s_output,
+                        debugValues);
     }
 
     protected List<DFEVar> makeInputPlaceHolders() {
