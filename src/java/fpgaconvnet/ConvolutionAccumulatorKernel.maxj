@@ -4,6 +4,7 @@ import java.util.List;
 import java.util.ArrayList;
 
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.CounterChain;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Stream.OffsetExpr;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.memory.Memory;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVector;
@@ -25,36 +26,54 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
         biasRom = mem.alloc(GlobalConfig.dataType, params.getNumOutputs());
         biasRom.mapToCPU(String.format("bias_layer_%d", params.getLayerId()));
 
+        DFEVar output = GlobalConfig.dataType.newInstance(this);
+
         List<DFEVar> inputVars = new ArrayList<DFEVar>();
         for (int i = 0 ; i < layerParams.getConv().getWorkerFactor() ; i++) {
             inputVars.add(io.input(getInputName(i), GlobalConfig.dataType));
         }
-        DFEVar sumVars = Utils.treeReduceAdd(inputVars);
-
         CounterChain chain = control.count.makeCounterChain();
         DFEVar address = Utils.chainCounterOrZero(this, chain, params.getNumOutputs());
         DFEVar iter = Utils.chainCounterOrZero(this, chain, getSchedulerIterations());
-        DFEVar output = GlobalConfig.dataType.newInstance(this);
 
+        DFEVar sumVars = Utils.treeReduceAdd(inputVars);
         if (getSchedulerIterations() == 1) {
             output <== sumVars + biasRom.read(address);
+            io.output(getOutputName(), output, GlobalConfig.dataType);
         } else {
-            /* TODO(fyquah): Use this if we run at a higher frequency. */
-            // DFEParLoop loop = new DFEParLoop(this, "loop");
-            // DFEVar result = Utils.treeReduceSum(inputVars) + lp2.feedback;
-            // loop.set_input(biasRom.read());
-            // loop.set_output(result);
-            // io.output(getOutputName(), result, GlobalConfig.dataType, lp2.done);
+            OffsetExpr loopOffsetExpr = stream.makeOffsetAutoLoop(getOffsetExprName());
+            DFEVar pipelineLengthVar = loopOffsetExpr.getDFEVar(this,dfeUInt(32));
+            DFEVar pipelineStage = chain.addCounter(pipelineLengthVar, 1);
 
-            DFEVar prevOutput = (iter.eq(0) ?  biasRom.read(address) : stream.offset(output, -1));
+            DFEVar outputControlFlag =
+                    iter.eq(getSchedulerIterations() - 1) & pipelineStage.eq(pipelineLengthVar - 1);
+            DFEVar prevOutput = (iter.eq(0)
+                    ?  biasRom.read(address)
+                    : stream.offset(output, -loopOffsetExpr));
             output <== sumVars + prevOutput;
+            io.output(getOutputName(), output, GlobalConfig.dataType, outputControlFlag);
         }
-        io.output(getOutputName(), output, GlobalConfig.dataType,
-                  iter.eq(getSchedulerIterations() - 1));
-        // debugging output
+
         debug.simPrintf(
                 "ConvolutionAccumulatorKernel[layer = %d] address = %d iter = %d output = %.3f\n",
                 layerParams.getLayerId(), address, iter, output);
+
+        // // Pipelined adder - may or may not be better, but this probably will not
+        //                      be the bottle neck of the performance, so there is not much point
+        //                      pouring too much work into this.
+        // DFEParLoop loop = new DFEParLoop(this, "loop");
+        // List<DFEVar> inputVars = new ArrayList<DFEVar>();
+        // List<DFEVar> transposedInputVars = new ArrayList<DFEVar>();
+        // for (int i = 0 ; i < layerParams.getConv().getWorkerFactor() ; i++) {
+        //     DFEVar input = io.input(getInputName(i), GlobalConfig.dataType, loop.ndone);
+        //     inputVars.add(input);
+        //     transposedInputVars.add(transpose(input, abc, loop.pipeline_len));
+        // }
+        // loop.set_input(biasRom.read(address));
+
+        // DFEVar result = loop.feedback + Utils.treeReduceAdd(transposedInputVars);
+        // loop.set_output(result);
+        // io.output("result", result, GlobalConfig.dataType, loop.done);
     }
 
     public String getInputName(int workerId) {
@@ -65,10 +84,15 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
         return "output";
     }
 
-    public int cyclesPerImage() {
+    public String getOffsetExprName() {
+        return String.format("offset_layer_%d", layerParams.getLayerId());
+    }
+
+    public InterfaceParam cyclesPerImage(InterfaceParam pipelineLength) {
         return (layerParams.getOutputWidth()
                 * layerParams.getOutputHeight()
                 * layerParams.getNumOutputs()
-                * getSchedulerIterations());
+                * getSchedulerIterations()
+                * pipelineLength);
     }
 }
