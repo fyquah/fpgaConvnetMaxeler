@@ -13,28 +13,35 @@ import fpgaconvnet.protos.Parameters;
 public abstract class ConvolutionKernelBase extends Kernel {
     
     private final List<ConvChannelIndex> convChannelIndices;
-    private final int loopIterations;
+    private final Parameters.LayerParameter layerParams;
 
-    public ConvolutionKernelBase (KernelParameters kp, Parameters.LayerParameter params) {
+    public ConvolutionKernelBase (KernelParameters kp, Parameters.LayerParameter argParams) {
         super(kp);
-        loopIterations = ConvolutionLayer.calcOuterLoopIterations(params);
-        convChannelIndices = ConvChannelIndex.rangeProduct(
-                params.getNumOutputs(), params.getNumInputs());
+        layerParams = argParams;
     }
 
     public int getLoopIterations() {
-        return loopIterations;
+        return ConvolutionLayer.calcOuterLoopIterations(layerParams);
     }
 
-    public List<ConvChannelIndex> getConvUnitChannelIndices(int convUnitId) {
-        List<ConvChannelIndex> ret = new ArrayList<ConvChannelIndex>();
+    public int getAccumulationIterations() {
+        return layerParams.getNumOutputs() / layerParams.getConv().getWorkerFactor();
+    }
 
-        for (int i = convUnitId * getLoopIterations() ;
-                i < (convUnitId + 1) * getLoopIterations() && i < convChannelIndices.size();
-                i++) {
-            ret.add(convChannelIndices[i]);
+    public int getSchedulerIterations() {
+        return Utils.divCeil(layerParams.getNumInputs(), layerParams.getConv().getWorkerFactor());
+    }
+
+    public List<Integer> getSchedulerChannels(int workerIndex) {
+        List<Integer> ret = new ArrayList<Integer>();
+        int workerFactor = layerParams.getConv().getWorkerFactor();
+        for (int i = 0 ; i < getSchedulerIterations() ; i++) {
+            if (workerFactor * workerIndex + i >= layerParams.getNumInputs()) {
+                ret.add(-1);
+            } else {
+                ret.add(workerFactor * workerIndex + i);
+            }
         }
-
         return ret;
     }
 
