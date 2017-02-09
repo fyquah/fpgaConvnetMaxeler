@@ -65,7 +65,7 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
         return "output";
     }
 
-    public int cyclesPerImage(InterfaceParam pipelineLength) {
+    public int cyclesPerImage() {
         return (layerParams.getOutputWidth()
                 * layerParams.getOutputHeight()
                 * layerParams.getNumOutputs()

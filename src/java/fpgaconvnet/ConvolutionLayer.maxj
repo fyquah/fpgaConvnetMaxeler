@@ -75,14 +75,16 @@ public class ConvolutionLayer {
         }
 
         /* Accumulator */
-        InterfaceParam pipelineLength = ei.getAutoLoopOffset(
-                accumulator.getKernel().getName(),
-                accumulator.getKernel().getOffsetExprName());
-        ei.ignoreAutoLoopOffset(
-                accumulator.getKernel().getName(),
-                accumulator.getKernel().getOffsetExprName());
         ei.setTicks(accumulator.getKernel().getName(),
-                    numberOfImages * accumulator.getKernel().cyclesPerImage(pipelineLength));
+                    numberOfImages * accumulator.getKernel().cyclesPerImage());
+        // InterfaceParam pipelineLength = ei.getAutoLoopOffset(
+        //         accumulator.getKernel().getName(),
+        //         accumulator.getKernel().getOffsetExprName());
+        // ei.ignoreAutoLoopOffset(
+        //         accumulator.getKernel().getName(),
+        //         accumulator.getKernel().getOffsetExprName());
+        // ei.setTicks(accumulator.getKernel().getName(),
+        //             numberOfImages * accumulator.getKernel().cyclesPerImage(pipelineLength));
     }
 
     /*
