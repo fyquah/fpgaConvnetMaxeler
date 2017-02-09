@@ -72,10 +72,10 @@ public class PoolingUnit extends KernelLib {
         );
         rowStride = rowStrideCtr.getCount();
 
-        if (poolingType.equals(PoolingParameter.PoolingType.Max)) {
+        if (poolingType.equals(PoolingParameter.PoolingType.Average)) {
             op = dfeSumOp;
             output_ = TreeReduce.reduce(op, slidingWindow.asList()) / (kernelDim * kernelDim);
-        } else if (poolingType.equals(PoolingParameter.PoolingType.Average)) {
+        } else if (poolingType.equals(PoolingParameter.PoolingType.Max)) {
             op = dfeMaxOp;
             output_ = TreeReduce.reduce(op, slidingWindow.asList());
         } else {
