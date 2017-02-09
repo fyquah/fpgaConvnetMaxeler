@@ -5,7 +5,8 @@ layer {
     num_outputs: 20
 
     conv: {
-        foldingFactor: 1
+        workerFactor: 5
+        convFoldingFactor: 1
         kernelFoldingFactor: 25
 
         kernel_size: 5
@@ -25,8 +26,9 @@ layer {
     num_outputs: 50
 
     conv: {
-        foldingFactor: 50
-        kernelFoldingFactor: 25
+        workerFactor: 5
+        convFoldingFactor: 5 
+        kernelFoldingFactor: 5
 
         kernel_size: 5
         activation: Relu

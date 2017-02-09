@@ -16,7 +16,7 @@ public class PoolingLayerKernel extends Kernel {
     int poolingDim;
     PoolingParameter.PoolingType poolingType;
     PoolingUnit[] poolingUnits;
-    DFEVectorType<DFEVar> inputType, outputType;
+    DFEVectorType<DFEVar> outputType;
 
     public int cyclesPerImage() {
         return inputDimension.height() * inputDimension.width();
@@ -36,10 +36,9 @@ public class PoolingLayerKernel extends Kernel {
 
         // derived properties
         int nChannels = inputDimension.channels();
-        inputType = new DFEVectorType<DFEVar>(GlobalConfig.dataType, nChannels);
         outputType = new DFEVectorType<DFEVar>(GlobalConfig.dataType, nChannels);
 
-        DFEVector<DFEVar> input = inputType.newInstance(this);
+        DFEVar input = GlobalConfig.dataType.newInstance(this);
         DFEVector<DFEVar> output = outputType.newInstance(this);
 
         poolingUnits = new PoolingUnit[inputDimension.channels()];
@@ -49,16 +48,21 @@ public class PoolingLayerKernel extends Kernel {
                 poolingType,
                 inputDimension.height(),
                 inputDimension.width(),
-                poolingDim
+                poolingDim,
+                inputDimension.channels()
             );
-            poolingUnits[i].setInput(input[i]);
+            poolingUnits[i].setInput(stream.offset(input[i], i));
             output[i] <== poolingUnits[i].output();
         }
         // end of dervived properties
 
         // set the kernel I/O interface
-        DFEVector<DFEVar> x = io.input("x", inputType);
-        input <== x;
-        io.output("y", output, outputType, poolingUnits[0].isOutputReady());
+        DFEVar allignmentCounter = control.count.simpleCounter(
+                Utils.ceilLog2(inputDimension.channels()),
+                inputDimension.channels());
+        DFEVar outputFlag = allignmentCounter.eq(inputDimension.channels() - 1)
+                & poolingUnits[0].isOutputReady();
+        input <== io.input("x", GlobalConfig.dataType);
+        io.output("y", output, outputType, outputFlag);
     }
 }

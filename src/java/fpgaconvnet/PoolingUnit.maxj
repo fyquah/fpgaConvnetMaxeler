@@ -34,7 +34,7 @@ public class PoolingUnit extends KernelLib {
     };
 
     public PoolingUnit (Kernel argKernel, PoolingParameter.PoolingType poolingType,
-                        int argInputHeight, int argInputWidth, int argKernelDim) {
+                        int argInputHeight, int argInputWidth, int argKernelDim, int delay) {
         super(argKernel);
 
         kernel = argKernel;
@@ -48,7 +48,7 @@ public class PoolingUnit extends KernelLib {
             inputHeight,
             inputWidth,
             kernelDim,
-            new OffsetExpr(1));
+            new OffsetExpr(delay));
         CounterChain chain = control.count.makeCounterChain();
         row = chain.addCounter(inputHeight, 1);
         col = chain.addCounter(inputWidth, 1);
