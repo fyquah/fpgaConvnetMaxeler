@@ -1,11 +1,12 @@
 package fpgaconvnet;
-// package nothing;
 
 import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
 import com.maxeler.maxcompiler.v2.kernelcompiler.KernelLib;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Stream.OffsetExpr;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEType;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVector;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVectorType;
 
 
 class DFEParLoop extends KernelLib {
@@ -28,7 +29,7 @@ class DFEParLoop extends KernelLib {
     void set_input(DFEType fb_type, double init) {
         feed_in = fb_type.newInstance(this);
         DFEVar start_feedback = global_pos < pipe_len;
-        feedback = start_feedback ? feed_in : init;
+        feedback = (start_feedback ? feed_in : constant.var(init));
     }
 
     void set_output(DFEVar result) {

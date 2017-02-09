@@ -22,7 +22,7 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
     private final DFEVectorType<DFEVar> inputVectorType;
     private final DFEVector<DFEVar> inputWindow;
     private final DFEVar output;
-    private final Memory<DFEVar> memFilters;
+    private final Memory<DFEVar> filtersRom;
     private final LayerParameter layerParams;
 
     public ConvolutionUnitKernel(KernelParameters kp, LayerParameter params, int workerId) {
@@ -35,10 +35,11 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
         inputWindow = inputVectorType.newInstance(this);
         output = GlobalConfig.dataType.newInstance(this);
 
-        memFilters = mem.alloc(
+        filtersRom = mem.alloc(
                 GlobalConfig.dataType,
                 getSchedulerIterations() * layerParams.getNumOutputs());
-        memFilters.mapToCPU(String.format("filters_%d_worker_%d", params.getLayerId(), workerId));
+        filtersRom.mapToCPU(String.format("filters_layer_%d_worker_%d",
+                                          params.getLayerId(), workerId));
 
         // schedule the pixel and weight vars.
         final List<DFEVar> multiplicationOutputs = new ArrayList<DFEVar>();
@@ -66,7 +67,7 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
                             .withInitValue(addressBase + multId)
                             .withMax(addressBaseMax + multId)
                             .withWrapMode(Count.WrapMode.COUNT_LT_MAX_THEN_WRAP));
-                weightVars[convUnitIndex][multId] = memFilters.read(addressCounter.getCount());
+                weightVars[convUnitIndex][multId] = filtersRom.read(addressCounter.getCount());
                 multiplicationOutputs.add(
                         pixelVars[multId] * weightVars[convUnitIndex][multId]);
             }
