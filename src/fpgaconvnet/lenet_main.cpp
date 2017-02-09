@@ -71,13 +71,16 @@ void verify_output(float *conv_out, std::string filename)
     float total_error = 0.0;
 
     for (uint32_t i = 0 ; i < std::min(N, 10u) ; i++) {
-        for (uint32_t j = 0 ; j < 784 ; j++) {
+        for (uint32_t j = 0 ; j < 800 ; j++) {
             float expected;
-            float obtained = conv_out[784 * i + j];
+            float obtained = conv_out[800 * i + j];
             fin >> expected;
-            std::cout << "Obtained = " << obtained << ", expected = " <<  expected << "\n";
             total_error += std::abs(obtained  - expected);
             total_pixels += 1;
+
+            if (std::abs(obtained - expected) > 0.01) {
+                std::cout << "Error > 0.01 while verifying output!" << std::endl;
+            }
         }
     }
     std::cout << "Average pixel error = " << float(total_error) / float(total_pixels) << std::endl;
@@ -134,10 +137,10 @@ void run_feature_extraction(const float *images, float *conv_out)
     lenet_run(dfe, &action);
     gettimeofday(&t_end, NULL);
     max_unload(dfe);
-    free(conv0_kernels);
-    free(conv0_bias);
-    free(conv2_kernels);
-    free(conv2_bias);
+    delete[] conv0_kernels;
+    delete[] conv0_bias;
+    delete[] conv2_kernels;
+    delete[] conv2_bias;
 
     std::cout << "Completed feature extraction!" << std::endl;
     report_conv_performance(t_begin, t_end);
