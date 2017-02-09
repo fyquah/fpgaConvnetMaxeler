@@ -116,7 +116,7 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
             actualOutput[i] <== (output[i] > 0 ? output[i] : constant.var(GlobalConfig.dataType, 0));
         }
         io.output(getOutputName(), actualOutput, outputVectorType, outputControlFlag);
-        DFEVar[] debugValues = new DFEVar[2 + foldingFactor + outputChannels + outputChannels];
+        DFEVar[] debugValues = new DFEVar[2 + foldingFactor + 3 * outputChannels];
 
         String s_input = "[\n";
         String s_output = "[\n";
@@ -135,17 +135,22 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
             debugValues[2 + i] = inputs[i];
         }
         for (int i = 0 ; i < outputChannels ; i++) {
-            debugValues[2 + foldingFactor + i] = actualOutput[i];
+            debugValues[2 + foldingFactor + i] = output[i];
         }
         for (int i = 0 ; i < outputChannels ; i++) {
-            debugValues[2 + foldingFactor + outputChannels + i] = output[i];
+            debugValues[2 + foldingFactor + outputChannels + i] = actualOutput[i];
+        }
+        for (int i = 0 ; i < outputChannels ; i++) {
+            debugValues[2 + foldingFactor + outputChannels + outputChannels + i] = 
+                    biasRom.read(constant.var(dfeUInt(Utils.ceilLog2(outputChannels)), i));
         }
 
         debug.simPrintf("AccumulatorKernel[layer = " + layerParams.getLayerId() + "]"
-                        + "pipelineIndex = %d iter = %d"
+                        + " pipelineIndex = %d iter = %d\n"
                         + "input = " + s_input
+                        + "output = " + s_output
                         + "actualOutput = " + s_output
-                        + "output = " + s_output,
+                        + "bias = " + s_output,
                         debugValues);
     }
 

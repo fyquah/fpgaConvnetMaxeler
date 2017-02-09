@@ -78,7 +78,7 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
             debugValues[3 + j] = input_weights[j];
         }
         for (int j = 0 ; j < kernelDim * kernelDim ; j++) {
-            debugValues[3 + kernelDim * kernelDim + j] = input_weights[j];
+            debugValues[3 + kernelDim * kernelDim + j] = input_pixels[j];
         }
         debug.simPrintf("ConvolutionUnitKernel[layer = " + params.getLayerId()
                         + "] loopIndex = %d pipelineState = %d output = %.3f\n"
