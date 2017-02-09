@@ -93,11 +93,15 @@ public class ParametersTransformer {
         int expectedWidth = -1;
         if (paramsCase.equals(LayerParameter.ParamsCase.CONV)) {
             ConvolutionParameter convParams = layerParameter.getConv();
+            int kernelSize = convParams.getKernelSize();
             if (!convParams.hasKernelSize() || convParams.getKernelSize() % 2 == 0) {
                 raiseError(layer_id, "Missing /invalid conv kernel_size");
             }
             if (!layerParameter.hasNumOutputs() || layerParameter.getNumOutputs() == 0) {
                 raiseError(layer_id, "numOutputs must be a positive integer in conv layers!");
+            }
+            if (kernelSize * kernelSize % convParams.getKernelFoldingFactor() != 0) {
+                raiseError(layer_id, "kernelFoldingFactor must be able divide the kernel size!");
             }
             numOutputs = layerParameter.getNumOutputs();
             expectedHeight = inputHeight + 1 - convParams.getKernelSize();

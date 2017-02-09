@@ -1,12 +1,15 @@
 package fpgaconvnet;
 import java.util.ArrayList;
+import java.util.List;
 
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVector;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVectorType;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Stream.OffsetExpr;
 import com.maxeler.maxcompiler.v2.kernelcompiler.KernelParameters;
-import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.CounterChain;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Count;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Count.Counter;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.memory.Memory;
 import com.maxeler.maxcompiler.v2.managers.engine_interfaces.InterfaceParam;
 
 import fpgaconvnet.protos.Parameters.LayerParameter;
@@ -15,159 +18,126 @@ import fpgaconvnet.protos.Parameters.LayerParameter;
 public class ConvolutionUnitKernel extends ConvolutionKernelBase {
 
     private final Dimension outputDimension;
-    private final int kernelDim, convLoopIterations, kernelFoldingFactor;
+    private final int kernelDim;
     private final DFEVectorType<DFEVar> inputVectorType;
-    private final DFEVector<DFEVar> input_weights, input_pixels;
-    private final DFEVar output, cycle, pipelineLengthVar, loopIndex, pipelineStage;
-    private final OffsetExpr pipelineLength;
-    private final ArrayList<DFEVar> multiplierOutputs;
-    private static final OffsetExprDefaultDict pipelineLengthCache =
-        new OffsetExprDefaultDict("ConvolutionUnit", 1, 10);
+    private final DFEVector<DFEVar> inputWindow;
+    private final DFEVar output;
+    private final Memory<DFEVar> memFilters;
+    private final LayerParameter layerParams;
 
-    private OffsetExpr getOffsetAutoLoop() {
-        return pipelineLengthCache.get(this);
-    }
-
-    public ConvolutionUnitKernel(KernelParameters kp, LayerParameter params) {
+    public ConvolutionUnitKernel(KernelParameters kp, LayerParameter params, int workerId) {
         super(kp, params);
-        kernelFoldingFactor = params.getConv().getKernelFoldingFactor();
+        layerParams = params;
         kernelDim = params.getConv().getKernelSize();
         outputDimension = Utils.layerOutputDimension(params);
 
-        convLoopIterations = Utils.divCeil(
-                kernelDim * kernelDim,  kernelFoldingFactor);
-        multiplierOutputs = new ArrayList<DFEVar>();
-
-        inputVectorType = new DFEVectorType<DFEVar>(
-                GlobalConfig.dataType, kernelDim * kernelDim);
-        input_weights = inputVectorType.newInstance(this);
-        input_pixels = inputVectorType.newInstance(this);
+        inputVectorType = new DFEVectorType<DFEVar>(GlobalConfig.dataType, kernelDim * kernelDim);
+        inputWindow = inputVectorType.newInstance(this);
         output = GlobalConfig.dataType.newInstance(this);
 
-        pipelineLength = getOffsetAutoLoop();
-        pipelineLengthVar = pipelineLength.getDFEVar(this, dfeUInt(25));
+        memFilters = mem.alloc(
+                GlobalConfig.dataType,
+                getSchedulerIterations() * layerParams.getNumOutputs());
+        memFilters.mapToCPU(String.format("filters_%d_worker_%d", params.getLayerId(), workerId));
 
-        CounterChain chain = control.count.makeCounterChain();
-        loopIndex = Utils.chainCounterOrZero(this, chain, convLoopIterations);
-        pipelineStage = chain.addCounter(pipelineLengthVar, 1);
-        cycle = control.count.simpleCounter(32);
+        // schedule the pixel and weight vars.
+        final List<DFEVar> multiplicationOutputs = new ArrayList<DFEVar>();
+        final int convFoldingFactor = layerParams.getConv().getConvFoldingFactor();
+        final int kernelFoldingFactor = layerParams.getConv().getKernelFoldingFactor();
+        final DFEVar[] pixelVars = new DFEVar[layerParams.getConv().getKernelFoldingFactor()];
+        final DFEVar[][] weightVars = new DFEVar[convFoldingFactor][kernelFoldingFactor];
+        for (int multId = 0; multId < layerParams.getConv().getKernelFoldingFactor(); multId++) {
+            pixelVars[multId] = getConvPixel(multId, inputWindow);
+        }
+        for (int convUnitIndex = 0; convUnitIndex < convFoldingFactor; convUnitIndex++) {
+            final int addressSeparation = kernelDim * kernelDim * Utils.divCeil(
+                    layerParams.getNumOutputs(), layerParams.getConv().getConvFoldingFactor());
+            final int addressBase = convUnitIndex * addressSeparation;
+            final int addressIncrement = layerParams.getConv().getKernelFoldingFactor();
+            final int addressBaseMax =
+                    (convUnitIndex + 1) * addressSeparation
+                    + 1 - layerParams.getConv().getKernelFoldingFactor();
 
-        initOutput();
+            for (int multId = 0; multId < kernelFoldingFactor; multId++) {
+                Counter addressCounter = control.count.makeCounter(
+                        control.count.makeParams(Utils.ceilLog2(addressBaseMax))
+                            .withCountMode(Count.CountMode.NUMERIC_INCREMENTING)
+                            .withInc(addressIncrement)
+                            .withInitValue(addressBase + multId)
+                            .withMax(addressBaseMax + multId)
+                            .withWrapMode(Count.WrapMode.COUNT_LT_MAX_THEN_WRAP));
+                weightVars[convUnitIndex][multId] = memFilters.read(addressCounter.getCount());
+                multiplicationOutputs.add(
+                        pixelVars[multId] * weightVars[convUnitIndex][multId]);
+            }
+        }
 
-        DFEVar inputControl = pipelineStage.eq(0) & loopIndex.eq(0);
-        DFEVar outputControl = pipelineStage.eq(pipelineLengthVar - 1) & loopIndex.eq(convLoopIterations - 1);;
-        input_weights <== io.input(getInputWeightsName(), inputVectorType, inputControl);
-        input_pixels <== io.input(getInputPixelsName(), inputVectorType, inputControl);
-        io.output(getOutputName(), output, GlobalConfig.dataType, outputControl);
+        // construct the actual outputs
+        int totalIter = getConvolutionIterations() * getSchedulerIterations() * getKernelIterations();
+        DFEVar iter = control.count.simpleCounter(Utils.ceilLog2((int) totalIter), totalIter);
+        output <== Utils.treeReduceAdd(multiplicationOutputs);
+        inputWindow <== io.input(getInputName(), inputVectorType, iter.eq(totalIter - 1));
+        io.output(getOutputName(), output, GlobalConfig.dataType);
 
         // debugging
-        String s_kernel = "[\n";
+        String s_window = "[\n";
+        String s_weights = "[\n";
+        DFEVar[] debugValues = new DFEVar[2 + kernelDim * kernelDim
+                                          + convFoldingFactor * kernelFoldingFactor] ;
+        debugValues[0] = iter;
+        debugValues[1] = output;
         for (int i = 0 ; i < kernelDim ; i++) {
-            s_kernel += "[";
+            s_window += "[";
             for (int j = 0; j < kernelDim ; j++) {
-                s_kernel += "%.3f, "; 
+                s_window += "%.3f, "; 
+                debugValues[i * kernelDim + j] = inputWindow[i * kernelDim + j];
             }
-            s_kernel += "],\n";
+            s_window += "],\n";
         }
-        s_kernel += "]\n";
-        DFEVar[] debugValues = new DFEVar[3 + 2 * kernelDim * kernelDim] ;
-        debugValues[0] = loopIndex;
-        debugValues[1] = pipelineStage;
-        debugValues[2] = output;
-        for (int j = 0 ; j < kernelDim * kernelDim ; j++) {
-            debugValues[3 + j] = input_weights[j];
+        s_window += "]\n";
+        for (int convUnitId = 0 ; convUnitId < convFoldingFactor ; convUnitId++) {
+            s_weights += "[";
+            for (int multId = 0; multId < kernelFoldingFactor ; multId++) {
+                s_weights += "%.3f, "; 
+                int idx = 2 + kernelDim * kernelDim + convUnitId * kernelFoldingFactor + multId;
+                debugValues[idx] = weightVars[convUnitId][multId];
+            }
+            s_weights += "]\n";
         }
-        for (int j = 0 ; j < kernelDim * kernelDim ; j++) {
-            debugValues[3 + kernelDim * kernelDim + j] = input_pixels[j];
-        }
+        s_weights += "]\n";
         debug.simPrintf("ConvolutionUnitKernel[layer = " + params.getLayerId()
-                        + "] loopIndex = %d pipelineState = %d output = %.3f\n"
-                        + "weights = " + s_kernel + "pixels = " + s_kernel,
+                        + "] iter = %d output = %.3f\n"
+                        + "input window = " + s_window 
+                        + "weights = " + s_weights,
                         debugValues);
     }
 
-    public String getOffsetExprName() {
-        return pipelineLengthCache.getOffsetExprName(this);
+    public int cyclesPerImage() {
+        int totalOutputPixels = outputDimension.height() * outputDimension.width();
+        int cyclesPerPixel = getSchedulerIterations()
+                * getConvolutionIterations()
+                * getKernelIterations();
+        return totalOutputPixels * cyclesPerPixel;
     }
 
-    public InterfaceParam cyclesPerImage(InterfaceParam pipelineLength) {
-        int totalOutputPixels = outputDimension.height() * outputDimension.width();
-        return convLoopIterations * getLoopIterations() * totalOutputPixels * pipelineLength;
+    public String getInputName() {
+        return "input";
     }
 
     public String getOutputName() {
         return "output";
     }
 
-    public String getInputWeightsName() {
-        return "input_weights";
-    }
-
-    public String getInputPixelsName() {
-        return "input_pixels";
-    }
-
-    public int getConvLoopIterations() {
-        return convLoopIterations;
-    }
-
-    private void initOutput() {
-        for (int i = 0 ; i < kernelFoldingFactor ; i++) {
-            DFEVar convWeight = getConvWeight(i);
-            DFEVar convPixel = getConvPixel(i);
-            debug.simPrintf(debugFlag(), "multiplier %d: %.5f %.5f\n", i, convWeight, convPixel);
-            multiplierOutputs.add(optimization.pipeline(convWeight * convPixel));
+    private DFEVar getConvPixel(int multiplierNumber, DFEVector<DFEVar> inputWindow) {
+        final int loopIterations = Utils.divCeil(
+                kernelDim * kernelDim,
+                layerParams.getConv().getKernelFoldingFactor());
+        final DFEVar iter = control.count.simpleCounter(loopIterations);
+        final DFEVar[] pixelChoices = new DFEVar[loopIterations];
+        for (int i = 0; i < loopIterations ; i++) {
+            int idx = i + multiplierNumber * layerParams.getConv().getKernelFoldingFactor();
+            pixelChoices[i] = inputWindow[idx];
         }
-
-        if (convLoopIterations == 1) {
-            output <== Utils.treeReduceAdd(multiplierOutputs);
-        } else {
-            DFEVar prev = (loopIndex.eq(0))
-                    ? constant.var(GlobalConfig.dataType, 0)
-                    : stream.offset(output, -pipelineLength);
-            DFEVar newSum = Utils.treeReduceAdd(multiplierOutputs);
-            output <== newSum + prev;
-        }
-    }
-
-    private DFEVar getConvWeight(int multiplierNumber) {
-        ArrayList<DFEVar> l = new ArrayList<DFEVar>();
-
-        for (int i = multiplierNumber * convLoopIterations ;
-                (i < (multiplierNumber + 1) * convLoopIterations) && (i < kernelDim * kernelDim);
-                i++) {
-            l.add(input_weights[i]);
-        }
-
-        while (l.size() < convLoopIterations) {
-            l.add(constant.var(GlobalConfig.dataType, 0));
-        }
-
-        if (l.size() == 1) {
-            return l[0];
-        } else {
-            return control.mux(
-                loopIndex,
-                l.toArray(new DFEVar[l.size()]));
-        }
-    }
-
-    private DFEVar getConvPixel(int multiplierNumber) {
-        ArrayList<DFEVar> l = new ArrayList<DFEVar>();
-        for (int i = multiplierNumber * convLoopIterations ;
-                i < (multiplierNumber + 1) * convLoopIterations && i < kernelDim * kernelDim;
-                i++) {
-            l.add(input_pixels[i]);
-        }
-
-        while (l.size() < convLoopIterations) {
-            l.add(constant.var(GlobalConfig.dataType, 0));
-        }
-
-        if (l.size() == 1) {
-            return l[0];
-        } else {
-            return control.mux(loopIndex, l.toArray(new DFEVar[l.size()]));
-        }
+        return control.mux(iter, pixelChoices);
     }
 }

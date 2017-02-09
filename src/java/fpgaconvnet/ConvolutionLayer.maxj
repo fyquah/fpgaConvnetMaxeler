@@ -15,15 +15,7 @@ import fpgaconvnet.protos.Parameters.LayerParameter;
 
 
 public class ConvolutionLayer {
-    private static int totalLayersInstantiated = 0;
-
-    public static int calcOuterLoopIterations(LayerParameter params) {
-        return Utils.divCeil(params.getNumInputs() * params.getNumOutputs(),
-                             params.getConv().getFoldingFactor()); 
-    }
-
     private final LayerParameter layer;
-    private final int id;
     private final CustomManager manager;
     private final BoxedKernelBlock<ConvolutionSchedulerKernel> scheduler;
     private final List<BoxedKernelBlock<ConvolutionUnitKernel>> convolutionUnits;
@@ -32,23 +24,23 @@ public class ConvolutionLayer {
     ConvolutionLayer(LayerParameter argLayer, CustomManager argManager) {
         layer = argLayer;
         manager = argManager;
-        id = totalLayersInstantiated++;
 
         convolutionUnits = new ArrayList<BoxedKernelBlock<ConvolutionUnitKernel>>();
 
         scheduler = new BoxedKernelBlock<ConvolutionSchedulerKernel>(
                 new ConvolutionSchedulerKernel(
-                        manager.makeKernelParameters("ConvolutionScheduler_" + id),
+                        manager.makeKernelParameters("ConvolutionScheduler_" + layer.getLayerId()),
                                                      layer));
         accumulator = new BoxedKernelBlock<ConvolutionAccumulatorKernel>(
                 new ConvolutionAccumulatorKernel(
-                        manager.makeKernelParameters("ConvolutionAccumulator_" + id),
+                        manager.makeKernelParameters("ConvolutionAccumulator_" + layer.getLayerId()),
                                                      layer));
 
-        for (int i = 0 ; i < layer.getConv().getFoldingFactor() ; i++) {
+        for (int workerId = 0 ; workerId < layer.getConv().getWorkerFactor() ; workerId++) {
             convolutionUnits.add(new BoxedKernelBlock<ConvolutionUnitKernel>(new ConvolutionUnitKernel(
-                    manager.makeKernelParameters("ConvolutionUnit_" + id + "_" + i),
-                    layer)));
+                    manager.makeKernelParameters(String.format("ConvolutionUnit_%d_%d",
+                                                               layer.getLayerId(), workerId)),
+                    layer, workerId)));
         }
 
         joinKernels();
@@ -77,15 +69,9 @@ public class ConvolutionLayer {
 
 
         /* ConvolutionUnits */
-        for (int i = 0 ; i < layer.getConv().getFoldingFactor() ; i++) {
-            InterfaceParam convPipelineLength = ei.getAutoLoopOffset(
-                    convolutionUnits[i].getKernel().getName(),
-                    convolutionUnits[i].getKernel().getOffsetExprName());
-            ei.ignoreAutoLoopOffset(
-                    convolutionUnits[i].getKernel().getName(),
-                    convolutionUnits[i].getKernel().getOffsetExprName());
+        for (int i = 0 ; i < layer.getConv().getWorkerFactor() ; i++) {
             ei.setTicks(convolutionUnits[i].getKernel().getName(),
-                        numberOfImages * convolutionUnits[i].getKernel().cyclesPerImage(convPipelineLength));
+                        numberOfImages * convolutionUnits[i].getKernel().cyclesPerImage());
         }
 
         /* Accumulator */
@@ -105,22 +91,17 @@ public class ConvolutionLayer {
     protected void joinKernels() {
 
         /* Configure from scheduler -> convolutionUnits */
-        for (int i = 0 ; i < layer.getConv().getFoldingFactor() ; i++) {
-            DFELink weightsFrom = scheduler.getBlock().getOutput(
-                        scheduler.getKernel().getWeightOutputName(i));
-            DFELink weightsTo = convolutionUnits[i].getBlock().getInput(
-                        convolutionUnits[i].getKernel().getInputWeightsName());;
+        for (int i = 0 ; i < layer.getConv().getWorkerFactor() ; i++) {
             DFELink pixelsFrom = scheduler.getBlock().getOutput(
-                        scheduler.getKernel().getPixelOutputName(i));
+                        scheduler.getKernel().getOutputName(i));
             DFELink pixelsTo = convolutionUnits[i].getBlock().getInput(
-                        convolutionUnits[i].getKernel().getInputPixelsName());;
+                        convolutionUnits[i].getKernel().getInputName());
 
-            weightsTo <== weightsFrom;
             pixelsTo <== pixelsFrom;
         }
 
         /* Configure from convolutionUnits -> accumulator */
-        for (int i = 0 ; i < layer.getConv().getFoldingFactor() ; i++) {
+        for (int i = 0 ; i < layer.getConv().getWorkerFactor() ; i++) {
             DFELink from = convolutionUnits[i].getBlock()
                     .getOutput(convolutionUnits[i].getKernel().getOutputName());;
             DFELink to = accumulator.getBlock()

@@ -12,7 +12,6 @@ import fpgaconvnet.protos.Parameters;
 
 public abstract class ConvolutionKernelBase extends Kernel {
     
-    private final List<ConvChannelIndex> convChannelIndices;
     private final Parameters.LayerParameter layerParams;
 
     public ConvolutionKernelBase (KernelParameters kp, Parameters.LayerParameter argParams) {
@@ -20,8 +19,13 @@ public abstract class ConvolutionKernelBase extends Kernel {
         layerParams = argParams;
     }
 
-    public int getLoopIterations() {
-        return ConvolutionLayer.calcOuterLoopIterations(layerParams);
+    public int getKernelIterations() {
+        int kernelDim = layerParams.getConv().getKernelSize();
+        return Utils.divCeil(kernelDim * kernelDim, layerParams.getConv().getKernelFoldingFactor());
+    }
+
+    public int getConvolutionIterations() {
+        return Utils.divCeil(layerParams.getNumOutputs(), layerParams.getConv().getConvFoldingFactor()); 
     }
 
     public int getAccumulationIterations() {
@@ -44,9 +48,6 @@ public abstract class ConvolutionKernelBase extends Kernel {
         }
         return ret;
     }
-
-    public abstract String getOffsetExprName();
-
 
     public static void setDebugMode(boolean flag) {
         debugMode = flag;

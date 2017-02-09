@@ -121,6 +121,7 @@ public class ResourceBenchmarkManager extends CustomManager {
 
     public ResourceBenchmarkManager(
         EngineParameters engineParameters,
+        int workerFoldingFactor,
         int convUnitFoldingFactor,
         int kernelFoldingFactor
     ) {
@@ -134,7 +135,8 @@ public class ResourceBenchmarkManager extends CustomManager {
                 .setNumOutputs(outputChannels)
                 .setConv(ConvolutionParameter.newBuilder()
                          .setKernelSize(kernelDim)
-                         .setFoldingFactor(convUnitFoldingFactor)
+                         .setWorkerFactor(workerFoldingFactor)
+                         .setConvFoldingFactor(convUnitFoldingFactor)
                          .setKernelFoldingFactor(kernelFoldingFactor)
                          .build())
                 .build();
@@ -178,6 +180,7 @@ public class ResourceBenchmarkManager extends CustomManager {
         ResourceBenchmarkParameters params = new ResourceBenchmarkParameters(args);
         ResourceBenchmarkManager manager = new ResourceBenchmarkManager(
             params,
+            params.getWorkerFactor(),
             params.getConvFoldingFactor(),
             params.getKernelFoldingFactor());
         BuildConfig buildConfig = manager.getBuildConfig();
@@ -187,8 +190,7 @@ public class ResourceBenchmarkManager extends CustomManager {
         buildConfig.setMPPRRetryNearMissesThreshold(params.getMPPRRetryThreshold());
 
         CustomManager.Config config = manager.config;
-		// was previously 125 (didn't work due to failed timing)
-        config.setDefaultStreamClockFrequency(75);
+        config.setDefaultStreamClockFrequency(150);
 
         manager.createSLiCinterface(manager.interfaceDefault());
         manager.build();

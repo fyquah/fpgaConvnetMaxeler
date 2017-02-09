@@ -9,7 +9,6 @@ import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVector;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVectorType;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.CounterChain;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Stream.OffsetExpr;
-import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.memory.Memory;
 
 import fpgaconvnet.protos.Parameters.LayerParameter;
 import fpgaconvnet.protos.Parameters.ConvolutionParameter;
@@ -18,13 +17,8 @@ import fpgaconvnet.protos.Parameters.ConvolutionParameter;
  * io.input:
  *  x : DFEVector[inputChannels] 
  * io.output:
- *  - y0, y1, y2, ...., y{foldingFactor - 1}
- *  - w0, w1, w2, ...., w{foldingFactor - 1}
- *  Bias will be handled at a later stage of the pipeline.
- *  where y_i and p_i are both inputs to ConvolutionUnit_i
- *        and are of type DFEVector[kerenlDim]
- *        (they are both sliding windows of the input streams
- *         and the convolution parameters respectively.)
+ *  - y0, y1, y2, ...., y{workerFactor - 1}
+ *  where y_i is a vector of length kernelDim * kernelDim.
  */
 
 public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
@@ -33,10 +27,9 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
     private final DFEVector<DFEVar> input;
     private final List<DFEVector<DFEVar>> output_y;
     private final Dimension inputDimension;
-    private final int foldingFactor, kernelDim, workerFactor;
+    private final int kernelDim, workerFactor;
     private final DFEVar iter, row, col;
     private final CounterChain masterChain;
-    private final int numberOfWeights;
     private final LayerParameter layerParams;
 
     public ConvolutionSchedulerKernel(KernelParameters kp, LayerParameter argLayerParams) {
@@ -46,15 +39,11 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
         inputDimension = Utils.layerInputDimension(layerParams);
         kernelDim = layerParams.getConv().getKernelSize();
         workerFactor = layerParams.getConv().getWorkerFactor();
-        foldingFactor = layerParams.getConv().getFoldingFactor();
-        numberOfWeights = (layerParams.getNumOutputs() * layerParams.getNumInputs() * kernelDim * kernelDim);
         masterChain = control.count.makeCounterChain();
         inputVectorType = new DFEVectorType<DFEVar>(
                 GlobalConfig.dataType,
                 inputDimension.channels());
-        outputVectorType = new DFEVectorType<DFEVar>(
-                GlobalConfig.dataType,
-                kernelDim * kernelDim);
+        outputVectorType = new DFEVectorType<DFEVar>(GlobalConfig.dataType, kernelDim * kernelDim);
         input = inputVectorType.newInstance(this);
         output_y = new ArrayList<DFEVector<DFEVar>>();;
         slidingWindows = new SlidingWindow[inputDimension.channels()];
@@ -78,7 +67,7 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
         DFEVar outputControlFlag = ~isBorder(row, col);
         for (int workerId = 0 ; workerId < workerFactor ; workerId++) {
             List<Integer> channelList = getSchedulerChannels(workerId);
-            io.output(getPixelOutputName(workerId),
+            io.output(getOutputName(workerId),
                       toMuxedPixel(iter, channelList), outputVectorType, outputControlFlag);
         }
 
@@ -115,16 +104,8 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
         return "input";
     }
 
-    public String getPixelOutputName(int convUnitId) {
-        return "output_x_" + convUnitId;
-    }
-
-    /*
-     * This is not used, but as the base class is a ConvolutionKernelBase
-     * we will need to implement this.
-     */
-    public String getOffsetExprName() {
-        return "";
+    public String getOutputName(int workerId) {
+        return "output_x_" + workerId;
     }
 
     protected DFEVar isBorder(DFEVar row, DFEVar col) {
