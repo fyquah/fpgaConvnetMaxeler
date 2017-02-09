@@ -51,7 +51,7 @@ public class PoolingLayerKernel extends Kernel {
                 poolingDim,
                 inputDimension.channels()
             );
-            poolingUnits[i].setInput(stream.offset(input[i], i));
+            poolingUnits[i].setInput(stream.offset(input, i));
             output[i] <== poolingUnits[i].output();
         }
         // end of dervived properties

@@ -61,14 +61,17 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
         }
         row = Utils.chainCounterOrZero(this, masterChain, inputDimension.height());
         col = Utils.chainCounterOrZero(this, masterChain, inputDimension.width());
-        iter = Utils.chainCounterOrZero(this, masterChain, workerFactor);
+        iter = Utils.chainCounterOrZero(this, masterChain, getSchedulerIterations());
 
         input <== io.input(getInputName(), inputVectorType);
         DFEVar outputControlFlag = ~isBorder(row, col);
         for (int workerId = 0 ; workerId < workerFactor ; workerId++) {
             List<Integer> channelList = getSchedulerChannels(workerId);
+            output_y[workerId] <== toMuxedPixel(iter, channelList);
             io.output(getOutputName(workerId),
-                      toMuxedPixel(iter, channelList), outputVectorType, outputControlFlag);
+                      output_y[workerId],
+                      outputVectorType,
+                      outputControlFlag);
         }
 
         /* For debugging only. */
@@ -82,12 +85,12 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
         }
         s_kernel += "]\n";
         for (int i = 0 ; i < workerFactor ; i++) {
-            DFEVar[] debugValues = new DFEVar[3 + kernelDim * kernelDim] ;
+            DFEVar[] debugValues = new DFEVar[2 + kernelDim * kernelDim];
             debugValues[0] = row;
             debugValues[1] = col;
 
             for (int j = 0 ; j < kernelDim * kernelDim ; j++) {
-                debugValues[3 + kernelDim * kernelDim + j] = output_y[i][j];
+                debugValues[2 + j] = output_y[i][j];
             }
             debug.simPrintf("ConvolutionScheduler[layer = " + layerParams.getLayerId() + "] "
                             + "row = %d col = %d worker = " + i + "\n"
@@ -130,6 +133,7 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
     }
 
     protected DFEVector<DFEVar> toMuxedPixel(DFEVar iter, List<Integer> channels) {
+        Utils.assertTrue(channels.size() == getSchedulerIterations());
 
         if (getSchedulerIterations() == 1) {
             Utils.assertTrue(channels.size() == 1);
