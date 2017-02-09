@@ -90,7 +90,7 @@ def main():
     x = np.maximum(convolve(x, filters[1], biases[1]), 0)
     x = max_pool(x)
     assert x.shape == (10, 4, 4, 50)
-    data = x.reshape(10, 800)
+    data = x.reshape(10, -1)
     with open("test_data/lenet/output.txt", "w") as f:
         for row in data:
             f.write(" ".join(str(x) for x in row) + "\n")
