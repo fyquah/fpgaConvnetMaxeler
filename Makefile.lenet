@@ -2,7 +2,7 @@ LENET_NAME=lenet
 LENET_SIMMAXDIR=$(MAXCOMPILER_BUILD_DIR)/$(LENET_NAME)_$(DFEModel)_DFE_SIM/results
 LENET_DFEMAXDIR=$(MAXCOMPILER_BUILD_DIR)/$(LENET_NAME)_$(DFEModel)_DFE/results
 LENET_SIM_MAXFILE=$(MAXCOMPILER_BUILD_DIR)/$(LENET_NAME)_$(DFEModel)_DFE_SIM/results/$(LENET_NAME).max
-LENET_MAXFILE=$(MAXCOMPILER_BUILD_DIR)/$(LENET_NAME)_$(DFEModel)_DFE/results/$(LENET_NAME).max
+LENET_DFE_MAXFILE=$(MAXCOMPILER_BUILD_DIR)/$(LENET_NAME)_$(DFEModel)_DFE/results/$(LENET_NAME).max
 LENET_DATA=mnist/train-images-idx3-ubyte mnist/train-labels-idx1-ubyte \
 	   mnist/t10k-images-idx3-ubyte mnist/t10k-labels-idx1-ubyte
 
@@ -12,6 +12,11 @@ fpgaconvnet/mnist.o: fpgaconvnet/mnist.cpp
 
 fpgaconvnet/convnet.o: fpgaconvnet/convnet.cpp
 	$(CPUCOMPILER) $< -c -o $@
+
+$(LENET_DATA):
+	mkdir -p mnist/
+	curl "http://yann.lecun.com/exdb/$@.gz" >$@.gz
+	gzip -d $@.gz
 
 # ==============================
 #           Simulation
@@ -42,11 +47,6 @@ lenet_sim: fpgaconvnet/mnist.o fpgaconvnet/feedforward.o fpgaconvnet/convnet.o \
 	    fpgaconvnet/lenet_sim.o fpgaconvnet/lenet_main_sim.o
 	$(CPUCOMPILER) $(ALL_FLAGS) -o $@ $^ $(LFLAGS)
 
-$(LENET_DATA):
-	mkdir -p mnist/
-	curl "http://yann.lecun.com/exdb/$@.gz" >$@.gz
-	gzip -d $@.gz
-
 run_lenet_sim: lenet_sim $(LENET_DATA)
 	$(MAXCOMPILERSIM) -n $(USER)a -c$(DEVICENUM) -d$(NUMDEVICES) restart
 	SLIC_CONF+="use_simulation=$(USER)a" LD_PRELOAD=$(MAXOS_SIM) ./$< $(USER)a0:$(USER)a
@@ -56,27 +56,33 @@ run_lenet_sim: lenet_sim $(LENET_DATA)
 #          DFE
 # ==============================
 
-$(LENET_MAXFILE): $(ENGINEFILES)
-	$(MAXJC) $(JFLAGS) $(ENGINEFILES)
-	MAXAPPJCP='.:$(CP)' MAXSOURCEDIRS='../src' $(MAXJAVARUN) -v -m 8192 $(MANAGER) le_net \
-		  DFEModel=$(DFEModel) maxFileName=$(LENET_NAME) \
-		  target='DFE' enableMPCX=$(MPCX)
+$(LENET_DFE_MAXFILE): $(ENGINEFILES) $(JAVA_PROTOS)
+	$(MAXJC) $(JFLAGS) $^
+	MAXAPPJCP='.:$(CP)' MAXSOURCEDIRS=$(SOURCE_DIRS) \
+		  $(MAXJAVARUN) fpgaconvnet.GenericNetworkBuilder \
+		  DFEModel=$(DFEModel) \
+		  maxFileName=$(LENET_NAME) \
+		  target="DFE" \
+		  descriptor="../descriptors/lenet.prototxt" \
+		  enableMPCX=$(MPCX)
 
-mnist.o: ../src/mnist.cpp
-	$(CPUCOMPILER) $< -c -o $@
 
-feedforward.o: ../src/feedforward.cpp
-	$(CPUCOMPILER) $< -c -o $@
-
-lenet.o: $(LENET_MAXFILE)
+fpgaconvnet/lenet_dfe.o: $(LENET_DFE_MAXFILE)
 	$(SLICCOMPILE) $< $@
 
-lenetc.o: ../src/lenet.cpp $(LENET_MAXFILE)
-	$(CPUCOMPILER) $< $(ALL_FLAGS) -I$(MAXCOMPILER_BUILD_DIR) -I$(LENET_DFEMAXDIR) -DDESIGN_NAME=$(LENET_NAME) -c -o $@
 
-lenet: lenet.o lenetc.o mnist.o feedforward.o
+fpgaconvnet/lenet_main_dfe.o: fpgaconvnet/lenet_main.cpp $(LENET_DFE_MAXFILE)
+	$(CPUCOMPILER) $< $(ALL_FLAGS) \
+		-I$(MAXCOMPILER_BUILD_DIR) -I$(LENET_DFEMAXDIR) \
+		-D__SIM__ -DDESIGN_NAME=$(LENET_NAME) -c -o $@
+
+
+lenet_dfe: fpgaconvnet/mnist.o fpgaconvnet/feedforward.o fpgaconvnet/convnet.o \
+	    fpgaconvnet/lenet_dfe.o fpgaconvnet/lenet_main_dfe.o
 	$(CPUCOMPILER) $(ALL_FLAGS) -o $@ $^ $(LFLAGS)
 
-run_lenet: lenet
-	SLIC_CONF="$(SLIC_CONF)" LD_PRELOAD=$(MAXOS_HW) ./$<
 
+run_lenet_dfe: lenet_dfe $(LENET_DATA)
+	reserve_fpga
+	SLIC_CONF="$(SLIC_CONF)" LD_PRELOAD=$(MAXOS_HW) ./$<
+	release_fpga
