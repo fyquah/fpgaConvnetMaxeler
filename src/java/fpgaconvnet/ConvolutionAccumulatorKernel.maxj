@@ -25,38 +25,50 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
         layerParams = params;
         biasRom = mem.alloc(GlobalConfig.dataType, params.getNumOutputs());
         biasRom.mapToCPU(String.format("bias_layer_%d", params.getLayerId()));
+        final int totalIterations = getCyclesPerChannel();
 
         DFEVar output = GlobalConfig.dataType.newInstance(this);
-
+        DFEVar inputControlFlag = dfeUInt(1).newInstance(this);
+        DFEVar outputControlFlag = dfeUInt(1).newInstance(this);
         List<DFEVar> inputVars = new ArrayList<DFEVar>();
         for (int i = 0 ; i < layerParams.getConv().getWorkerFactor() ; i++) {
-            inputVars.add(io.input(getInputName(i), GlobalConfig.dataType));
+            inputVars.add(io.input(getInputName(i), GlobalConfig.dataType, inputControlFlag));
         }
+        io.output(getOutputName(), output, GlobalConfig.dataType, outputControlFlag);
+
         CounterChain chain = control.count.makeCounterChain();
         DFEVar address = Utils.chainCounterOrZero(this, chain, params.getNumOutputs());
-        DFEVar iter = Utils.chainCounterOrZero(this, chain, getSchedulerIterations());
+        DFEVar iter = Utils.chainCounterOrZero(this, chain, totalIterations);
 
         DFEVar sumVars = Utils.treeReduceAdd(inputVars);
-        if (getSchedulerIterations() == 1) {
+        if (totalIterations == 1) {
             output <== sumVars + biasRom.read(address);
-            io.output(getOutputName(), output, GlobalConfig.dataType);
+            inputControlFlag <== constant.var(dfeUInt(1), 1);
+            outputControlFlag <== constant.var(dfeUInt(1), 1);
         } else {
             OffsetExpr loopOffsetExpr = stream.makeOffsetAutoLoop(getOffsetExprName());
             DFEVar pipelineLengthVar = loopOffsetExpr.getDFEVar(this,dfeUInt(32));
             DFEVar pipelineStage = chain.addCounter(pipelineLengthVar, 1);
 
-            DFEVar outputControlFlag =
-                    iter.eq(getSchedulerIterations() - 1) & pipelineStage.eq(pipelineLengthVar - 1);
             DFEVar prevOutput = (iter.eq(0)
-                    ?  biasRom.read(address)
+                    ? biasRom.read(address)
                     : stream.offset(output, -loopOffsetExpr));
             output <== sumVars + prevOutput;
-            io.output(getOutputName(), output, GlobalConfig.dataType, outputControlFlag);
+            inputControlFlag <== pipelineStage.eq(0);
+            outputControlFlag <==
+                    iter.eq(totalIterations - 1) & pipelineStage.eq(pipelineLengthVar - 1);
+
+            debug.simPrintf(
+                    "ConvolutionAccumulatorKernel[layer = %d]" +
+                    " inputControlFlag = %d outputControlFlag = %d" +
+                    " pipelineStage = %d pipelineLengthVar = %d" +
+                    " address = %d iter = %d output = %.3f\n",
+                    layerParams.getLayerId(),
+                    inputControlFlag, outputControlFlag, pipelineStage, pipelineLengthVar,
+                    address, iter, output);
         }
 
-        debug.simPrintf(
-                "ConvolutionAccumulatorKernel[layer = %d] address = %d iter = %d output = %.3f\n",
-                layerParams.getLayerId(), address, iter, output);
+        // debug
 
         // // Pipelined adder - may or may not be better, but this probably will not
         //                      be the bottle neck of the performance, so there is not much point
@@ -85,14 +97,23 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
     }
 
     public String getOffsetExprName() {
-        return String.format("offset_layer_%d", layerParams.getLayerId());
+        return String.format("offset");
     }
 
-    public InterfaceParam cyclesPerImage(InterfaceParam pipelineLength) {
-        return (layerParams.getOutputWidth()
-                * layerParams.getOutputHeight()
+    public int getCyclesPerChannel() {
+        return getSchedulerIterations() * getConvolutionIterations();
+
+    }
+
+    public int cyclesPerImage() {
+        int x = layerParams.getOutputWidth() * layerParams.getOutputHeight()
                 * layerParams.getNumOutputs()
-                * getSchedulerIterations()
-                * pipelineLength);
+                * getCyclesPerChannel();
+        System.out.println(String.format(
+                    "accum: %d * %d = %d",
+                    layerParams.getOutputWidth() * layerParams.getOutputHeight(),
+                    getCyclesPerChannel() * layerParams.getNumOutputs(),
+                    x));
+        return x;
     }
 }

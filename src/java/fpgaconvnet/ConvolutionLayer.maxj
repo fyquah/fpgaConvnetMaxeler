@@ -52,8 +52,7 @@ public class ConvolutionLayer {
     }
 
     public DFELink getOutput() {
-        return accumulator.getBlock().getOutput(
-                accumulator.getKernel().getOutputName());
+        return accumulator.getBlock().getOutput(accumulator.getKernel().getOutputName());
     }
 
     // TODO(fyq14): Once pipelining is introduced, this function probably needs some
@@ -75,14 +74,18 @@ public class ConvolutionLayer {
         }
 
         /* Accumulator */
-        InterfaceParam pipelineLength = ei.getAutoLoopOffset(
-                accumulator.getKernel().getName(),
-                accumulator.getKernel().getOffsetExprName());
-        // ei.ignoreAutoLoopOffset(
-        //         accumulator.getKernel().getName(),
-        //         accumulator.getKernel().getOffsetExprName());
-        ei.setTicks(accumulator.getKernel().getName(),
-                    numberOfImages * accumulator.getKernel().cyclesPerImage(pipelineLength));
+        if (accumulator.getKernel().getSchedulerIterations() == 1) {
+            ei.setTicks(accumulator.getKernel().getName(),
+                        numberOfImages * accumulator.getKernel().cyclesPerImage());
+        } else {
+            InterfaceParam latency = ei.getAutoLoopOffset(
+                    accumulator.getKernel().getName(),
+                    accumulator.getKernel().getOffsetExprName());
+            ei.ignoreAutoLoopOffset(accumulator.getKernel().getName(),
+                                    accumulator.getKernel().getOffsetExprName());
+            ei.setTicks(accumulator.getKernel().getName(),
+                        numberOfImages * accumulator.getKernel().cyclesPerImage() * latency);
+        }
     }
 
     /*

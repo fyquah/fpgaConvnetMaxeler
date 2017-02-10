@@ -75,6 +75,7 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
         }
 
         /* For debugging only. */
+        DFEVar cycle = control.count.simpleCounter(32);
         String s_kernel = "[\n";
         for (int i = 0 ; i < kernelDim ; i++) {
             s_kernel += "[";
@@ -85,22 +86,25 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
         }
         s_kernel += "]\n";
         for (int i = 0 ; i < workerFactor ; i++) {
-            DFEVar[] debugValues = new DFEVar[2 + kernelDim * kernelDim];
-            debugValues[0] = row;
-            debugValues[1] = col;
+            DFEVar[] debugValues = new DFEVar[3 + kernelDim * kernelDim];
+            debugValues[0] = outputControlFlag;
+            debugValues[1] = row;
+            debugValues[2] = col;
 
             for (int j = 0 ; j < kernelDim * kernelDim ; j++) {
-                debugValues[2 + j] = output_y[i][j];
+                debugValues[3 + j] = output_y[i][j];
             }
             debug.simPrintf("ConvolutionScheduler[layer = " + layerParams.getLayerId() + "] "
-                            + "row = %d col = %d worker = " + i + "\n"
+                            + "outputFlag = %d row = %d col = %d worker = " + i + "\n"
                             + "pixel_window = " + s_kernel,
                             debugValues);
         }
     }
 
     public int cyclesPerImage() {
-        return (inputDimension.width() * inputDimension.height() * getSchedulerIterations());
+        int x  = (inputDimension.width() * inputDimension.height() * getSchedulerIterations());
+        System.out.println("x = " + x);
+        return x;
     }
 
     public String getInputName() {

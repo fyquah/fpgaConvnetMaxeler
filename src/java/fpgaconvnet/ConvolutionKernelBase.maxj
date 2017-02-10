@@ -19,19 +19,25 @@ public abstract class ConvolutionKernelBase extends Kernel {
         layerParams = argParams;
     }
 
+    /* The number of cycles to perform _one_ convolution */
     public int getKernelIterations() {
         int kernelDim = layerParams.getConv().getKernelSize();
         return Utils.divCeil(kernelDim * kernelDim, layerParams.getConv().getKernelFoldingFactor());
     }
 
+    /* The number of loop iterations required to convolve a input channel's window with all
+     * the the filters that concerned it.
+     */
     public int getConvolutionIterations() {
-        return Utils.divCeil(layerParams.getNumOutputs(), layerParams.getConv().getConvFoldingFactor()); 
+        return Utils.divCeil(
+                layerParams.getNumOutputs(), layerParams.getConv().getConvFoldingFactor()); 
     }
 
     public int getAccumulationIterations() {
         return layerParams.getNumOutputs() / layerParams.getConv().getWorkerFactor();
     }
 
+    /* The number of input channels a worker needs to handle. */
     public int getSchedulerIterations() {
         return Utils.divCeil(layerParams.getNumInputs(), layerParams.getConv().getWorkerFactor());
     }
