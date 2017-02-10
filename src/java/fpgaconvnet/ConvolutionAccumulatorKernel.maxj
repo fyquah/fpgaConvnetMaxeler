@@ -31,6 +31,10 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
         return ret;
     }
 
+    private DFEVar relu(DFEVar x) {
+        return (x > 0 ? x : 0);
+    }
+
     public ConvolutionAccumulatorKernel(KernelParameters kp, LayerParameter params) {
         super(kp, params);
 
@@ -81,11 +85,9 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
                     convIter.eq(channel / layerParams.getConv().getConvFoldingFactor())
                     & kernelIter.eq(0)
                     & pipelineStage.eq(0));
-            DFEVar channelOutput = (
-                    channelOutputFlag
-                    ? (prevOutput + sumVars)
-                    : prevOutput);
-            output[channel] <== channelOutput;
+            DFEVar acc = (
+                    channelOutputFlag ? (prevOutput + sumVars) : prevOutput);
+            output[channel] <== outputControlFlag ? relu(acc) : acc;
         }
 
         // debugging output
