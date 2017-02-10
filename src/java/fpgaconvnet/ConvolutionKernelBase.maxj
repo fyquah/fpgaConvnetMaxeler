@@ -40,10 +40,11 @@ public abstract class ConvolutionKernelBase extends Kernel {
         List<Integer> ret = new ArrayList<Integer>();
         int workerFactor = layerParams.getConv().getWorkerFactor();
         for (int i = 0 ; i < getSchedulerIterations() ; i++) {
-            if (workerFactor * workerIndex + i >= layerParams.getNumInputs()) {
+            int channel = workerIndex * getSchedulerIterations() + i;
+            if (channel >= layerParams.getNumInputs()) {
                 ret.add(-1);
             } else {
-                ret.add(workerFactor * workerIndex + i);
+                ret.add(channel);
             }
         }
         return ret;
