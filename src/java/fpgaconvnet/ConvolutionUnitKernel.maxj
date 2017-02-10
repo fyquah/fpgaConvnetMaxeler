@@ -21,8 +21,9 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
     private final int kernelDim;
     private final int totalWeights;
     private final DFEVectorType<DFEVar> inputVectorType;
+    private final DFEVectorType<DFEVar> outputVectorType;
     private final DFEVector<DFEVar> inputWindow;
-    private final DFEVar output;
+    private final DFEVector<DFEVar> output;
     private final Memory<DFEVar> filtersRom;
     private final LayerParameter layerParams;
 
@@ -32,8 +33,10 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
         kernelDim = params.getConv().getKernelSize();
 
         inputVectorType = new DFEVectorType<DFEVar>(GlobalConfig.dataType, kernelDim * kernelDim);
+        outputVectorType = new DFEVectorType<DFEVar>(
+                GlobalConfig.dataType, layerParams.getConv().getConvFoldingFactor());
         inputWindow = inputVectorType.newInstance(this);
-        output = GlobalConfig.dataType.newInstance(this);
+        output = outputVectorType.newInstance(this);
         totalWeights =
                 getSchedulerIterations() * layerParams.getNumOutputs() * kernelDim * kernelDim;
 
@@ -64,6 +67,7 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
                     (convUnitIndex + 1) * addressSeparation
                     + 1 - layerParams.getConv().getKernelFoldingFactor();
 
+            DFEVar convUnitOutput = constant.var(GlobalConfig.dataType, 0.0);
             for (int multId = 0; multId < kernelFoldingFactor; multId++) {
                 Counter addressCounter = control.count.makeCounter(
                         control.count.makeParams(Utils.ceilLog2(addressBaseMax))
@@ -74,15 +78,15 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
                             .withWrapMode(Count.WrapMode.COUNT_LT_MAX_THEN_WRAP));
                 weightVars[convUnitIndex][multId] = filtersRom.read(
                         addressCounter.getCount().cast(dfeUInt(Utils.ceilLog2(totalWeights))));
-                multiplicationOutputs.add(
-                        pixelVars[multId] * weightVars[convUnitIndex][multId]);
+                convUnitOutput = convUnitOutput
+                        + pixelVars[multId] * weightVars[convUnitIndex][multId];
             }
+            output[convUnitIndex] <== convUnitOutput;
         }
 
         DFEVar inputControlFlag = iter.eq(0) & kernelIter.eq(0);
-        output <== Utils.treeReduceAdd(multiplicationOutputs);
         inputWindow <== io.input(getInputName(), inputVectorType, inputControlFlag);
-        io.output(getOutputName(), output, GlobalConfig.dataType);
+        io.output(getOutputName(), output, outputVectorType);
 
         // debugging
         String s_window = "[\n";
@@ -92,7 +96,7 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
         debugValues[0] = inputControlFlag;
         debugValues[1] = iter;
         debugValues[2] = kernelIter;
-        debugValues[3] = output;
+        debugValues[3] = output[0];
         for (int i = 0 ; i < kernelDim ; i++) {
             s_window += "[";
             for (int j = 0; j < kernelDim ; j++) {
@@ -114,7 +118,7 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
         s_weights += "]\n";
         debug.simPrintf("ConvolutionUnitKernel[layer = " + params.getLayerId()
                         + "] worker = " + workerId
-                        + " inputControlFlag = %d iter = %d kernelIter = %d output = %.3f\n"
+                        + " inputControlFlag = %d iter = %d kernelIter = %d output[0] = %.3f\n"
                         + "input window = " + s_window 
                         + "weights = " + s_weights,
                         debugValues);
@@ -125,11 +129,6 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
         int cyclesPerPixel = getSchedulerIterations()
                 * getConvolutionIterations()
                 * getKernelIterations();
-        System.out.println(String.format(
-                    "unit: %d * %d = %d",
-                    totalOutputPixels,
-                    cyclesPerPixel,
-                    totalOutputPixels * cyclesPerPixel));
         return totalOutputPixels * cyclesPerPixel;
     }
 

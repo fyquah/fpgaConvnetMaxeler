@@ -74,18 +74,13 @@ public class ConvolutionLayer {
         }
 
         /* Accumulator */
-        if (accumulator.getKernel().getSchedulerIterations() == 1) {
-            ei.setTicks(accumulator.getKernel().getName(),
-                        numberOfImages * accumulator.getKernel().cyclesPerImage());
-        } else {
-            InterfaceParam latency = ei.getAutoLoopOffset(
-                    accumulator.getKernel().getName(),
-                    accumulator.getKernel().getOffsetExprName());
-            ei.ignoreAutoLoopOffset(accumulator.getKernel().getName(),
-                                    accumulator.getKernel().getOffsetExprName());
-            ei.setTicks(accumulator.getKernel().getName(),
-                        numberOfImages * accumulator.getKernel().cyclesPerImage() * latency);
-        }
+        InterfaceParam latency = ei.getAutoLoopOffset(
+                accumulator.getKernel().getName(),
+                accumulator.getKernel().getOffsetExprName());
+        ei.ignoreAutoLoopOffset(accumulator.getKernel().getName(),
+                                accumulator.getKernel().getOffsetExprName());
+        ei.setTicks(accumulator.getKernel().getName(),
+                    numberOfImages * accumulator.getKernel().cyclesPerImage() * latency);
     }
 
     /*
