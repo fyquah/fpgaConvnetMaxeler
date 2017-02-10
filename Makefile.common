@@ -44,7 +44,7 @@ ifneq ($(findstring cpp, $(CPUFILES)), )
     CPUCOMPILER = $(CXX)
 
     # Assuming CXX points to g++/c++ by default
-    COMPILER_CFLAGS = -fopenmp
+    COMPILER_CFLAGS = -fopenmp -std=c++11
     OPT_FLAGS = -march=native -O3
 
     ifeq ($(CXX), icpc)
