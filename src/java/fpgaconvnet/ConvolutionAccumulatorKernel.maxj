@@ -72,22 +72,20 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
 
         for (int channel = 0 ; channel < layerParams.getNumOutputs() ; channel++) {
             final int convFoldingFactor = layerParams.getConv().getConvFoldingFactor();
+            DFEVar acc = GlobalConfig.dataType.newInstance(this);
             DFEType addressType = dfeUInt(Utils.ceilLog2(layerParams.getNumOutputs()));
             DFEVar initFlag = (schedulerIter.eq(0)
                     & convIter.eq(channel / layerParams.getConv().getConvFoldingFactor())
-                    & kernelIter.eq(0)
-                    & pipelineStage.eq(0));
-            DFEVar prevOutput = (
+                    & kernelIter.eq(0));
+            DFEVar prevAcc = (
                     initFlag ? biasRom.read(constant.var(addressType, channel))
-                    : stream.offset(output[channel], -loopOffsetExpr));
+                    : stream.offset(acc, -loopOffsetExpr));
             DFEVar sumVars = Utils.treeReduceAdd(map(inputVectors, channel % convFoldingFactor));
             DFEVar channelOutputFlag = (
-                    convIter.eq(channel / layerParams.getConv().getConvFoldingFactor())
-                    & kernelIter.eq(0)
-                    & pipelineStage.eq(0));
-            DFEVar acc = (
-                    channelOutputFlag ? (prevOutput + sumVars) : prevOutput);
-            output[channel] <== outputControlFlag ? relu(acc) : acc;
+                    convIter.eq(channel / layerParams.getConv().getConvFoldingFactor()));
+
+            acc <== (channelOutputFlag ? (prevAcc + sumVars) : prevAcc);
+            output[channel] <== relu(acc);
         }
 
         // debugging output
