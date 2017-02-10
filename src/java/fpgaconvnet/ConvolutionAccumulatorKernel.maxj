@@ -51,14 +51,14 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
         }
         io.output(getOutputName(), output, outputVectorType, outputControlFlag);
 
+        OffsetExpr loopOffsetExpr = stream.makeOffsetAutoLoop(getOffsetExprName());
+        DFEVar pipelineLengthVar = loopOffsetExpr.getDFEVar(this,dfeUInt(32));
         CounterChain chain = control.count.makeCounterChain();
         DFEVar schedulerIter = Utils.chainCounterOrZero(this, chain, getSchedulerIterations());
         DFEVar convIter = Utils.chainCounterOrZero(this, chain, getConvolutionIterations());
         DFEVar kernelIter = Utils.chainCounterOrZero(this, chain, getKernelIterations());
-
-        OffsetExpr loopOffsetExpr = stream.makeOffsetAutoLoop(getOffsetExprName());
-        DFEVar pipelineLengthVar = loopOffsetExpr.getDFEVar(this,dfeUInt(32));
         DFEVar pipelineStage = chain.addCounter(pipelineLengthVar, 1);
+
         inputControlFlag <== pipelineStage.eq(0);
         outputControlFlag <==
                 schedulerIter.eq(getSchedulerIterations() - 1)
@@ -77,8 +77,12 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
                     flag ? biasRom.read(constant.var(addressType, channel))
                     : stream.offset(output[channel], -loopOffsetExpr));
             DFEVar sumVars = Utils.treeReduceAdd(map(inputVectors, channel % convFoldingFactor));
+            DFEVar channelOutputFlag = (
+                    convIter.eq(channel / layerParams.getConv().getConvFoldingFactor())
+                    & kernelIter.eq(0)
+                    & pipelineStage.eq(0));
             DFEVar channelOutput = (
-                    schedulerIter.eq(channel / layerParams.getConv().getWorkerFactor())
+                    channelOutputFlag
                     ? (prevOutput + sumVars)
                     : prevOutput);
             output[channel] <== channelOutput;
@@ -86,10 +90,7 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
 
         // debugging output
         String s_output = "[";
-        for (int i = 0 ; i < params.getNumOutputs() ; i++) {
-            s_output += "%.3f, ";
-        }
-        s_output += "]";
+        String s_conv = "[\n";
         List<Object> debugValues = new ArrayList<Object>();
         debugValues.add((Integer) layerParams.getLayerId());
         debugValues.add(inputControlFlag);
@@ -99,14 +100,26 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
         debugValues.add(schedulerIter);
         debugValues.add(convIter);
         debugValues.add(kernelIter);
+        for (DFEVector<DFEVar> vector: inputVectors) {
+            s_conv += "[";
+            for (int i = 0 ; i < params.getConv().getConvFoldingFactor() ; i++) {
+                debugValues.add(vector[i]);
+                s_conv += "%.3f, ";
+            }
+            s_conv += "]\n";
+        }
         for (int i = 0 ; i < params.getNumOutputs() ; i++) {
             debugValues.add(output[i]);
+            s_output += "%.3f, ";
         }
+        s_conv += "]";
+        s_output += "]";
         debug.simPrintf(
                 "ConvolutionAccumulatorKernel[layer = %d]"
                 + " inputControlFlag = %d outputControlFlag = %d"
                 + " pipelineStage = %d pipelineLengthVar = %d"
                 + " schedulerIter = %d convIter = %d kernelIter = %d"
+                + "\ninputs = " + s_conv + "\n"
                 + "\noutput = " + s_output + "\n",
                 debugValues.toArray(new Object [1]));
 
