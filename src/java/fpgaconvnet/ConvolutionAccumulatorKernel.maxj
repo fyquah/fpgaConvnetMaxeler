@@ -73,12 +73,12 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
         for (int channel = 0 ; channel < layerParams.getNumOutputs() ; channel++) {
             final int convFoldingFactor = layerParams.getConv().getConvFoldingFactor();
             DFEType addressType = dfeUInt(Utils.ceilLog2(layerParams.getNumOutputs()));
-            DFEVar flag = (schedulerIter.eq(0)
+            DFEVar initFlag = (schedulerIter.eq(0)
                     & convIter.eq(channel / layerParams.getConv().getConvFoldingFactor())
                     & kernelIter.eq(0)
                     & pipelineStage.eq(0));
             DFEVar prevOutput = (
-                    flag ? biasRom.read(constant.var(addressType, channel))
+                    initFlag ? biasRom.read(constant.var(addressType, channel))
                     : stream.offset(output[channel], -loopOffsetExpr));
             DFEVar sumVars = Utils.treeReduceAdd(map(inputVectors, channel % convFoldingFactor));
             DFEVar channelOutputFlag = (
