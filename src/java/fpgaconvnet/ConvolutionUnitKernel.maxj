@@ -70,6 +70,8 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
         for (int multId = 0; multId < layerParams.getConv().getKernelFoldingFactor(); multId++) {
             pixelVars[multId] = getConvPixel(multId, kernelIter, inputWindow);
         }
+
+        /* Stream the multiplication results. */
         for (int convUnitIndex = 0; convUnitIndex < convFoldingFactor; convUnitIndex++) {
             final int addressSeparation = kernelDim * kernelDim * Utils.divCeil(
                     layerParams.getNumOutputs(), layerParams.getConv().getConvFoldingFactor());

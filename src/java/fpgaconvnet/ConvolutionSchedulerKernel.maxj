@@ -19,6 +19,13 @@ import fpgaconvnet.protos.Parameters.ConvolutionParameter;
  * io.output:
  *  - y0, y1, y2, ...., y{workerFactor - 1}
  *  where y_i is a vector of length kernelDim * kernelDim.
+ *
+ * When the number of workers is a factor of the number of input channels, the outputs are
+ * scheduled as such, for example in the case of three workers and n_in input channels.
+ *
+ * - worker 0: {0, 3, ..., n_in - 3}
+ * - worker 1: {1, 4, ..., n_in - 2}
+ * - worker 2: {2, 5, ..., n_in - 1}
  */
 
 public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
