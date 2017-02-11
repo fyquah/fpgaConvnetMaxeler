@@ -73,8 +73,8 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
 
         /* Stream the multiplication results. */
         for (int convUnitIndex = 0; convUnitIndex < convFoldingFactor; convUnitIndex++) {
-            final int addressSeparation = kernelDim * kernelDim * Utils.divCeil(
-                    layerParams.getNumOutputs(), layerParams.getConv().getConvFoldingFactor());
+            final int addressSeparation = kernelDim * kernelDim
+                    * getConvolutionIterations() * getSchedulerIterations();
             final int addressBase = convUnitIndex * addressSeparation;
 
             DFEVar convUnitOutput = constant.var(GlobalConfig.dataType, 0.0);

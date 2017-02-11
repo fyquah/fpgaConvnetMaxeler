@@ -129,10 +129,15 @@ void weights_copy(
                         (channel * layer.num_inputs + worker_iter * worker_factor)
                         * kernel_dim * kernel_dim;
                 const int dest_offset =
-                        ((worker_iter * layer.num_outputs)
-                         + (channel % conv_ff) * (layer.num_outputs / conv_ff)
+                        ((worker_iter * (layer.num_outputs / conv_ff))
+                         + (channel % conv_ff) * (layer.num_outputs / conv_ff) * (layer.num_inputs / worker_factor)
                          + (channel / conv_ff))
                         * kernel_dim * kernel_dim;
+                std::cout << "src_offset = " 
+                        << src_offset / (kernel_dim * kernel_dim)
+                        << " -> "
+                        << dest_offset / (kernel_dim * kernel_dim)
+                        << std::endl;
                 std::memcpy(
                         dest + dest_offset,
                         src + src_offset,
@@ -188,7 +193,7 @@ void run_feature_extraction(const float *images, float *conv_out)
      */
     
     weights_copy(layer_0_worker_0, conv0_kernels, conv0_layer);
-    // weights_copy(layer_2_worker_0, conv2_kernels, conv2_layer);
+    weights_copy(layer_2_worker_0, conv2_kernels, conv2_layer);
     __sync_synchronize();
 
     action.inmem_ConvolutionUnit_0_0_filters_layer_0_worker_0 = layer_0_worker_0;
