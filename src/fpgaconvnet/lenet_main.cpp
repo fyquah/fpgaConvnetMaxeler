@@ -122,7 +122,7 @@ void weights_copy(
 
         for (int w = 0; w < layer.num_inputs / worker_factor; w++) {
             const int worker_iter = w;  // the w-th channel that the worker's handling.
-            std::cout << "wroker_offset = " << worker_iter << std::endl;
+            std::cout << "/**/ worker_iter = " << worker_iter << std::endl;
 
             for (int channel = 0 ; channel < layer.num_outputs ; channel++) {
                 const int src_offset =
@@ -150,7 +150,7 @@ void run_feature_extraction(const float *images, float *conv_out)
     lenet_actions_t action;
     timeval t_begin, t_end;
     convnet::conv_layer_t conv0_layer =
-            {.kernel_size = 5, .num_inputs = 1, .num_outputs = 2,
+            {.kernel_size = 5, .num_inputs = 1, .num_outputs = 20,
              .conv_folding_factor = 5, .worker_factor = 1};
     convnet::conv_layer_t conv2_layer =
             {.kernel_size = 5, .num_inputs = 20, .num_outputs = 50,
@@ -188,7 +188,7 @@ void run_feature_extraction(const float *images, float *conv_out)
      */
     
     weights_copy(layer_0_worker_0, conv0_kernels, conv0_layer);
-    weights_copy(layer_2_worker_0, conv2_kernels, conv2_layer);
+    // weights_copy(layer_2_worker_0, conv2_kernels, conv2_layer);
     __sync_synchronize();
 
     action.inmem_ConvolutionUnit_0_0_filters_layer_0_worker_0 = layer_0_worker_0;
