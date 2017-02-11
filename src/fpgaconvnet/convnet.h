@@ -7,6 +7,9 @@ struct conv_layer_t {
     unsigned kernel_size;
     unsigned num_inputs;
     unsigned num_outputs;
+
+    unsigned conv_folding_factor;
+    unsigned worker_factor;
 };
 
 extern void load_kernels_from_file(

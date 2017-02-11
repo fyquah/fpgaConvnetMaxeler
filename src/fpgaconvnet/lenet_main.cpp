@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <fstream>
 #include <iostream>
+#include <cstring>
 
 #include "mnist.h"
 #include "lenet.h"
@@ -13,6 +14,8 @@
 #else
     static const unsigned N = 10000;
 #endif
+static const int CONV_IN_SIZE = 784;
+static const int CONV_OUT_SIZE = 800;
 
 
 template<typename T>
@@ -71,10 +74,12 @@ void verify_output(float *conv_out, std::string filename)
     float total_error = 0.0;
 
     for (uint32_t i = 0 ; i < std::min(N, 10u) ; i++) {
-        for (uint32_t j = 0 ; j < 800 ; j++) {
+        for (uint32_t j = 0 ; j < CONV_OUT_SIZE; j++) {
             float expected;
-            float obtained = conv_out[800 * i + j];
+            float obtained = conv_out[CONV_OUT_SIZE * i + j];
             fin >> expected;
+            std::cout << "Expected = " << expected
+                    << " obtained = " << obtained << std::endl;
             total_error += std::abs(obtained  - expected);
             total_pixels += 1;
 
@@ -88,29 +93,78 @@ void verify_output(float *conv_out, std::string filename)
 }
 
 
+unsigned ceil_div(unsigned a, unsigned b)
+{
+    if (a % b == 0) {
+        return a / b;
+    } else {
+        return a / b + 1;
+    }
+}
+
+
+void weights_copy(
+        double *dest_base,
+        double *src_base,
+        const convnet::conv_layer_t & layer
+)
+{
+    const int conv_ff = layer.conv_folding_factor;
+    const int kernel_dim = layer.kernel_size;
+    const int worker_factor = layer.worker_factor;
+
+    for (int i = 0 ; i < worker_factor ; i++) {
+        int total = ((layer.num_inputs / worker_factor)
+                * layer.kernel_size * layer.kernel_size
+                * layer.num_outputs);
+        double *dest = dest_base + (i * total);
+        double *src = src_base + (i * layer.kernel_size * layer.kernel_size);
+
+        for (int w = 0; w < layer.num_inputs / worker_factor; w++) {
+            const int worker_iter = w;  // the w-th channel that the worker's handling.
+            std::cout << "wroker_offset = " << worker_iter << std::endl;
+
+            for (int channel = 0 ; channel < layer.num_outputs ; channel++) {
+                const int src_offset =
+                        (channel * layer.num_inputs + worker_iter * worker_factor)
+                        * kernel_dim * kernel_dim;
+                const int dest_offset =
+                        ((worker_iter * layer.num_outputs)
+                         + (channel % conv_ff) * (layer.num_outputs / conv_ff)
+                         + (channel / conv_ff))
+                        * kernel_dim * kernel_dim;
+                std::memcpy(
+                        dest + dest_offset,
+                        src + src_offset,
+                        sizeof(double) * kernel_dim * kernel_dim);
+            }
+        }
+    }
+}
+
+
 void run_feature_extraction(const float *images, float *conv_out)
 {
     max_file_t *max_file = lenet_init();
     max_engine_t *dfe = max_load(max_file, "*");
     lenet_actions_t action;
     timeval t_begin, t_end;
-    convnet::conv_layer_t conv0_layer;
-    convnet::conv_layer_t conv2_layer;
-    double *conv0_kernels;
-    double *conv0_bias;
-    double *conv2_kernels;
-    double *conv2_bias;
-
-    conv0_layer.kernel_size = 5;
-    conv0_layer.num_inputs = 1;
-    conv0_layer.num_outputs = 20;
-    conv2_layer.kernel_size = 5;
-    conv2_layer.num_inputs = 20;
-    conv2_layer.num_outputs = 50;
-    conv0_kernels = new double[convnet::total_kernel_weights(conv0_layer)];
-    conv0_bias = new double[conv0_layer.num_outputs];
-    conv2_kernels = new double[convnet::total_kernel_weights(conv2_layer)];
-    conv2_bias = new double[conv2_layer.num_outputs];
+    convnet::conv_layer_t conv0_layer =
+            {.kernel_size = 5, .num_inputs = 1, .num_outputs = 2,
+             .conv_folding_factor = 5, .worker_factor = 1};
+    convnet::conv_layer_t conv2_layer =
+            {.kernel_size = 5, .num_inputs = 20, .num_outputs = 50,
+             .conv_folding_factor = 5, .worker_factor = 5};
+    double *conv0_kernels = new double[convnet::total_kernel_weights(conv0_layer)];
+    double *conv0_bias = new double[conv0_layer.num_outputs];
+    double *conv2_kernels = new double[convnet::total_kernel_weights(conv2_layer)];
+    double *conv2_bias = new double[conv2_layer.num_outputs];
+    double *layer_0_worker_0 = new double[convnet::total_kernel_weights(conv0_layer)];
+    double *layer_2_worker_0 = new double[convnet::total_kernel_weights(conv2_layer)];
+    double *layer_2_worker_1 = layer_2_worker_0 + convnet::total_kernel_weights(conv2_layer) / 5;
+    double *layer_2_worker_2 = layer_2_worker_1 + convnet::total_kernel_weights(conv2_layer) / 5;
+    double *layer_2_worker_3 = layer_2_worker_2 + convnet::total_kernel_weights(conv2_layer) / 5;
+    double *layer_2_worker_4 = layer_2_worker_3 + convnet::total_kernel_weights(conv2_layer) / 5;
 
     convnet::load_kernels_from_file(
             std::string("../test_data/lenet/weights/conv0_kernels.txt"),
@@ -124,10 +178,27 @@ void run_feature_extraction(const float *images, float *conv_out)
     convnet::load_bias_from_file(
             std::string("../test_data/lenet/weights/conv2_bias.txt"),
             conv2_layer, conv2_bias);
-    action.inmem_ConvolutionScheduler_0_mappedRom = conv0_kernels;
+
+    /*
+     * Reallign the kernels such that we have:
+     * [kernel[c][0], kernel[c][convFactor], kernel[c][2 * convFactor] ...,
+     *  kernel[c][1], kernel[c][convFactor + 1], kernel[c][2 * convFactor + 2], ...,
+     *  ]
+     *  akin reshape(kernels, (convFactors, -1)).T
+     */
+    
+    weights_copy(layer_0_worker_0, conv0_kernels, conv0_layer);
+    weights_copy(layer_2_worker_0, conv2_kernels, conv2_layer);
+    __sync_synchronize();
+
+    action.inmem_ConvolutionUnit_0_0_filters_layer_0_worker_0 = layer_0_worker_0;
     action.inmem_ConvolutionAccumulator_0_bias_layer_0 = conv0_bias;
-    action.inmem_ConvolutionScheduler_1_mappedRom = conv2_kernels;
-    action.inmem_ConvolutionAccumulator_1_bias_layer_2 = conv2_bias;
+    action.inmem_ConvolutionUnit_2_0_filters_layer_2_worker_0 = layer_2_worker_0;
+    action.inmem_ConvolutionUnit_2_1_filters_layer_2_worker_1 = layer_2_worker_1;
+    action.inmem_ConvolutionUnit_2_2_filters_layer_2_worker_2 = layer_2_worker_2;
+    action.inmem_ConvolutionUnit_2_3_filters_layer_2_worker_3 = layer_2_worker_3;
+    action.inmem_ConvolutionUnit_2_4_filters_layer_2_worker_4 = layer_2_worker_4;
+    action.inmem_ConvolutionAccumulator_2_bias_layer_2 = conv2_bias;
     action.param_N = N;
     action.instream_x = images;
     action.outstream_y = conv_out;
@@ -141,6 +212,8 @@ void run_feature_extraction(const float *images, float *conv_out)
     delete[] conv0_bias;
     delete[] conv2_kernels;
     delete[] conv2_bias;
+    delete[] layer_0_worker_0;
+    delete[] layer_2_worker_0;
 
     std::cout << "Completed feature extraction!" << std::endl;
     report_conv_performance(t_begin, t_end);
@@ -149,8 +222,8 @@ void run_feature_extraction(const float *images, float *conv_out)
 
 int main()
 {
-    float *x = new float[N * 784];
-    float *conv_out = new float[N * 800];
+    float *x = new float[N * CONV_IN_SIZE];
+    float *conv_out = new float[N * CONV_OUT_SIZE];
     std::vector<std::vector<double> > images;
     std::vector<int> labels;
     layer_t layers[N_LAYERS];
@@ -165,6 +238,7 @@ int main()
             }
         } 
         run_feature_extraction(x, conv_out);
+        return 0;
 
         std::cout << "Initializing fully connected weights ..." << std::endl;
         fully_connected_layers_init(layers);
