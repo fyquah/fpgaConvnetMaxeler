@@ -10,7 +10,7 @@
 
 
 #ifdef __SIM__
-    static const unsigned N = 1;
+    static const unsigned N = 3;
 #else
     static const unsigned N = 10000;
 #endif
