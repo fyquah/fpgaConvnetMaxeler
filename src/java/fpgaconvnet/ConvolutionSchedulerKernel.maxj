@@ -70,7 +70,7 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
         col = Utils.chainCounterOrZero(this, masterChain, inputDimension.width());
         iter = Utils.chainCounterOrZero(this, masterChain, getSchedulerIterations());
 
-        input <== io.input(getInputName(), inputVectorType);
+        input <== io.input(getInputName(), inputVectorType, iter.eq(0));
         DFEVar outputControlFlag = ~isBorder(row, col);
         for (int workerId = 0 ; workerId < workerFactor ; workerId++) {
             List<Integer> channelList = getSchedulerChannels(workerId);

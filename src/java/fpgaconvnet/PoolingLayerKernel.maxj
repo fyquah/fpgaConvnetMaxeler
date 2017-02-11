@@ -1,5 +1,8 @@
 package fpgaconvnet;
 
+import java.util.List;
+import java.util.ArrayList;
+
 import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
 import com.maxeler.maxcompiler.v2.kernelcompiler.KernelParameters;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
@@ -60,5 +63,18 @@ public class PoolingLayerKernel extends Kernel {
         DFEVar outputFlag = poolingUnits[0].isOutputReady();
         input <== io.input("x", inputType);
         io.output("y", output, outputType, outputFlag);
+
+        // debugging messages
+        String debug_s = "[";
+        List<Object> debugValues = new ArrayList<Object>();
+        for (int i = 0 ; i < inputDimension.channels() ; i++) {
+             debug_s += "%.3f, ";
+             debugValues.add(output[i]);
+        }
+        debug_s += "]";
+        debug.simPrintf(
+                outputFlag,
+                "PoolingLayerKernel[" + layer.getLayerId() + "] output = " + debug_s + "\n",
+                debugValues.toArray(new Object[1]));
     }
 }
