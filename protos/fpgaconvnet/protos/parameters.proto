@@ -37,10 +37,10 @@ message ConvolutionParameter
         None = 1;
         Relu = 2;
     }
-    optional uint32 workerFactor = 1;         // 1 <= x <= num_inputs
-    optional uint32 convFoldingFactor = 2;    // 1 <= x <= num_outputs
+    optional uint32 worker_factor = 1;         // 1 <= x <= num_inputs
+    optional uint32 conv_folding_factor = 2;    // 1 <= x <= num_outputs
                                               // - number of convoluters per worker.
-    optional uint32 kernelFoldingFactor = 3;  // 1 <= x <= kernel_dim * kernel_dim
+    optional uint32 kernel_folding_factor = 3;  // 1 <= x <= kernel_dim * kernel_dim
                                               // - number of multipliers per convoluter.
                                               // - must be a factor of kernelDim * kernelDim
     /* input_height, input_width and num_inputs must be provided at the input layer and are
