@@ -40,7 +40,6 @@ public class NetworkManager extends CustomManager {
      * has populated the parameters appropriately.
      */
     private Parameters.Network networkParameters;
-    private LMemInterface lmem;
 
     private static boolean isConvLayer(Parameters.LayerParameter layer) {
         return layer.getParamsCase().equals(Parameters.LayerParameter.ParamsCase.CONV);
@@ -61,10 +60,10 @@ public class NetworkManager extends CustomManager {
         return new Dimension(layer.getOutputHeight(), layer.getOutputWidth(), layer.getNumOutputs());
     }
 
-    private EngineInterface buildRunInterface () {
-        EngineInterface ei = new EngineInterface("run_convnet");
+    private EngineInterface interfaceDefault () {
+        EngineInterface ei = new EngineInterface();
 
-        InterfaceParam N = ei.addParam("N", CPUTypes.INT);
+        InterfaceParam N = ei.addParam("N", CPUTypes.UINT64);
         InterfaceParam addr_images = ei.addParam("address_images", CPUTypes.UINT64);
         InterfaceParam addr_features = ei.addParam("address_features", CPUTypes.UINT64);
         ei.setTicks("DfeInputAlligner", N * inputDimension().totalSize());
@@ -81,34 +80,52 @@ public class NetworkManager extends CustomManager {
                 networkParameters.getLayerCount() - 1);
         int inputSize = Utils.layerInputDimension(firstLayer).totalSize();
         int outputSize = Utils.layerOutputDimension(lastLayer).totalSize();
+
         ei.setLMemLinear("images", addr_images, N * inputSize * CPUTypes.FLOAT.sizeInBytes());
         ei.setLMemLinear("features", addr_features, N * outputSize * CPUTypes.FLOAT.sizeInBytes());
         ei.ignoreAll(Direction.IN_OUT);
+        return ignoreMem(ei);
+    }
+
+    private EngineInterface ignoreMem(EngineInterface ei) {
+        for (int i = 0 ; i < networkParameters.getLayerCount() ; i++) {
+            Parameters.LayerParameter layer = networkParameters.getLayer(i);
+            if (isConvLayer(layer)) {
+                for (int worker = 0 ; worker < layer.getConv().getWorkerFactor(); worker++) {
+                    String name = String.format("ConvolutionUnit_%d_%d", i, worker);
+                    ei.ignoreMem(name, "kernels", Direction.IN);
+                }
+
+                ei.ignoreMem(String.format("ConvolutionAccumulator_%d", i), "bias", Direction.IN);
+            }
+        }
         return ei;
     }
 
     private EngineInterface buildLoadDataInterface() {
         EngineInterface ei = new EngineInterface("load_data");
-        InterfaceParam address = ei.addParam("address", CPUTypes.UINT64);
-        InterfaceParam sizeInBytes = ei.addParam("size", CPUTypes.UINT64);
         CPUTypes type = CPUTypes.FLOAT;
+        InterfaceParam address = ei.addParam("address", CPUTypes.UINT64);
+        InterfaceParam size = ei.addParam("size", CPUTypes.UINT64);
+        InterfaceParam sizeInBytes = size * type.sizeInBytes();
 
         ei.setStream("fromcpu", type, sizeInBytes);
         ei.setLMemLinear("cpu2lmem", address, sizeInBytes);
         ei.ignoreAll(Direction.IN_OUT);
-        return ei;
+        return ignoreMem(ei);
     }
 
     private EngineInterface buildGetResultsInterface() {
         EngineInterface ei = new EngineInterface("get_results");
-        InterfaceParam address = ei.addParam("address", CPUTypes.UINT64);
-        InterfaceParam sizeInBytes = ei.addParam("size", CPUTypes.UINT64);
         CPUTypes type = CPUTypes.FLOAT;
+        InterfaceParam address = ei.addParam("address", CPUTypes.UINT64);
+        InterfaceParam size = ei.addParam("size", CPUTypes.UINT64);
+        InterfaceParam sizeInBytes = size * type.sizeInBytes();
 
         ei.setLMemLinear("lmem2cpu", address, sizeInBytes);
         ei.setStream("tocpu", type, sizeInBytes);
         ei.ignoreAll(Direction.IN_OUT);
-        return ei;
+        return ignoreMem(ei);
     }
 
     private EngineInterface buildInitInterface() {
@@ -126,13 +143,19 @@ public class NetworkManager extends CustomManager {
                     String paramName = String.format("kernels_%d_worker_%d", i, worker);
                     InterfaceParamArray paramArray = ei.addParamArray(paramName, CPUTypes.DOUBLE);
                     String name = String.format("ConvolutionUnit_%d_%d", i, worker);
-                    ei.setMem(name, "kernels", 0, totalWeights / workerFactor, paramArray);
+
+                    for (int j = 0 ; j < totalWeights / workerFactor; j++) {
+                        ei.setMem(name, "kernels", j, paramArray[j]);
+                    }
                 }
 
                 String paramName = String.format("bias_%d", i);
                 InterfaceParamArray paramArray = ei.addParamArray(paramName, CPUTypes.DOUBLE);
                 String name = String.format("ConvolutionAccumulator_%d", i);
-                ei.setMem(name, "bias", 0, layer.getNumOutputs(), paramArray);
+
+                for (int j = 0 ; j < layer.getNumOutputs() ; j++) {
+                    ei.setMem(name, "bias", j, paramArray[j]);
+                }
             }
         }
 
@@ -157,6 +180,18 @@ public class NetworkManager extends CustomManager {
     }
 
     private void linkKernels() {
+        LMemInterface lmem = addLMemInterface();
+
+        /* Data tranfer */
+        DFELink fromCpu = addStreamFromCPU("fromcpu");
+        DFELink toCpu = addStreamToCPU("tocpu");
+        DFELink cpu2lmem = lmem.addStreamToLMem("cpu2lmem", MemoryAccessPattern.LINEAR_1D);
+        DFELink lmem2cpu = lmem.addStreamFromLMem("lmem2cpu", MemoryAccessPattern.LINEAR_1D);
+
+        cpu2lmem <== fromCpu;
+        toCpu <== lmem2cpu;
+
+        /* Kernel logic transfer */
         DFELink lmemInputLink = lmem.addStreamFromLMem("images", MemoryAccessPattern.LINEAR_1D);
         DFELink lmemOutputLink = lmem.addStreamToLMem("features", MemoryAccessPattern.LINEAR_1D);
         int poolingUnitId = 0;
@@ -180,19 +215,8 @@ public class NetworkManager extends CustomManager {
         lmemOutputLink <== outputAllignerBlock.getOutput("y");
     }
 
-    public void linkDataInterfaces() {
-        DFELink fromCpu = addStreamFromCPU("fromcpu");
-        DFELink toCpu = addStreamToCPU("tocpu");
-        DFELink cpu2lmem = lmem.addStreamToLMem("cpu2lmem", MemoryAccessPattern.LINEAR_1D);
-        DFELink lmem2cpu = lmem.addStreamFromLMem("lmem2cpu", MemoryAccessPattern.LINEAR_1D);
-
-        cpu2lmem <== fromCpu;
-        toCpu <== lmem2cpu;
-    }
-
     public NetworkManager(EngineParameters engineParameters, Parameters.Network networkParametersIn) {
         super(engineParameters);
-        lmem = addLMemInterface();
         networkParameters = networkParametersIn;
         convolutionLayers = new ArrayList<ConvolutionLayer>();
         poolingKernels = new ArrayList<PoolingLayerKernel>();
@@ -211,12 +235,11 @@ public class NetworkManager extends CustomManager {
             poolingKernelBlocks.add(addKernel(poolingKernels[i]));
         }
         linkKernels();
-        linkDataInterfaces();
 
         /* Interfaces */
         createSLiCinterface(buildInitInterface());
         createSLiCinterface(buildLoadDataInterface());
-        createSLiCinterface(buildRunInterface());
+        createSLiCinterface(interfaceDefault());
         createSLiCinterface(buildGetResultsInterface());
     }
 }

@@ -10,12 +10,12 @@
 
 
 #ifdef __SIM__
-    static const unsigned N = 3;
+    static const uint64_t N = 6;
 #else
-    static const unsigned N = 10000;
+    static const uint64_t N = 10000;
 #endif
-static const int CONV_IN_SIZE = 784;
-static const int CONV_OUT_SIZE = 800;
+static const uint64_t CONV_IN_SIZE = 784;
+static const uint64_t CONV_OUT_SIZE = 800;
 
 
 template<typename T>
@@ -73,7 +73,7 @@ void verify_output(float *conv_out, std::string filename)
     uint32_t total_pixels = 0;
     float total_error = 0.0;
 
-    for (uint32_t i = 0 ; i < std::min(N, 10u) ; i++) {
+    for (uint32_t i = 0 ; i < std::min(N, 10ul) ; i++) {
         for (uint32_t j = 0 ; j < CONV_OUT_SIZE; j++) {
             float expected;
             float obtained = conv_out[CONV_OUT_SIZE * i + j];
@@ -200,7 +200,7 @@ void run_feature_extraction(const float *images, float *conv_out)
     double *layer_0_worker_weights = new double[convnet::total_kernel_weights(conv0_layer)];
     double *layer_2_worker_weights = new double[convnet::total_kernel_weights(conv2_layer)];
     const uint64_t address_images = 0;
-    const uint64_t address_features= N * 784 * sizeof(float);
+    const uint64_t address_features = N * 784 * sizeof(float);
 
     convnet::load_kernels_from_file(
             std::string("../test_data/lenet/weights/conv0_kernels.txt"),
@@ -224,7 +224,6 @@ void run_feature_extraction(const float *images, float *conv_out)
      */
     weights_copy(layer_0_worker_weights, conv0_kernels, conv0_layer);
     weights_copy(layer_2_worker_weights, conv2_kernels, conv2_layer);
-    __sync_synchronize();
 
     /* Calling the initializtion */
     std::cout << "Initializing net weights in DFE." << std::endl;
@@ -233,21 +232,42 @@ void run_feature_extraction(const float *images, float *conv_out)
             memory_action, conv0_layer, layer_0_worker_weights, conv0_bias);
     set_layer_weights(
             memory_action, conv2_layer, layer_2_worker_weights, conv2_bias);
+    max_disable_validation(memory_action);
     max_run(dfe, memory_action);
     max_actions_free(memory_action);
 
     std::cout << "Copying sample data to off-chip memory." << std::endl;
-    lenet_load_data(address_images, N * 784 * sizeof(float), images);
+    max_actions_t *load_action = max_actions_init(max_file, "load_data");
+    max_set_param_uint64t(load_action, "address", address_images);
+    max_set_param_uint64t(load_action, "size", N * CONV_IN_SIZE);
+    max_queue_input(load_action, "fromcpu", images, sizeof(float) * N * CONV_IN_SIZE);
+    max_disable_validation(load_action);
+    max_run(dfe, load_action);
+    max_actions_free(load_action);
 
     std::cout << "Running Feature Extraction ... " << std::endl;
-    lenet_run_convnet_actions_t run_action = {
-            .param_N = N,
-            .param_address_features = address_features,
-            .param_address_images = address_images};
+    max_actions_t *run_action = max_actions_init(max_file, "default");
+    max_set_param_uint64t(run_action, "N", N);
+    max_set_param_uint64t(run_action, "address_features", address_features);
+    max_set_param_uint64t(run_action, "address_images", address_images);
+    max_disable_validation(run_action);
+    __sync_synchronize();
     gettimeofday(&t_begin, NULL);
-    lenet_run_convnet_run(dfe, &run_action);
+    max_run(dfe, run_action);
     gettimeofday(&t_end, NULL);
-    max_unload(dfe);
+    __sync_synchronize();
+    max_actions_free(run_action);
+
+    std::cout << "Copying features from off-chip memory." << std::endl;
+    max_actions_t *read_action = max_actions_init(max_file, "get_results");
+    max_set_param_uint64t(read_action, "address", address_features);
+    max_set_param_uint64t(read_action, "size", N * CONV_OUT_SIZE);
+    max_queue_output(read_action, "tocpu", conv_out, N * CONV_OUT_SIZE);
+    max_disable_validation(read_action);
+    max_run(dfe, read_action);
+    max_actions_free(read_action);
+    verify_output(conv_out, "../test_data/lenet/output.txt");
+
     delete[] conv0_kernels;
     delete[] conv0_bias;
     delete[] conv2_kernels;
@@ -255,14 +275,9 @@ void run_feature_extraction(const float *images, float *conv_out)
     delete[] layer_0_worker_weights;
     delete[] layer_2_worker_weights;
 
+    max_unload(dfe);
     std::cout << "Completed feature extraction!" << std::endl;
     report_conv_performance(t_begin, t_end);
-
-
-    std::cout << "Copying features from off-chip memory." << std::endl;
-    lenet_load_data(address_features, N * 800 * sizeof(float), conv_out);
-
-    verify_output(conv_out, "../test_data/lenet/output.txt");
 }
 
 int main()
@@ -278,8 +293,8 @@ int main()
         read_mnist_images(images, "mnist/t10k-images-idx3-ubyte");
         read_mnist_labels(labels, "mnist/t10k-labels-idx1-ubyte");
         for (unsigned i = 0 ; i < N ; i++) {
-            for (unsigned j = 0 ; j < 784 ; j++) {
-                x[i * 784 + j] = (float) images[i][j];
+            for (unsigned j = 0 ; j < CONV_IN_SIZE ; j++) {
+                x[i * CONV_IN_SIZE + j] = (float) images[i][j];
             }
         } 
         run_feature_extraction(x, conv_out);

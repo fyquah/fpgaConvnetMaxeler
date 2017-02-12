@@ -48,8 +48,8 @@ lenet_sim: fpgaconvnet/mnist.o fpgaconvnet/feedforward.o fpgaconvnet/convnet.o \
 	$(CPUCOMPILER) $(ALL_FLAGS) -o $@ $^ $(LFLAGS)
 
 run_lenet_sim: lenet_sim $(LENET_DATA)
-	$(MAXCOMPILERSIM) -n $(USER)a -c$(DEVICENUM) -d$(NUMDEVICES) -r 1GB restart
-	SLIC_CONF+="use_simulation=$(USER)a" LD_PRELOAD=$(MAXOS_SIM) ./$< $(USER)a0:$(USER)a
+	$(MAXCOMPILERSIM) -n $(USER)a -c$(DEVICENUM) -d$(NUMDEVICES) restart
+	SLIC_CONF+="use_simulation=$(USER)a; default_topology_timeout=-1" LD_PRELOAD=$(MAXOS_SIM) ./$< $(USER)a0:$(USER)a
 	make stopsim
 
 # ==============================
