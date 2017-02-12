@@ -7,12 +7,6 @@ LENET_DATA=mnist/train-images-idx3-ubyte mnist/train-labels-idx1-ubyte \
 	   mnist/t10k-images-idx3-ubyte mnist/t10k-labels-idx1-ubyte
 
 
-fpgaconvnet/mnist.o: fpgaconvnet/mnist.cpp
-	$(CPUCOMPILER) $< -c -o $@
-
-fpgaconvnet/convnet.o: fpgaconvnet/convnet.cpp
-	$(CPUCOMPILER) $< -c -o $@
-
 $(LENET_DATA):
 	mkdir -p mnist/
 	curl "http://yann.lecun.com/exdb/$@.gz" >$@.gz

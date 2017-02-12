@@ -28,12 +28,14 @@ MAXELEROSDIR_SIM:=$(MAXCOMPILERDIR)/lib/maxeleros-sim
 SOURCE_DIRS="../src/java/:../src/javatest/:./java/"
 PROTOS=fpgaconvnet/protos/parameters.proto
 JAVA_PROTOS=java/fpgaconvnet/protos/Parameters.java
+CPP_PROTOS=fpgaconvnet/protos/parameters.pb.h fpgaconvnet/protos/parameters.pb.cc
 PYTHON_PROTOS=fpgaconvnet/protos/parameters_pb2.py
-ALL_GENERATED_PROTOS=$(JAVA_PROTOS) $(PYTHON_PROTOS)
+ALL_GENERATED_PROTOS=$(JAVA_PROTOS) $(PYTHON_PROTOS) $(CPP_PROTOS)
 ENGINEFILES=$(shell cd ../src && find ./java -name "*.maxj")
 TESTENGINEFILES=$(shell cd ../src && find ./javatest -name "*.maxj")
 CPUFILES=$(shell cd ../src && find . -name "*.cpp")
 VPATH=../src:../protos:.
+CXXFLAGS+= -std=c++0x $(INCFLAGS)
 
 # ---- Compiler settings ----
 
@@ -44,7 +46,7 @@ ifneq ($(findstring cpp, $(CPUFILES)), )
     CPUCOMPILER = $(CXX)
 
     # Assuming CXX points to g++/c++ by default
-    COMPILER_CFLAGS = -fopenmp -std=c++11
+    COMPILER_CFLAGS = -fopenmp -std=c++0x
     OPT_FLAGS = -march=native -O3
 
     ifeq ($(CXX), icpc)
@@ -125,7 +127,7 @@ $(RESOURCE_BENCH_HELPERS):
 
 $(ALL_GENERATED_PROTOS): $(PROTOS)
 	mkdir -p java/
-	$(PROTOC) $< -I ../protos --java_out=./java --python_out=./
+	$(PROTOC) $< -I ../protos --java_out=./java --python_out=./ --cpp_out=./
 
 protos: $(ALL_GENERATED_PROTOS)
 
