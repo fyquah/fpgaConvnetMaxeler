@@ -51,7 +51,6 @@ public class GenericNetworkBuilder {
                     engineParameters.getMPPRStartCT(), engineParameters.getMPPREndCT());
             buildConfig.setMPPRParallelism(engineParameters.getMPPRThreads());
             buildConfig.setMPPRRetryNearMissesThreshold(engineParameters.getMPPRRetryThreshold());
-            manager.createSLiCinterface(manager.interfaceDefault());
             manager.build();
 
         } catch (Exception e) {

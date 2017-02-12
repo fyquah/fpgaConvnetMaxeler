@@ -41,7 +41,7 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
                 getSchedulerIterations() * layerParams.getNumOutputs() * kernelDim * kernelDim;
 
         filtersRom = mem.alloc(GlobalConfig.dataType, totalWeights);
-        filtersRom.mapToCPU(String.format("filters_layer_%d_worker_%d",
+        filtersRom.mapToCPU(String.format("kernels",
                                           params.getLayerId(), workerId));
 
         final int convFoldingFactor = layerParams.getConv().getConvFoldingFactor();

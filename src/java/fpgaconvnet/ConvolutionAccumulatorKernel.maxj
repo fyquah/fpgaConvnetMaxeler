@@ -44,7 +44,7 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
         outputVectorType = new DFEVectorType<DFEVar>(
                 GlobalConfig.dataType, layerParams.getNumOutputs());
         biasRom = mem.alloc(GlobalConfig.dataType, params.getNumOutputs());
-        biasRom.mapToCPU(String.format("bias_layer_%d", params.getLayerId()));
+        biasRom.mapToCPU(String.format("bias", params.getLayerId()));
 
         DFEVector<DFEVar> output = outputVectorType.newInstance(this);
         DFEVar inputControlFlag = dfeUInt(1).newInstance(this);

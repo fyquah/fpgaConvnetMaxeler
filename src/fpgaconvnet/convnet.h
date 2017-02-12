@@ -4,6 +4,8 @@ namespace convnet {
 
 /* TODO(fyq14) : Use C++ protobuf instead of this.  */
 struct conv_layer_t {
+    unsigned id;
+
     unsigned kernel_size;
     unsigned num_inputs;
     unsigned num_outputs;
