@@ -262,7 +262,7 @@ void run_feature_extraction(const float *images, float *conv_out)
     max_actions_t *read_action = max_actions_init(max_file, "get_results");
     max_set_param_uint64t(read_action, "address", address_features);
     max_set_param_uint64t(read_action, "size", N * CONV_OUT_SIZE);
-    max_queue_output(read_action, "tocpu", conv_out, N * CONV_OUT_SIZE);
+    max_queue_output(read_action, "tocpu", conv_out, N * CONV_OUT_SIZE * sizeof(float));
     max_disable_validation(read_action);
     max_run(dfe, read_action);
     max_actions_free(read_action);
