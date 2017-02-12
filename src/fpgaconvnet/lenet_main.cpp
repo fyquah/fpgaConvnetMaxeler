@@ -122,7 +122,6 @@ void weights_copy(
 
         for (int w = 0; w < layer.num_inputs / worker_factor; w++) {
             const int worker_iter = w;  // the w-th channel that the worker's handling.
-            std::cout << "/**/ worker_iter = " << worker_iter << std::endl;
 
             for (int channel = 0 ; channel < layer.num_outputs ; channel++) {
                 const int src_offset =
@@ -133,11 +132,16 @@ void weights_copy(
                          + (channel % conv_ff) * (layer.num_outputs / conv_ff) * (layer.num_inputs / worker_factor)
                          + (channel / conv_ff))
                         * kernel_dim * kernel_dim;
-                std::cout << "src_offset = " 
-                        << src_offset / (kernel_dim * kernel_dim)
-                        << " -> "
-                        << dest_offset / (kernel_dim * kernel_dim)
-                        << std::endl;
+                
+                /*
+                 * Useful piece of code to visualize the kernels weights
+                 *    -> worker position mapping.
+                 * std::cout << "src_offset = " 
+                 *         << src_offset / (kernel_dim * kernel_dim)
+                 *         << " -> "
+                 *         << dest_offset / (kernel_dim * kernel_dim)
+                 *         << std::endl;
+                */
                 std::memcpy(
                         dest + dest_offset,
                         src + src_offset,
