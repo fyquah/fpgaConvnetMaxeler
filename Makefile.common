@@ -91,7 +91,7 @@ INCFLAGS =  -I../src/ -I${MAXCOMPILERDIR}/include \
 	-I${MAXCOMPILERDIR}/include/slic -I${MAXELEROSDIR}/include 
 CFLAGS= $(COMPILER_CFLAGS) $(OPT_FLAGS) -Wall -D_XOPEN_SOURCE=600 $(INCFLAGS)
 LFLAGS=-L${MAXCOMPILERDIR}/lib -L${MAXELEROSDIR}/lib -lmaxeleros \
-       -lslic -lm -lpthread -lstdc++
+       -lslic -lm -lpthread -lprotobuf
 
 # Add this on the command line to pass to make when compiling
 # Useful for debug/optimization flags
@@ -128,6 +128,8 @@ $(RESOURCE_BENCH_HELPERS):
 $(ALL_GENERATED_PROTOS): $(PROTOS)
 	mkdir -p java/
 	$(PROTOC) $< -I ../protos --java_out=./java --python_out=./ --cpp_out=./
+
+fpgaconvnet/convnet.o: fpgaconvnet/protos/parameters.pb.h
 
 protos: $(ALL_GENERATED_PROTOS)
 

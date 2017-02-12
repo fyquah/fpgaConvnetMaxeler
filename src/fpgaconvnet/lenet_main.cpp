@@ -65,7 +65,10 @@ unsigned ceil_div(unsigned a, unsigned b)
 }
 
 
-std::vector<float> run_feature_extraction(const std::vector<float> & images)
+std::vector<float> run_feature_extraction(
+        const fpgaconvnet::protos::Network & network_parameters,
+        const std::vector<float> & images
+)
 {
     std::vector<std::string> filenames = {
             "../test_data/lenet/weights/conv0_kernels.txt",
@@ -83,6 +86,7 @@ std::vector<float> run_feature_extraction(const std::vector<float> & images)
 
     fpgaconvnet::verify_conv_output(
             network_parameters,
+            N,
             &extracted_features[0],
             "../test_data/lenet/output.txt");
 
@@ -90,7 +94,7 @@ std::vector<float> run_feature_extraction(const std::vector<float> & images)
 }
 
 
-int main()
+int main(int argc, char **argv)
 {
     std::vector<std::vector<double> > images;
     std::vector<int> labels;
@@ -98,6 +102,15 @@ int main()
     layer_t layers[N_LAYERS];
 
     try {
+        if (argc < 2) {
+            std::cout << "Missing network descriptor" << std::endl;
+            return 1;
+        }
+
+        std::cout << "Loading netowork parameters from " << argv[1] << std::endl;
+        fpgaconvnet::protos::Network network_parameters =
+                fpgaconvnet::load_network_proto(argv[1]);
+
         std::cout << "Reading images ..." << std::endl;
         read_mnist_images(images, "mnist/t10k-images-idx3-ubyte");
         read_mnist_labels(labels, "mnist/t10k-labels-idx1-ubyte");
@@ -106,7 +119,9 @@ int main()
                 pixel_stream.push_back(images[i][j]);
             }
         } 
-        std::vector<float> conv_out = run_feature_extraction(pixel_stream);
+
+        std::vector<float> conv_out = run_feature_extraction(
+                network_parameters, pixel_stream);
         return 0;
 
         std::cout << "Initializing fully connected weights ..." << std::endl;

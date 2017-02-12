@@ -1,14 +1,21 @@
 #ifndef CONVNET_H
 #define CONVNET_H
 
+#include <fcntl.h>
 #include <vector>
 
 #include "MaxSLiCInterface.h"
+
+#include <google/protobuf/text_format.h>
+#include <google/protobuf/io/zero_copy_stream_impl.h>
 
 #include "fpgaconvnet/protos/parameters.pb.h"
 
 
 namespace fpgaconvnet {
+
+
+protos::Network load_network_proto(const std::string & filename);
 
 
 void load_kernels_from_file(
@@ -36,6 +43,7 @@ void verify_conv_output(
         std::string filename
 );
 
+
 /*
  * Reallign the kernels such that we have:
  * [kernel[c][0], kernel[c][convFactor], kernel[c][2 * convFactor] ...,
@@ -48,12 +56,14 @@ void allign_and_place_kernel_weights(
         double *dest_base,
         double *src_base
 );
+
 void max_set_layer_weights(
         max_actions_t *action,
         const protos::LayerParameter & layer,
         double *kernels,
         double *bias
 );
+
 uint64_t calc_total_kernel_weights(const protos::LayerParameter & layer);
 
 
@@ -76,7 +86,9 @@ private:
 
     Convnet(const Convnet &) {}
 public:
-    Convnet(max_file_t *max_file, const char* load_spec = "*");
+    Convnet(const protos::Network & network_params,
+            max_file_t *max_file,
+            const char* load_spec = "*");
     ~Convnet ();
 
     void load_weights_from_files(std::vector<std::string> filenames);

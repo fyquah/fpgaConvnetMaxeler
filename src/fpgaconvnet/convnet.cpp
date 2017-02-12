@@ -22,6 +22,16 @@ static void generic_load(std::string filename, int count, double *output)
 namespace fpgaconvnet {
 
 
+protos::Network load_network_proto(const std::string & filename)
+{
+    protos::Network network;
+    int fd = open(filename.c_str(), O_RDONLY);
+
+    google::protobuf::io::FileInputStream fstream(fd);
+    google::protobuf::TextFormat::Parse(&fstream, &network);
+    return network;
+}
+
 /* Utilities for loading weights into C-arrrays. */
 void load_kernels_from_file(
     std::string filename,
@@ -194,8 +204,12 @@ void max_set_layer_weights(
 }
 
 
-Convnet::Convnet(max_file_t *max_file, const char* load_spec) :
-        max_file(max_file), dfe(max_load(max_file,load_spec))
+Convnet::Convnet(
+        const protos::Network & network_params,
+        max_file_t *max_file,
+        const char* load_spec) :
+    network_params(network_params), max_file(max_file),
+    dfe(max_load(max_file,load_spec))
 {
     for (auto it = network_params.layer().begin();
             it != network_params.layer().end();
