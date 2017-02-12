@@ -29,6 +29,27 @@ protos::Network load_network_proto(const std::string & filename)
 
     google::protobuf::io::FileInputStream fstream(fd);
     google::protobuf::TextFormat::Parse(&fstream, &network);
+
+    int i = 0;
+    for (auto it = network.mutable_layer()->begin(); it != network.mutable_layer()->end() ; it++, i++) {
+        if (it != network.mutable_layer()->begin()) {
+            auto prev_it = it - 1;
+            it->set_num_inputs(prev_it->num_outputs());
+            it->set_input_height(prev_it->output_height());
+            it->set_input_width(prev_it->output_width());
+        }
+
+        it->set_layer_id(i);
+        if (it->has_conv()) {
+            it->set_output_height(it->input_height() - it->conv().kernel_size() + 1);
+            it->set_output_width(it->input_width() - it->conv().kernel_size() + 1);
+        } else {
+            it->set_num_outputs(it->num_inputs());
+            it->set_output_height(it->input_height() / it->pool().dim());
+            it->set_output_width(it->input_width() / it->pool().dim());
+        }
+    }
+    std::cout << network.DebugString() << std::endl;
     return network;
 }
 
@@ -237,7 +258,7 @@ Convnet::Convnet(
 
 Convnet::~Convnet ()
 {
-    for (int i = 0 ; i < kernels.size() ; i++) {
+    for (int i = 0 ; i < conv_layer_params.size() ; i++) {
         delete[] kernels[i];
         delete[] bias[i];
         delete[] worker_kernels[i];
@@ -249,16 +270,11 @@ Convnet::~Convnet ()
 
 void Convnet::load_weights_from_files(std::vector<std::string> filenames)
 {
-    int i = 0;
-    for (auto it = network_params.layer().begin();
-            it != network_params.layer().end();
-            it++) {
-        load_kernels_from_file(filenames[i], *it, kernels[i / 2]);
-        i++;
-        load_bias_from_file(filenames[i], *it, bias[i / 2]);
-        i++;
+    for (int i = 0 ; i < conv_layer_params.size(); i++) {
+        load_kernels_from_file(filenames[2 * i], conv_layer_params[i], kernels[i]);
+        load_bias_from_file(filenames[2 * i + 1], conv_layer_params[i], bias[i]);
     }
-    for (int i = 0; i < kernels.size() ; i++) {
+    for (int i = 0; i < conv_layer_params.size() ; i++) {
         allign_and_place_kernel_weights(
                 conv_layer_params[i], worker_kernels[i], kernels[i]);
     }
@@ -323,7 +339,7 @@ void Convnet::max_run_inference(uint64_t N) {
 
 std::vector<float> Convnet::max_retrieve_features(uint64_t N) {
     const uint64_t address_features = N * input_size * sizeof(float);
-    std::vector<float> features(N * output_size * sizeof(float));
+    std::vector<float> features(N * output_size);
 
     std::cout << "Copying features from off-chip memory." << std::endl;
     max_actions_t *read_action = max_actions_init(max_file, "get_results");
@@ -336,6 +352,8 @@ std::vector<float> Convnet::max_retrieve_features(uint64_t N) {
             N * output_size * sizeof(float));
     max_disable_validation(read_action);
     max_run(dfe, read_action);
+
+    return features;
 }
 
 } // fpgaconvnet
