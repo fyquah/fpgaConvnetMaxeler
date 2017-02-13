@@ -61,7 +61,7 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
                     .withInitValue(0)
                     .withMax(totalAddressCount)
                     .withWrapMode(Count.WrapMode.MODULO_MAX_OF_COUNT));
-        DFEVar addressCount = addressCounter.getCount();
+        DFEVar addressCount = addressCounter.getCount().cast(dfeUInt(Utils.ceilLog2(totalWeights)));
 
         // schedule the pixel and weight vars.
         final List<DFEVar> multiplicationOutputs = new ArrayList<DFEVar>();
@@ -79,7 +79,8 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
 
             DFEVar convUnitOutput = constant.var(GlobalConfig.dataType, 0.0);
             for (int multId = 0; multId < kernelFoldingFactor; multId++) {
-                DFEVar address = addressBase + multId + addressCount;
+                DFEVar offset = constant.var(dfeUInt(Utils.ceilLog2(totalWeights)), addressBase + multId);
+                DFEVar address = addressCount + offset;
                 weightVars[convUnitIndex][multId] = filtersRom.read(
                         address.cast(dfeUInt(Utils.ceilLog2(totalWeights))));
                 convUnitOutput = convUnitOutput
