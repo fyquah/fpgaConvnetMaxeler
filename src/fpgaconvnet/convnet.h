@@ -64,6 +64,8 @@ void max_set_layer_weights(
         double *bias
 );
 
+void set_log_prefix(const std::string & prefix);
+
 uint64_t calc_total_kernel_weights(const protos::LayerParameter & layer);
 
 

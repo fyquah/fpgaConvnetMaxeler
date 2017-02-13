@@ -3,6 +3,7 @@
 
 #include <fstream>
 #include <iostream>
+#include <string>
 #include <sys/time.h>
 
 #include "fpgaconvnet/convnet.h"
@@ -20,6 +21,34 @@ static void generic_load(std::string filename, int count, double *output)
 
 
 namespace fpgaconvnet {
+
+// Logging stuff
+static const int DEBUG = 0;
+static const int INFO = 1;
+static const int WARNING = 2;
+static const int ERROR = 3;
+static const char* level_strings[] = {
+        "DEBUG", "INFO", "WARNING", "ERROR"
+};
+
+static std::string LOG_PREFIX = "default";
+
+static std::ostream& log_stdout(int level = INFO)
+{
+    if (level > 4) {
+        level = 4;
+    } else if (level < 0) {
+        level = 0;
+    }
+    return std::cout << "[" << LOG_PREFIX << "\t "
+            << level_strings[level] << "]\t";
+}
+
+
+void set_log_prefix(const std::string & prefix)
+{
+    LOG_PREFIX = prefix;
+}
 
 
 protos::Network load_network_proto(const std::string & filename)
@@ -49,7 +78,7 @@ protos::Network load_network_proto(const std::string & filename)
             it->set_output_width(it->input_width() / it->pool().dim());
         }
     }
-    std::cout << network.DebugString() << std::endl;
+    log_stdout() << network.DebugString() << std::endl;
     return network;
 }
 
@@ -88,15 +117,19 @@ void report_conv_performance(
     double total_ops = 0.0;
    
     for (auto it = network.layer().begin() ; it != network.layer().end() ; it++) {
-
+        if (it->has_conv()) {
+            total_ops += (
+                    double(it->conv().kernel_size() * it->conv().kernel_size())
+                    * double(it->output_height() * it->output_width())
+                    * double(it->num_inputs() * it->num_outputs()));
+        }
     }
 
-    std::cout << "Time taken for " << N << " feature extractions  = ";
-    std::cout << delta << std::endl;
-    std::cout << "Throughput (images per second) = "
-              << throughput << std::endl;
-
-    std::cout << "GOps = " << throughput * total_ops / 1e9 << std::endl;
+    log_stdout(INFO) << "Time taken for " << N << " feature extractions  = "
+             << delta << std::endl;
+    log_stdout(INFO) << "Throughput (images per second) = "
+            << throughput << std::endl;
+    log_stdout(INFO) << "GOps = " << throughput * total_ops / 1e9 << std::endl;
 }
 
 
@@ -120,17 +153,15 @@ void verify_conv_output(
             float expected;
             float obtained = conv_out[conv_out_size * i + j];
             fin >> expected;
-            std::cout << "Expected = " << expected
-                    << " obtained = " << obtained << std::endl;
             total_error += std::abs(obtained  - expected);
             total_pixels += 1;
 
             if (std::abs(obtained - expected) > 0.01) {
-                std::cout << "Error > 0.01 while verifying output!" << std::endl;
+                log_stdout(WARNING) << "Error > 0.01 while verifying output!" << std::endl;
             }
         }
     }
-    std::cout << "Average pixel error = " << float(total_error) / float(total_pixels) << std::endl;
+    log_stdout(INFO) << "pixel_error = " << float(total_error) / float(total_pixels) << std::endl;
     fin.close();
 }
 
@@ -282,7 +313,7 @@ void Convnet::load_weights_from_files(std::vector<std::string> filenames)
 
 void Convnet::max_init_weights()
 {
-    std::cout << "Initializing net weights in DFE." << std::endl;
+    log_stdout(INFO) << "Initializing net weights in DFE." << std::endl;
     max_actions_t *memory_action = max_actions_init(max_file, "init_convnet");
 
     int i = 0;
@@ -306,7 +337,7 @@ void Convnet::max_load_input_data(const std::vector<float> & images, uint64_t N)
     const uint64_t address_features = N * input_size * sizeof(float);
     max_actions_t *load_action = max_actions_init(max_file, "load_data");
 
-    std::cout << "Copying sample data to off-chip memory." << std::endl;
+    log_stdout(INFO) << "Copying sample data to off-chip memory." << std::endl;
     max_set_param_uint64t(load_action, "address", address_images);
     max_set_param_uint64t(load_action, "size", N * input_size);
     max_queue_input(
@@ -323,7 +354,7 @@ void Convnet::max_run_inference(uint64_t N) {
     max_actions_t *run_action = max_actions_init(max_file, "default");
     timeval t_begin, t_end;
 
-    std::cout << "Running Feature Extraction ... " << std::endl;
+    log_stdout(INFO) << "Running Feature Extraction ... " << std::endl;
     max_set_param_uint64t(run_action, "N", N);
     max_set_param_uint64t(run_action, "address_images", address_images);
     max_set_param_uint64t(run_action, "address_features", address_features);
@@ -341,7 +372,7 @@ std::vector<float> Convnet::max_retrieve_features(uint64_t N) {
     const uint64_t address_features = N * input_size * sizeof(float);
     std::vector<float> features(N * output_size);
 
-    std::cout << "Copying features from off-chip memory." << std::endl;
+    log_stdout(INFO) << "Copying features from off-chip memory." << std::endl;
     max_actions_t *read_action = max_actions_init(max_file, "get_results");
     max_set_param_uint64t(read_action, "address", address_features);
     max_set_param_uint64t(read_action, "size", N * output_size);

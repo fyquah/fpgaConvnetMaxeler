@@ -68,9 +68,11 @@ int main (int argc, char **argv)
         max_file_t*(*fnc)() = NULL;
         int lookup_size = sizeof(resource_bench_lookup_table)
                 / sizeof(resource_bench_lookup_table[0]);
+
         sprintf(buffer, "../descriptors/resource_bench/%s.prototxt", argv[i]);
         fpgaconvnet::protos::Network network_parameters =
                 fpgaconvnet::load_network_proto(buffer);
+        fpgaconvnet::set_log_prefix(argv[i]);
 
         for (int j = 0 ; j < lookup_size ; j++) {
             if (std::strcmp(argv[i], resource_bench_lookup_table[j].name) == 0) {
