@@ -1,0 +1,74 @@
+RESOURCE_BENCH_NAMES= resource_bench_0 \
+		      resource_bench_1
+# 		      resource_bench_2 \
+# 		      resource_bench_3 \
+# 		      resource_bench_4 \
+# 		      resource_bench_5 \
+# 		      resource_bench_6 \
+# 		      resource_bench_7 \
+# 		      resource_bench_8 \
+# 		      resource_bench_9
+
+RESOURCE_BENCH_SIMMAXDIRS := $(foreach name,$(RESOURCE_BENCH_NAMES),$(MAXCOMPILER_BUILD_DIR)/$(name)_$(DFEModel)_DFE_SIM/results)
+RESOURCE_BENCH_SIM_MAXFILES := $(foreach name,$(RESOURCE_BENCH_NAMES),$(MAXCOMPILER_BUILD_DIR)/$(name)_$(DFEModel)_DFE_SIM/results/$(name).max)
+RESOURCE_BENCH_DFEMAXDIRS := $(foreach name,$(RESOURCE_BENCH_NAMES),$(MAXCOMPILER_BUILD_DIR)/$(name)_$(DFEModel)_DFE/results)
+RESOURCE_BENCH_DFE_MAXFILES := $(foreach name,$(RESOURCE_BENCH_NAMES),$(MAXCOMPILER_BUILD_DIR)/$(name)_$(DFEModel)_DFE/results/$(name).max)
+RESOURCE_BENCH_OBJS := $(foreach name,$(RESOURCE_BENCH_NAMES),fpgaconvnet/$(name).o)
+
+bla:
+	echo $(RESOURCE_BENCH_OBJS)
+	echo $(RESOURCE_BENCH_NAMES)
+	echo $(RESOURCE_BENCH_SIMMAXDIRS)
+
+# ==============================
+#           Simulation
+# ==============================
+
+
+resource_bench_sim_lookup.h: $(RESOURCE_BENCH_SIM_MAXFILES)
+	python ../scripts/generate_resource_bench_lookup.py $@ $(RESOURCE_BENCH_NAMES)
+
+
+$(RESOURCE_BENCH_SIM_MAXFILES): $(ENGINEFILES) $(JAVA_PROTOS)
+	$(MAXJC) $(JFLAGS) $^
+	MAXAPPJCP='.:$(CP)' MAXSOURCEDIRS=$(SOURCE_DIRS) \
+		  $(MAXJAVARUN) fpgaconvnet.GenericNetworkBuilder \
+		  DFEModel=$(DFEModel) \
+		  maxFileName=$(basename $(notdir $@)) \
+		  target="DFE_SIM" \
+		  descriptor="../descriptors/resource_bench/$(basename $(notdir $@)).prototxt" \
+		  enableMPCX=$(MPCX)
+
+
+$(RESOURCE_BENCH_OBJS): $(RESOURCE_BENCH_SIM_MAXFILES)
+	$(SLICCOMPILE) $< $@
+
+
+fpgaconvnet/resource_bench_main_sim.o: fpgaconvnet/resource_bench_main.cpp $(RESOURCE_BENCH_SIM_MAXFILES) resource_bench_sim_lookup.h
+	$(CPUCOMPILER) $< $(ALL_FLAGS) \
+		-I$(MAXCOMPILER_BUILD_DIR) \
+		$(foreach name,$(RESOURCE_BENCH_SIMMAXDIRS),-I$(name)) \
+		-D__SIM__ -c -o $@
+
+
+resource_bench_sim: fpgaconvnet/convnet.o \
+		fpgaconvnet/resource_bench_main_sim.o \
+		fpgaconvnet/protos/parameters.pb.o \
+		$(RESOURCE_BENCH_OBJS)
+	$(CPUCOMPILER) $(ALL_FLAGS) -o $@ $^ $(LFLAGS)
+
+
+run_resource_bench_sim: resource_bench_sim
+	$(MAXCOMPILERSIM) -n $(USER)a -c$(DEVICENUM) -d$(NUMDEVICES) restart
+	SLIC_CONF+="use_simulation=$(USER)a; default_topology_timeout=-1" \
+		   LD_PRELOAD=$(MAXOS_SIM) \
+		   ./$< $(LENET_DESCRIPTOR)
+	make stopsim
+
+# ==============================
+#          DFE
+# ==============================
+
+resource_bench_dfe_lookup.h: $(RESOURCE_BENCH_DFE_MAXFILES)
+	python ../scripts/generate_resource_bench_lookup.py $@ $(RESOURCE_BENCH_NAMES)
+

@@ -112,119 +112,19 @@ all: runsim build
 
 .PHONY: stopsim run cleansim cleandfe debug debughw
 
-# Use various targets for resource benchmarking
-include $(WHEREISROOT)/build/Makefile.resource.benchmark
 
-# SceneAnalysis
-include $(WHEREISROOT)/Makefile.scene
-
-# ---- shared ----
-
-RESOURCE_BENCH_HELPERS=resource_bench_helper.cpp resource_bench_helper.h
-
-$(RESOURCE_BENCH_HELPERS):
-	python ../scripts/generate_resource_benchmarks.py
-
+# Rules for protobufs
 $(ALL_GENERATED_PROTOS): $(PROTOS)
 	mkdir -p java/
 	$(PROTOC) $< -I ../protos --java_out=./java --python_out=./ --cpp_out=./
 
-fpgaconvnet/convnet.o: fpgaconvnet/protos/parameters.pb.h
-
 protos: $(ALL_GENERATED_PROTOS)
 
-# ---- tests ----
-## Kernel unit tests
-UNIT_TESTS = \
-	fpgaconvnet.ConvolutionAccumulatorKernelTest \
-	fpgaconvnet.ConvolutionSchedulerKernelTest \
-	fpgaconvnet.ConvolutionUnitKernelTest
+# Rules for arbitary object files.
+fpgaconvnet/convnet.o: fpgaconvnet/protos/parameters.pb.h
 
-unit_tests: $(ENGINEFILES) $(TESTENGINEFILES) $(JAVA_PROTOS)
-	$(MAXJC) $(JFLAGS) $^
-	MAXAPPJCP='.:$(CP)' MAXSOURCEDIRS=$(SOURCE_DIRS) \
-		  $(MAXJAVARUN) fpgaconvnet.RunUnitTests  \
-		  testKlass="$(UNIT_TESTS)" \
-		  DFEModel=$(DFEModel) \
-		  maxFileName=test \
-		  target='DFE_SIM' \
-		  enableMPCX=$(MPCX)
 
-## Nets that we know will serve as a unit test.
+
+include $(WHEREISROOT)/Makefile.resource.bench
+include $(WHEREISROOT)/Makefile.scene
 include $(WHEREISROOT)/Makefile.lenet
-
-
-# ---- Simulation ----
-
-resource_bench_simc.o: ../src/resource_bench.cpp $(RESOURCE_BENCH_HELPERS) $(RESOURCE_BENCH_SIM_MAXFILES)
-	$(CPUCOMPILER) resource_bench_helper.cpp $(ALL_FLAGS) $(RESOURCE_BENCH_SIM_INCLUDE_FLAGS) -I$(MAXCOMPILER_BUILD_DIR) -I$(SIMMAXDIR) -D__SIM__ -DDESIGN_NAME=$(PRJ) -c -o resource_bench_helper.o
-	$(CPUCOMPILER) $< $(ALL_FLAGS) $(RESOURCE_BENCH_SIM_INCLUDE_FLAGS) -I$(MAXCOMPILER_BUILD_DIR) -I$(SIMMAXDIR) -D__SIM__ -DDESIGN_NAME=$(PRJ) -c -o $@
-
-resource_bench_sim: resource_bench_simc.o $(RESOURCE_BENCH_SIM_SLIC_OBJECT_FILES)
-	$(CPUCOMPILER) $(ALL_FLAGS) -o $@ $^ resource_bench_helper.o $(LFLAGS)
-
-run_resource_bench_sim: resource_bench_sim
-	$(MAXCOMPILERSIM) -n $(USER)a -c$(DEVICENUM) -d$(NUMDEVICES) restart
-	SLIC_CONF+="use_simulation=$(USER)a" LD_PRELOAD=$(MAXOS_SIM) ./$< $(USER)a0:$(USER)a
-	make stopsim
-
-stopsim:
-	$(MAXCOMPILERSIM) -n $(USER)a -c$(DEVICENUM) stop
-
-gdbsim:
-	DEBUG_FLAGS="-O0 -g" make $(PRJ)_sim
-	LD_PRELOAD=$(MAXOS_SIM) gdb $(PRJ)_sim
-
-test_blas_sim: ../src/feedforward.cpp ../src/test_blas.cpp
-	g++ $^ -D__SIM__ -o $@
-	./$@
-
-# ---- DFE ----
-
-resource_bench_dfec.o: ../src/resource_bench.cpp $(RESOURCE_BENCH_HELPERS) $(RESOURCE_BENCH_MAXFILES)
-	$(CPUCOMPILER) resource_bench_helper.cpp $(ALL_FLAGS) $(RESOURCE_BENCH_INCLUDE_FLAGS) \
-	    -I$(MAXCOMPILER_BUILD_DIR) -DDESIGN_NAME=$(PRJ) -c -o resource_bench_helper.o
-	$(CPUCOMPILER) $< $(ALL_FLAGS) $(RESOURCE_BENCH_INCLUDE_FLAGS) -I$(MAXCOMPILER_BUILD_DIR) -DDESIGN_NAME=$(PRJ) -c -o $@
-
-resource_bench_dfe: resource_bench_dfec.o $(RESOURCE_BENCH_SLIC_OBJECT_FILES)
-	$(CPUCOMPILER) $(ALL_FLAGS) -o $@ $^ resource_bench_helper.o $(LFLAGS)
-
-run_resource_bench: resource_bench_dfe
-	SLIC_CONF=$(SLIC_CONF) LD_PRELOAD=$(MAXOS_HW) ./resource_bench_dfe
-
-test_blas: ../src/feedforward.cpp ../src/test_blas.cpp
-	g++ $^ -I ~/OpenBLAS/lapack-netlib/CBLAS/include -L ~/OpenBLAS -o $@
-	LD_LIBRARY_PATH="~/OpenBLAS:$$LD_LIBRARY_PATH" ./$@
-
-gdbdfe:
-	DEBUG_FLAGS="-O0 -g" make build
-	LD_PRELOAD=$(MAXOS_HW) gdb $(PRJ)_dfe
-
-# ---- Clean ----
-
-cleansim:
-	rm resource_helper.cpp resource_helper.h
-	rm -f $(PRJ)_sim $(TRASH)
-
-cleandfe:
-	rm -f $(PRJ)_dfe $(TRASH)
-
-clean:
-	# deleting everything except the Makefile in the build/ directory
-	find ./* ! -name "Makefile" -exec rm -rf {} +
-
-distcleansim: cleansim
-	rm -rf $(DIST_TRASH) $(PRJ)_$(DFEModel)_DFE_SIM
-
-distcleandfe: cleandfe
-	rm -rf $(DIST_TRASH) $(PRJ)_$(DFEModel)_DFE
-
-distclean: distcleansim distcleandfe
-
-# ---- Debug ----
-
-debug:
-	maxdebug -v -g $(PRJ)Graph -s $(PRJ)Graph -c -k $(KERNEL) -d $(USER)a0:$(USER)a $(SIMMAXDIR)/$(PRJ).max
-
-debughw:
-	maxdebug -v -g $(PRJ)Graph -s $(PRJ)Graph -c -k $(KERNEL) -d $(DFEID) $(DFEMAXDIR)/$(PRJ).max
