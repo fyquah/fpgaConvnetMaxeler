@@ -2,10 +2,10 @@
 import numpy as np
 from scipy import signal
 
-inputHeight = 30
-inputWidth = 30
-inputChannels = 32
-outputChannels = 96
+inputHeight = 28
+inputWidth = 28
+inputChannels = 30
+outputChannels = 32
 kernelDim = 5
 testCases = 100
 outputHeight = inputHeight - kernelDim + 1
