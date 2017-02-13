@@ -11,7 +11,7 @@ layer {
         kernel_size: 5
 
         worker_factor: 1
-        conv_folding_factor: 32
+        conv_folding_factor: 16
         kernel_folding_factor: 25
     }
 }
