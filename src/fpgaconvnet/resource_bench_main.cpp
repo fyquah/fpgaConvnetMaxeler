@@ -52,7 +52,7 @@ void run_feature_extraction(
 
 int main (int argc, char **argv)
 {
-    std::cout << "Running " << argc << " benchmarkings" << std::endl;
+    std::cout << "Running " << argc - 1 << " resource benchmarks." << std::endl;
 
     std::vector<float> pixel_stream;
     std::ifstream fin("../test_data/resource_bench/inputs.txt");
@@ -64,11 +64,13 @@ int main (int argc, char **argv)
     std::cout << pixel_stream.size() << std::endl;
 
     for (int i = 1 ; i < argc ; i++) {
-        fpgaconvnet::protos::Network network_parameters =
-                fpgaconvnet::load_network_proto(argv[i]);
+        char buffer[100];
         max_file_t*(*fnc)() = NULL;
         int lookup_size = sizeof(resource_bench_lookup_table)
                 / sizeof(resource_bench_lookup_table[0]);
+        sprintf(buffer, "../descriptors/resource_bench/%s.prototxt", argv[i]);
+        fpgaconvnet::protos::Network network_parameters =
+                fpgaconvnet::load_network_proto(buffer);
 
         for (int j = 0 ; j < lookup_size ; j++) {
             if (std::strcmp(argv[i], resource_bench_lookup_table[j].name) == 0) {

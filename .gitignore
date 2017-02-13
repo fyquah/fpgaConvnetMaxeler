@@ -1,6 +1,7 @@
 *.swp
 *.pyc
 !build/Makefile
+!build/fpgaconvnet/.gitkeep
 !build/java/.gitkeep
 !build/javatest/.gitkeep
 build/

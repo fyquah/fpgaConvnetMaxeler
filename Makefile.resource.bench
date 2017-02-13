@@ -41,7 +41,7 @@ $(RESOURCE_BENCH_SIM_MAXFILES): $(ENGINEFILES) $(JAVA_PROTOS)
 
 
 $(RESOURCE_BENCH_OBJS): $(RESOURCE_BENCH_SIM_MAXFILES)
-	$(SLICCOMPILE) $< $@
+	$(SLICCOMPILE) $(MAXCOMPILER_BUILD_DIR)/$(basename $(notdir $@))_$(DFEModel)_DFE_SIM/results/$(basename $(notdir $@)).max $@
 
 
 fpgaconvnet/resource_bench_main_sim.o: fpgaconvnet/resource_bench_main.cpp $(RESOURCE_BENCH_SIM_MAXFILES) resource_bench_sim_lookup.h
@@ -62,7 +62,7 @@ run_resource_bench_sim: resource_bench_sim
 	$(MAXCOMPILERSIM) -n $(USER)a -c$(DEVICENUM) -d$(NUMDEVICES) restart
 	SLIC_CONF+="use_simulation=$(USER)a; default_topology_timeout=-1" \
 		   LD_PRELOAD=$(MAXOS_SIM) \
-		   ./$< $(LENET_DESCRIPTOR)
+		   ./$< $(RESOURCE_BENCH_NAMES)
 	make stopsim
 
 # ==============================
