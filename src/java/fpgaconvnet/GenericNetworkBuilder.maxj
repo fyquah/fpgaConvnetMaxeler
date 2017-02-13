@@ -46,7 +46,7 @@ public class GenericNetworkBuilder {
 
             NetworkManager manager = new NetworkManager(engineParameters, networkParameters);
             BuildConfig buildConfig = manager.getBuildConfig();
-            buildConfig.setBuildEffort(BuildConfig.Effort.VERY_HIGH);
+            buildConfig.setBuildEffort(BuildConfig.Effort.MEDIUM);
             buildConfig.setMPPRCostTableSearchRange(
                     engineParameters.getMPPRStartCT(), engineParameters.getMPPREndCT());
             buildConfig.setMPPRParallelism(engineParameters.getMPPRThreads());
