@@ -1,19 +1,20 @@
 RESOURCE_BENCH_NAMES= resource_bench_0 \
-		      resource_bench_1
-# 		      resource_bench_2 \
-# 		      resource_bench_3 \
-# 		      resource_bench_4 \
-# 		      resource_bench_5 \
-# 		      resource_bench_6 \
-# 		      resource_bench_7 \
-# 		      resource_bench_8 \
-# 		      resource_bench_9
+		      resource_bench_1 \
+  		      resource_bench_2 \
+  		      resource_bench_3 \
+  		      resource_bench_4 \
+  		      resource_bench_5 \
+  		      resource_bench_6 \
+  		      resource_bench_7 \
+  		      resource_bench_8 \
+  		      resource_bench_9
 
 RESOURCE_BENCH_SIMMAXDIRS := $(foreach name,$(RESOURCE_BENCH_NAMES),$(MAXCOMPILER_BUILD_DIR)/$(name)_$(DFEModel)_DFE_SIM/results)
 RESOURCE_BENCH_SIM_MAXFILES := $(foreach name,$(RESOURCE_BENCH_NAMES),$(MAXCOMPILER_BUILD_DIR)/$(name)_$(DFEModel)_DFE_SIM/results/$(name).max)
+RESOURCE_BENCH_SIM_OBJS := $(foreach name,$(RESOURCE_BENCH_NAMES),fpgaconvnet/$(name).sim.o)
 RESOURCE_BENCH_DFEMAXDIRS := $(foreach name,$(RESOURCE_BENCH_NAMES),$(MAXCOMPILER_BUILD_DIR)/$(name)_$(DFEModel)_DFE/results)
 RESOURCE_BENCH_DFE_MAXFILES := $(foreach name,$(RESOURCE_BENCH_NAMES),$(MAXCOMPILER_BUILD_DIR)/$(name)_$(DFEModel)_DFE/results/$(name).max)
-RESOURCE_BENCH_OBJS := $(foreach name,$(RESOURCE_BENCH_NAMES),fpgaconvnet/$(name).o)
+RESOURCE_BENCH_DFE_OBJS := $(foreach name,$(RESOURCE_BENCH_NAMES),fpgaconvnet/$(name).dfe.o)
 
 bla:
 	echo $(RESOURCE_BENCH_OBJS)
@@ -72,3 +73,35 @@ run_resource_bench_sim: resource_bench_sim
 resource_bench_dfe_lookup.h: $(RESOURCE_BENCH_DFE_MAXFILES)
 	python ../scripts/generate_resource_bench_lookup.py $@ $(RESOURCE_BENCH_NAMES)
 
+
+$(RESOURCE_BENCH_DFE_MAXFILES): $(ENGINEFILES) $(JAVA_PROTOS)
+	$(MAXJC) $(JFLAGS) $^
+	MAXAPPJCP='.:$(CP)' MAXSOURCEDIRS=$(SOURCE_DIRS) \
+		  $(MAXJAVARUN) fpgaconvnet.GenericNetworkBuilder \
+		  DFEModel=$(DFEModel) \
+		  maxFileName=$(basename $(notdir $@)) \
+		  target="DFE" \
+		  descriptor="../descriptors/resource_bench/$(basename $(notdir $@)).prototxt" \
+		  enableMPCX=$(MPCX)
+
+
+$(RESOURCE_BENCH_DFE_OBJS): $(RESOURCE_BENCH_DFE_MAXFILES)
+	$(SLICCOMPILE) $(MAXCOMPILER_BUILD_DIR)/$(basename $(notdir $@))_$(DFEModel)_DFE/results/$(basename $(notdir $@)).max $@
+
+
+fpgaconvnet/resource_bench_main_dfe.o: fpgaconvnet/resource_bench_main.cpp $(RESOURCE_BENCH_DFE_MAXFILES) resource_bench_dfe_lookup.h
+	$(CPUCOMPILER) $< $(ALL_FLAGS) \
+		-I$(MAXCOMPILER_BUILD_DIR) \
+		$(foreach name,$(RESOURCE_BENCH_SIMMAXDIRS),-I$(name)) \
+		-c -o $@
+
+
+resource_bench_dfe: fpgaconvnet/convnet.o \
+		fpgaconvnet/resource_bench_main_dfe.o \
+		fpgaconvnet/protos/parameters.pb.o \
+		$(RESOURCE_BENCH_DFE_OBJS)
+	$(CPUCOMPILER) $(ALL_FLAGS) -o $@ $^ $(LFLAGS)
+
+
+run_resource_bench_dfe: resource_bench_dfe
+	SLIC_CONF="$(SLIC_CONF)" LD_PRELOAD=$(MAXOS_HW) ./$< $(RESOURCE_BENCH_NAMES)
