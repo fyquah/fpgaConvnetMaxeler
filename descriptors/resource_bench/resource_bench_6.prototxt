@@ -10,7 +10,7 @@ layer {
         activation: Relu
         kernel_size: 5
 
-        worker_factor: 2
+        worker_factor: 1
         conv_folding_factor: 24
         kernel_folding_factor: 25
     }
