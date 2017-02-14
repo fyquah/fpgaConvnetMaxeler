@@ -153,6 +153,15 @@ void verify_conv_output(
             float expected;
             float obtained = conv_out[conv_out_size * i + j];
             fin >> expected;
+
+            if (fin.eof()) {
+                fin.clear();
+                fin.seekg(0, std::ios::beg);
+                log_stdout(INFO) << "Verifier moving to the beginning of file!"
+                        << std::endl;
+                fin >> expected;
+            }
+
             total_error += std::abs(obtained  - expected);
             total_pixels += 1;
 

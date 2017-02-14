@@ -63,16 +63,17 @@ int main (int argc, char **argv)
     }
     fin.close();
 
-#ifndef __SIM__
-    int ori_stream_size = pixel_stream.size();
-    pixel_stream.resize(N / 100 * ori_stream_size);
-    for (int i = 1 ; i < N / 100; i++) {
-        std::memcpy(
-                &pixel_stream[i * ori_stream_size],
-                &pixel_stream[0],
-                sizeof(float) * ori_stream_size);
+    if (N > 100) {
+        int ori_stream_size = pixel_stream.size();
+        pixel_stream.resize(N / 100 * ori_stream_size);
+        for (int i = 1 ; i < N / 100; i++) {
+            std::memcpy(
+                    &pixel_stream[i * ori_stream_size],
+                    &pixel_stream[0],
+                    sizeof(float) * ori_stream_size);
+        }
     }
-#endif
+
     std::cout << "Number of pixels: = " << pixel_stream.size() << std::endl;
 
     for (int i = 1 ; i < argc ; i++) {
