@@ -3,3 +3,4 @@ DFEModel=MAIA
 
 MPCX=false
 DEVICENUM=MAIA
+SLIC_CONF+=default_engine_resource = fyq14^192.168.0.1

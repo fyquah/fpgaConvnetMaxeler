@@ -16,7 +16,7 @@ const uint64_t N = 1;
 #else
 
 #include "resource_bench_dfe_lookup.h"
-const uint64_t N = 100;
+const uint64_t N = 1000;
 
 #endif
 
@@ -33,6 +33,7 @@ void run_feature_extraction(
             "../test_data/resource_bench/bias.txt"
     };
     max_file_t *max_file = max_file_fnc();
+    max_set_max_runnable_timing_score(max_file, 1000000);
     fpgaconvnet::Convnet convnet(network_parameters, max_file, "");
 
     convnet.load_weights_from_files(filenames);
@@ -61,7 +62,18 @@ int main (int argc, char **argv)
         pixel_stream.push_back(x);
     }
     fin.close();
-    std::cout << pixel_stream.size() << std::endl;
+
+#ifndef __SIM__
+    int ori_stream_size = pixel_stream.size();
+    pixel_stream.resize(N / 100 * ori_stream_size);
+    for (int i = 1 ; i < N / 100; i++) {
+        std::memcpy(
+                &pixel_stream[i * ori_stream_size],
+                &pixel_stream[0],
+                sizeof(float) * ori_stream_size);
+    }
+#endif
+    std::cout << "Number of pixels: = " << pixel_stream.size() << std::endl;
 
     for (int i = 1 ; i < argc ; i++) {
         char buffer[100];
