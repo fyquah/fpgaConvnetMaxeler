@@ -139,13 +139,11 @@ def main(argv):
         new_result = parse_file(filename)
         new_result["commit_hash"] = FLAGS.commit_hash
 
-        if new_result and not is_duplicate(results["data"], new_result):
+        if new_result["usage"] and not is_duplicate(results["data"], new_result):
             results["data"].append(new_result)
 
     with open(FLAGS.output, "w") as f:
         f.write(yaml.dump(results, default_flow_style=False))
-
-    print yaml.dump(results, default_flow_style=False)
 
 
 if __name__ == "__main__":

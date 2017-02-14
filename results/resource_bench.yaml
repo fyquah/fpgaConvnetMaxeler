@@ -1,0 +1,38 @@
+resources:
+  logic_utilization: 262400
+  primary_ff: 524800
+  secondary_ff: 524800
+  multiplier: 3926
+  dsp_block: 1963
+  block_memory: 2567
+data:
+- commit_hash: e626405de288de74e941a66a119b692562965c90
+  name: resource_bench_1_MAIA_DFE
+  time: '2017-02-14 10:59:54.315423'
+  usage:
+    logic_utilization: 89618
+    primary_ff: 143877
+    seconday_ff: 11452
+    multiplier: 216
+    dsp_block: 120
+    block_memory: 1212
+- commit_hash: e626405de288de74e941a66a119b692562965c90
+  name: resource_bench_2_MAIA_DFE
+  time: '2017-02-14 04:26:36.446666'
+  usage:
+    logic_utilization: 95951
+    primary_ff: 165655
+    seconday_ff: 11130
+    multiplier: 720
+    dsp_block: 400
+    block_memory: 1441
+- commit_hash: e626405de288de74e941a66a119b692562965c90
+  name: resource_bench_3_MAIA_DFE
+  time: '2017-02-14 06:35:51.509775'
+  usage:
+    logic_utilization: 100323
+    primary_ff: 171748
+    seconday_ff: 8316
+    multiplier: 540
+    dsp_block: 300
+    block_memory: 1061
