@@ -36,3 +36,13 @@ data:
     multiplier: 540
     dsp_block: 300
     block_memory: 1061
+- commit_hash: e626405de288de74e941a66a119b692562965c90
+  name: resource_bench_4_MAIA_DFE
+  time: '2017-02-14 21:51:09.875459'
+  usage:
+    logic_utilization: 117948
+    primary_ff: 189759
+    seconday_ff: 10907
+    multiplier: 540
+    dsp_block: 300
+    block_memory: 1155

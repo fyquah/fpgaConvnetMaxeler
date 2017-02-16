@@ -222,6 +222,7 @@ public class NetworkManager extends CustomManager {
         poolingKernels = new ArrayList<PoolingLayerKernel>();
         poolingKernelBlocks = new ArrayList<KernelBlock>();
 
+        config.setAllowNonMultipleTransitions(true);
         config.setDefaultStreamClockFrequency(networkParameters.getFrequency());
         System.out.println("Network compilation target:");
         System.out.println(networkParameters.toString());
