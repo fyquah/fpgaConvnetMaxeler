@@ -226,6 +226,7 @@ public class NetworkManager extends CustomManager {
         config.setDefaultStreamClockFrequency(networkParameters.getFrequency());
         System.out.println("Network compilation target:");
         System.out.println(networkParameters.toString());
+        System.out.println("Frequency = " + networkParameters.getFrequency());
         setupKernels();
 
         // TODO(fyq14): Make PoolingLayer class to wrap around the pooling layers kernel too.
