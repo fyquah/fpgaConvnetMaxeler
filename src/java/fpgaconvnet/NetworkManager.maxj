@@ -88,8 +88,8 @@ public class NetworkManager extends CustomManager {
             Parameters.LayerParameter layer = networkParameters.getLayer(i);
             if (isConvLayer(layer)) {
                 for (int worker = 0 ; worker < layer.getConv().getWorkerFactor(); worker++) {
-                    String name = String.format("ConvolutionUnit_%d_%d", i, worker);
-                    ei.ignoreMem(name, "kernels", Direction.IN);
+                    String name = String.format("ConvolutionUnit_%d", i);
+                    ei.ignoreMem(name, String.format("kernels_%d", worker), Direction.IN);
                 }
 
                 ei.ignoreMem(String.format("ConvolutionAccumulator_%d", i), "bias", Direction.IN);
@@ -138,10 +138,10 @@ public class NetworkManager extends CustomManager {
                 for (int worker = 0 ; worker < workerFactor; worker++) {
                     String paramName = String.format("kernels_%d_worker_%d", i, worker);
                     InterfaceParamArray paramArray = ei.addParamArray(paramName, CPUTypes.DOUBLE);
-                    String name = String.format("ConvolutionUnit_%d_%d", i, worker);
+                    String name = String.format("ConvolutionUnit_%d", i);
 
                     for (int j = 0 ; j < totalWeights / workerFactor; j++) {
-                        ei.setMem(name, "kernels", j, paramArray[j]);
+                        ei.setMem(name, String.format("kernels_%d", worker), j, paramArray[j]);
                     }
                 }
 

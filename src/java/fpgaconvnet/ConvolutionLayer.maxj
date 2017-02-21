@@ -18,14 +18,12 @@ public class ConvolutionLayer {
     private final LayerParameter layer;
     private final CustomManager manager;
     private final BoxedKernelBlock<ConvolutionSchedulerKernel> scheduler;
-    private final List<BoxedKernelBlock<ConvolutionUnitKernel>> convolutionUnits;
+    private final BoxedKernelBlock<ConvolutionUnitKernel> convolutionUnit;
     private final BoxedKernelBlock<ConvolutionAccumulatorKernel> accumulator;
     
     ConvolutionLayer(LayerParameter argLayer, CustomManager argManager) {
         layer = argLayer;
         manager = argManager;
-
-        convolutionUnits = new ArrayList<BoxedKernelBlock<ConvolutionUnitKernel>>();
 
         scheduler = new BoxedKernelBlock<ConvolutionSchedulerKernel>(
                 new ConvolutionSchedulerKernel(
@@ -33,15 +31,15 @@ public class ConvolutionLayer {
                                                      layer));
         accumulator = new BoxedKernelBlock<ConvolutionAccumulatorKernel>(
                 new ConvolutionAccumulatorKernel(
-                        manager.makeKernelParameters("ConvolutionAccumulator_" + layer.getLayerId()),
-                                                     layer));
+                        manager.makeKernelParameters(
+                            "ConvolutionAccumulator_" + layer.getLayerId()),
+                        layer));
 
-        for (int workerId = 0 ; workerId < layer.getConv().getWorkerFactor() ; workerId++) {
-            convolutionUnits.add(new BoxedKernelBlock<ConvolutionUnitKernel>(new ConvolutionUnitKernel(
-                    manager.makeKernelParameters(String.format("ConvolutionUnit_%d_%d",
-                                                               layer.getLayerId(), workerId)),
-                    layer, workerId)));
-        }
+        convolutionUnit = new BoxedKernelBlock<ConvolutionUnitKernel>(
+                new ConvolutionUnitKernel(
+                        manager.makeKernelParameters(
+                            String.format("ConvolutionUnit_%d", layer.getLayerId())),
+                        layer));
 
         joinKernels();
     }
@@ -59,19 +57,14 @@ public class ConvolutionLayer {
     //              rewriting w.r.t. the cycles required.
     protected void setKernelTimings(EngineInterface ei, InterfaceParam numberOfImages) {
         /*
-         * scheduler:
-         * Scheduler does not have a loop offset, so we will not need to deal
-         * with ei.getAutoLoopOffset here.
+         * scheduler and convolution units do not have a loop offset, so we will not
+         * need to deal with ei.getAutoLoopOffset.
          */
         ei.setTicks(scheduler.getKernel().getName(),
                     numberOfImages * scheduler.getKernel().cyclesPerImage());
 
-
-        /* ConvolutionUnits */
-        for (int i = 0 ; i < layer.getConv().getWorkerFactor() ; i++) {
-            ei.setTicks(convolutionUnits[i].getKernel().getName(),
-                        numberOfImages * convolutionUnits[i].getKernel().cyclesPerImage());
-        }
+        ei.setTicks(convolutionUnit.getKernel().getName(),
+                    numberOfImages * convolutionUnit.getKernel().cyclesPerImage());
 
         /* Accumulator */
         InterfaceParam latency = ei.getAutoLoopOffset(
@@ -92,16 +85,16 @@ public class ConvolutionLayer {
         for (int i = 0 ; i < layer.getConv().getWorkerFactor() ; i++) {
             DFELink pixelsFrom = scheduler.getBlock().getOutput(
                         scheduler.getKernel().getOutputName(i));
-            DFELink pixelsTo = convolutionUnits[i].getBlock().getInput(
-                        convolutionUnits[i].getKernel().getInputName());
+            DFELink pixelsTo = convolutionUnit.getBlock().getInput(
+                        convolutionUnit.getKernel().getInputName(i));
 
             pixelsTo <== pixelsFrom;
         }
 
         /* Configure from convolutionUnits -> accumulator */
         for (int i = 0 ; i < layer.getConv().getWorkerFactor() ; i++) {
-            DFELink from = convolutionUnits[i].getBlock()
-                    .getOutput(convolutionUnits[i].getKernel().getOutputName());;
+            DFELink from = convolutionUnit.getBlock()
+                    .getOutput(convolutionUnit.getKernel().getOutputName(i));
             DFELink to = accumulator.getBlock()
                     .getInput(accumulator.getKernel().getInputName(i));
 

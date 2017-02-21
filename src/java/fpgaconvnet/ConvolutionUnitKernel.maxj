@@ -22,12 +22,10 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
     private final int totalWeights;
     private final DFEVectorType<DFEVar> inputVectorType;
     private final DFEVectorType<DFEVar> outputVectorType;
-    private final DFEVector<DFEVar> inputWindow;
-    private final DFEVector<DFEVar> output;
-    private final Memory<DFEVar> filtersRom;
+    private final List<Memory<DFEVar>> filtersRomList;
     private final LayerParameter layerParams;
 
-    public ConvolutionUnitKernel(KernelParameters kp, LayerParameter params, int workerId) {
+    public ConvolutionUnitKernel(KernelParameters kp, LayerParameter params) {
         super(kp, params);
         layerParams = params;
         kernelDim = params.getConv().getKernelSize();
@@ -35,14 +33,9 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
         inputVectorType = new DFEVectorType<DFEVar>(GlobalConfig.dataType, kernelDim * kernelDim);
         outputVectorType = new DFEVectorType<DFEVar>(
                 GlobalConfig.dataType, layerParams.getConv().getConvFoldingFactor());
-        inputWindow = inputVectorType.newInstance(this);
-        output = outputVectorType.newInstance(this);
         totalWeights =
                 getSchedulerIterations() * layerParams.getNumOutputs() * kernelDim * kernelDim;
-
-        filtersRom = mem.alloc(GlobalConfig.dataType, totalWeights);
-        filtersRom.mapToCPU(String.format("kernels",
-                                          params.getLayerId(), workerId));
+        filtersRomList = new ArrayList<Memory<DFEVar>>();
 
         final int convFoldingFactor = layerParams.getConv().getConvFoldingFactor();
         final int kernelFoldingFactor = layerParams.getConv().getKernelFoldingFactor();
@@ -50,84 +43,94 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
         CounterChain chain = control.count.makeCounterChain();
         DFEVar iter = Utils.chainCounterOrZero(this, chain, getConvolutionIterations());
         DFEVar kernelIter = Utils.chainCounterOrZero(this, chain, getKernelIterations());
-        // DFEVar addressCount = addressCounter.getCount().cast(dfeUInt(totalWeights));
-        final int addressIncrement = layerParams.getConv().getKernelFoldingFactor();
-        final int totalAddressCount = getSchedulerIterations()
-                * getConvolutionIterations() * kernelDim * kernelDim;
-        Counter addressCounter = control.count.makeCounter(
-                control.count.makeParams(totalAddressCount)
-                    .withCountMode(Count.CountMode.NUMERIC_INCREMENTING)
-                    .withInc(addressIncrement)
-                    .withInitValue(0)
-                    .withMax(totalAddressCount)
-                    .withWrapMode(Count.WrapMode.MODULO_MAX_OF_COUNT));
-        DFEVar addressCount = addressCounter.getCount().cast(dfeUInt(Utils.ceilLog2(totalWeights)));
 
-        // schedule the pixel and weight vars.
-        final List<DFEVar> multiplicationOutputs = new ArrayList<DFEVar>();
-        final DFEVar[] pixelVars = new DFEVar[layerParams.getConv().getKernelFoldingFactor()];
-        final DFEVar[][] weightVars = new DFEVar[convFoldingFactor][kernelFoldingFactor];
-        for (int multId = 0; multId < layerParams.getConv().getKernelFoldingFactor(); multId++) {
-            pixelVars[multId] = getConvPixel(multId, kernelIter, inputWindow);
-        }
+        for (int workerId = 0 ; workerId < params.getConv().getWorkerFactor() ; workerId++) {
 
-        /* Stream the multiplication results. */
-        for (int convUnitIndex = 0; convUnitIndex < convFoldingFactor; convUnitIndex++) {
-            final int addressSeparation = kernelDim * kernelDim
-                    * getConvolutionIterations() * getSchedulerIterations();
-            final int addressBase = convUnitIndex * addressSeparation;
+            DFEVector<DFEVar> inputWindow = inputVectorType.newInstance(this);
+            DFEVector<DFEVar> output = outputVectorType.newInstance(this);
+            Memory<DFEVar> filtersRom = mem.alloc(GlobalConfig.dataType, totalWeights);
+            filtersRom.mapToCPU(String.format("kernels_%d", workerId));
 
-            DFEVar convUnitOutput = constant.var(GlobalConfig.dataType, 0.0);
-            for (int multId = 0; multId < kernelFoldingFactor; multId++) {
-                DFEVar offset = constant.var(dfeUInt(Utils.ceilLog2(totalWeights)), addressBase + multId);
-                DFEVar address = addressCount + offset;
-                weightVars[convUnitIndex][multId] = filtersRom.read(
-                        address.cast(dfeUInt(Utils.ceilLog2(totalWeights))));
-                convUnitOutput = convUnitOutput
-                        + pixelVars[multId] * weightVars[convUnitIndex][multId];
-            }
-            output[convUnitIndex] <== convUnitOutput;
-        }
+            final int addressIncrement = layerParams.getConv().getKernelFoldingFactor();
+            final int totalAddressCount = getSchedulerIterations()
+                    * getConvolutionIterations() * kernelDim * kernelDim;
+            Counter addressCounter = control.count.makeCounter(
+                    control.count.makeParams(totalAddressCount)
+                        .withCountMode(Count.CountMode.NUMERIC_INCREMENTING)
+                        .withInc(addressIncrement)
+                        .withInitValue(0)
+                        .withMax(totalAddressCount)
+                        .withWrapMode(Count.WrapMode.MODULO_MAX_OF_COUNT));
+            DFEVar addressCount = addressCounter.getCount().cast(dfeUInt(Utils.ceilLog2(totalWeights)));
 
-        DFEVar inputControlFlag = iter.eq(0) & kernelIter.eq(0);
-        inputWindow <== io.input(getInputName(), inputVectorType, inputControlFlag);
-        io.output(getOutputName(), output, outputVectorType);
-
-        // debugging
-        String s_window = "[\n";
-        String s_weights = "[\n";
-        String s_output = "[\n";
-        List<Object> debugValues = new ArrayList<Object>();
-        debugValues.add(inputControlFlag);
-        debugValues.add(iter);
-        debugValues.add(kernelIter);
-        for (int i = 0 ; i < layerParams.getConv().getKernelFoldingFactor() ; i++) {
-            s_window += "%.3f, "; 
-            debugValues.add(pixelVars[i]);
-        }
-        s_window += "]\n";
-        for (int convUnitId = 0 ; convUnitId < convFoldingFactor ; convUnitId++) {
-            s_weights += "[";
-            for (int multId = 0; multId < kernelFoldingFactor ; multId++) {
-                s_weights += "%.3f, "; 
-                debugValues.add(weightVars[convUnitId][multId]);
+            // schedule the pixel and weight vars.
+            final List<DFEVar> multiplicationOutputs = new ArrayList<DFEVar>();
+            final DFEVar[] pixelVars = new DFEVar[layerParams.getConv().getKernelFoldingFactor()];
+            final DFEVar[][] weightVars = new DFEVar[convFoldingFactor][kernelFoldingFactor];
+            for (int multId = 0; multId < layerParams.getConv().getKernelFoldingFactor(); multId++) {
+                pixelVars[multId] = getConvPixel(multId, kernelIter, inputWindow);
             }
 
+            /* Stream the multiplication results. */
+            for (int convUnitIndex = 0; convUnitIndex < convFoldingFactor; convUnitIndex++) {
+                final int addressSeparation = kernelDim * kernelDim
+                        * getConvolutionIterations() * getSchedulerIterations();
+                final int addressBase = convUnitIndex * addressSeparation;
+
+                DFEVar convUnitOutput = constant.var(GlobalConfig.dataType, 0.0);
+                for (int multId = 0; multId < kernelFoldingFactor; multId++) {
+                    DFEVar offset = constant.var(dfeUInt(Utils.ceilLog2(totalWeights)), addressBase + multId);
+                    DFEVar address = addressCount + offset;
+                    weightVars[convUnitIndex][multId] = filtersRom.read(
+                            address.cast(dfeUInt(Utils.ceilLog2(totalWeights))));
+                    convUnitOutput = convUnitOutput
+                            + pixelVars[multId] * weightVars[convUnitIndex][multId];
+                }
+                output[convUnitIndex] <== convUnitOutput;
+            }
+
+            DFEVar inputControlFlag = iter.eq(0) & kernelIter.eq(0);
+            inputWindow <== io.input(getInputName(workerId), inputVectorType, inputControlFlag);
+            io.output(getOutputName(workerId), output, outputVectorType);
+
+            // debugging
+            String s_window = "[\n";
+            String s_weights = "[\n";
+            String s_output = "[\n";
+            List<Object> debugValues = new ArrayList<Object>();
+            debugValues.add(inputControlFlag);
+            debugValues.add(iter);
+            debugValues.add(kernelIter);
+            for (int i = 0 ; i < layerParams.getConv().getKernelFoldingFactor() ; i++) {
+                s_window += "%.3f, "; 
+                debugValues.add(pixelVars[i]);
+            }
+            s_window += "]\n";
+            for (int convUnitId = 0 ; convUnitId < convFoldingFactor ; convUnitId++) {
+                s_weights += "[";
+                for (int multId = 0; multId < kernelFoldingFactor ; multId++) {
+                    s_weights += "%.3f, "; 
+                    debugValues.add(weightVars[convUnitId][multId]);
+                }
+
+                s_weights += "]\n";
+            }
             s_weights += "]\n";
+            for (int convUnitId = 0 ; convUnitId < convFoldingFactor;  convUnitId++) {
+                debugValues.add(output[convUnitId]);
+                s_output += "%.3f, ";
+            }
+            s_output += "]\n";
+            debug.simPrintf("ConvolutionUnitKernel[layer = " + params.getLayerId()
+                            + "] worker = " + workerId
+                            + " inputControlFlag = %d iter = %d kernelIter = %d\n"
+                            + "input window = " + s_window 
+                            + "weights = " + s_weights
+                            + "outputs = " + s_output,
+                            debugValues.toArray(new Object[1]));
+
+            filtersRomList.add(filtersRom);
         }
-        s_weights += "]\n";
-        for (int convUnitId = 0 ; convUnitId < convFoldingFactor;  convUnitId++) {
-            debugValues.add(output[convUnitId]);
-            s_output += "%.3f, ";
-        }
-        s_output += "]\n";
-        debug.simPrintf("ConvolutionUnitKernel[layer = " + params.getLayerId()
-                        + "] worker = " + workerId
-                        + " inputControlFlag = %d iter = %d kernelIter = %d\n"
-                        + "input window = " + s_window 
-                        + "weights = " + s_weights
-                        + "outputs = " + s_output,
-                        debugValues.toArray(new Object[1]));
     }
 
     public int cyclesPerImage() {
@@ -138,12 +141,12 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
         return totalOutputPixels * cyclesPerPixel;
     }
 
-    public String getInputName() {
-        return "input";
+    public String getInputName(int workerId) {
+        return "input_" + workerId;
     }
 
-    public String getOutputName() {
-        return "output";
+    public String getOutputName(int workerId) {
+        return "output_" + workerId;
     }
 
     private DFEVar getConvPixel(
