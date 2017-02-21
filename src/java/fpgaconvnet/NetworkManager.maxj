@@ -25,6 +25,7 @@ import com.maxeler.maxcompiler.v2.managers.engine_interfaces.InterfaceParam;
 import com.maxeler.maxcompiler.v2.managers.engine_interfaces.InterfaceParamArray;
 
 import fpgaconvnet.protos.Parameters;
+import fpgaconvnet.protos.Parameters.LayerParameter;
 
 
 public class NetworkManager extends CustomManager {
@@ -83,16 +84,25 @@ public class NetworkManager extends CustomManager {
         return ignoreMem(ei);
     }
 
+    private void ignoreConvFMem(EngineInterface ei, Parameters.LayerParameter layer, int layerId) {
+        final String kernelName = String.format("ConvolutionUnit_%d", layerId);
+
+        for (int worker = 0 ; worker < layer.getConv().getWorkerFactor(); worker++) {
+            for (int convUnit = 0; convUnit < layer.getConv().getConvFoldingFactor(); convUnit++) {
+                for (int multId = 0; multId < layer.getConv().getKernelFoldingFactor(); multId++) {
+                    String memName = String.format("kernels_%d_%d_%d", worker, convUnit, multId);
+                    ei.ignoreMem(kernelName, memName, Direction.IN);
+                }
+            }
+        }
+        ei.ignoreMem(String.format("ConvolutionAccumulator_%d", layerId), "bias", Direction.IN);
+    }
+
     private EngineInterface ignoreMem(EngineInterface ei) {
         for (int i = 0 ; i < networkParameters.getLayerCount() ; i++) {
             Parameters.LayerParameter layer = networkParameters.getLayer(i);
             if (isConvLayer(layer)) {
-                for (int worker = 0 ; worker < layer.getConv().getWorkerFactor(); worker++) {
-                    String name = String.format("ConvolutionUnit_%d", i);
-                    ei.ignoreMem(name, String.format("kernels_%d", worker), Direction.IN);
-                }
-
-                ei.ignoreMem(String.format("ConvolutionAccumulator_%d", i), "bias", Direction.IN);
+                ignoreConvFMem(ei, layer, i);
             }
         }
         return ei;
@@ -124,34 +134,55 @@ public class NetworkManager extends CustomManager {
         return ignoreMem(ei);
     }
 
+    private void initSingleConvRom(
+            EngineInterface ei,
+            Parameters.LayerParameter layer,
+            int worker, int convUnit, int multId) {
+
+        /* Find the ConvolutionLayer whose layerId is the same as the layer.getLayerId().
+         * This is very hacky, but this is the quickest solution to code sharing.
+         */
+
+        String blockName = String.format("ConvolutionUnit_%d", layer.getLayerId());
+        String memoryName = String.format("kernels_%d_%d_%d", worker, convUnit, multId);
+        String paramName = String.format("layer_%d_%s", layer.getLayerId(), memoryName);
+        InterfaceParamArray paramArray = ei.addParamArray(paramName, CPUTypes.DOUBLE);
+        final int arraySize = new IterationCounter(layer).getTotalIterations();
+
+        ei.setMem(blockName, memoryName, 0, arraySize, paramArray);
+    }
+
+    private void initConvLayer(EngineInterface ei, Parameters.LayerParameter layer) {
+
+        final int workerFactor = layer.getConv().getWorkerFactor();
+        final int totalWeights =
+                layer.getNumOutputs() * layer.getNumInputs()
+                * layer.getConv().getKernelSize() * layer.getConv().getKernelSize();
+
+        for (int worker = 0 ; worker < layer.getConv().getWorkerFactor(); worker++) {
+            for (int convUnit = 0; convUnit < layer.getConv().getConvFoldingFactor(); convUnit++) {
+                for (int multId = 0; multId < layer.getConv().getKernelFoldingFactor(); multId++) {
+                    initSingleConvRom(ei, layer, worker, convUnit, multId);
+                }
+            }
+        }
+
+        String paramName = String.format("bias_%d", layer.getLayerId());
+        InterfaceParamArray paramArray = ei.addParamArray(paramName, CPUTypes.DOUBLE);
+        String name = String.format("ConvolutionAccumulator_%d", layer.getLayerId());
+
+        for (int j = 0 ; j < layer.getNumOutputs() ; j++) {
+            ei.setMem(name, "bias", j, paramArray[j]);
+        }
+    }
+
     private EngineInterface buildInitInterface() {
         EngineInterface ei = new EngineInterface("init_convnet");
 
         for (int i = 0 ; i < networkParameters.getLayerCount() ; i++) {
             Parameters.LayerParameter layer = networkParameters.getLayer(i);
             if (isConvLayer(layer)) {
-                final int workerFactor = layer.getConv().getWorkerFactor();
-                final int totalWeights =
-                        layer.getNumOutputs() * layer.getNumInputs()
-                        * layer.getConv().getKernelSize() * layer.getConv().getKernelSize();
-
-                for (int worker = 0 ; worker < workerFactor; worker++) {
-                    String paramName = String.format("kernels_%d_worker_%d", i, worker);
-                    InterfaceParamArray paramArray = ei.addParamArray(paramName, CPUTypes.DOUBLE);
-                    String name = String.format("ConvolutionUnit_%d", i);
-
-                    for (int j = 0 ; j < totalWeights / workerFactor; j++) {
-                        ei.setMem(name, String.format("kernels_%d", worker), j, paramArray[j]);
-                    }
-                }
-
-                String paramName = String.format("bias_%d", i);
-                InterfaceParamArray paramArray = ei.addParamArray(paramName, CPUTypes.DOUBLE);
-                String name = String.format("ConvolutionAccumulator_%d", i);
-
-                for (int j = 0 ; j < layer.getNumOutputs() ; j++) {
-                    ei.setMem(name, "bias", j, paramArray[j]);
-                }
+                initConvLayer(ei, layer);
             }
         }
 

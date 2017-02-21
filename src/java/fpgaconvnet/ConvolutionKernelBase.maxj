@@ -8,38 +8,31 @@ import com.maxeler.maxcompiler.v2.kernelcompiler.KernelParameters;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
 
 import fpgaconvnet.protos.Parameters;
+import fpgaconvnet.protos.Parameters.LayerParameter;
 
 
 public abstract class ConvolutionKernelBase extends Kernel {
     
     private final Parameters.LayerParameter layerParams;
+    private final IterationCounter iterCounter;
 
     public ConvolutionKernelBase (KernelParameters kp, Parameters.LayerParameter argParams) {
         super(kp);
         layerParams = argParams;
+        iterCounter = new IterationCounter(layerParams);
     }
 
-    /* The number of cycles to perform _one_ convolution */
     public int getKernelIterations() {
-        int kernelDim = layerParams.getConv().getKernelSize();
-        return Utils.divCeil(kernelDim * kernelDim, layerParams.getConv().getKernelFoldingFactor());
+        return iterCounter.getKernelIterations();
     }
 
-    /* The number of loop iterations required to convolve a input channel's window with all
-     * the the filters that concerned it.
-     */
     public int getConvolutionIterations() {
-        return Utils.divCeil(
-                layerParams.getNumOutputs(), layerParams.getConv().getConvFoldingFactor()); 
-    }
-
-    public int getAccumulationIterations() {
-        return layerParams.getNumOutputs() / layerParams.getConv().getWorkerFactor();
+        return iterCounter.getConvolutionIterations();
     }
 
     /* The number of input channels a worker needs to handle. */
     public int getSchedulerIterations() {
-        return Utils.divCeil(layerParams.getNumInputs(), layerParams.getConv().getWorkerFactor());
+        return iterCounter.getSchedulerIterations();
     }
 
     public List<Integer> getSchedulerChannels(int workerIndex) {

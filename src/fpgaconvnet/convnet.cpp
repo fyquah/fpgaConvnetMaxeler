@@ -6,6 +6,8 @@
 #include <string>
 #include <sys/time.h>
 
+#include <Eigen/Dense>
+
 #include "fpgaconvnet/convnet.h"
 #include "fpgaconvnet/protos/parameters.pb.h"
 
@@ -48,6 +50,43 @@ static std::ostream& log_stdout(int level = INFO)
 void set_log_prefix(const std::string & prefix)
 {
     LOG_PREFIX = prefix;
+}
+
+static uint64_t div_ceil(uint64_t a, uint64_t b)
+{
+    if (a % b == 0) {
+        return a / b;
+    } else {
+        return a / b + 1;
+    }
+}
+
+
+/* The number of iterations to convolve a kernel with a sliding window. */
+static uint64_t calc_kernel_iterations(const protos::LayerParameter & layer)
+{
+    uint64_t kernelDim = layer.conv().kernel_size();
+    return div_ceil(kernelDim * kernelDim, layer.conv().kernel_folding_factor());
+}
+
+/* The number of convolution cycles to process a single sliding window. */
+static uint64_t calc_convolution_iterations(const protos::LayerParameter & layer)
+{
+    return div_ceil(layer.num_outputs(),
+                    layer.conv().conv_folding_factor()); 
+}
+
+/* The number of cycles to process all input channels of a sliding window. */ 
+static uint64_t calc_scheduler_iterations(const protos::LayerParameter & layer)
+{
+    return div_ceil(layer.num_inputs(), layer.conv().worker_factor());
+}
+
+
+static uint64_t calc_total_iterations(const protos::LayerParameter &layer)
+{
+    return calc_scheduler_iterations(layer)
+            * calc_convolution_iterations(layer) * calc_kernel_iterations(layer);
 }
 
 
@@ -180,9 +219,11 @@ void allign_and_place_kernel_weights(
         double *src_base
 )
 {
-    const int conv_ff = layer.conv().conv_folding_factor();
-    const int kernel_dim = layer.conv().kernel_size();
-    const int worker_factor = layer.conv().worker_factor();
+    const uint64_t kernel_ff = layer.conv().kernel_folding_factor();
+    const uint64_t conv_ff = layer.conv().conv_folding_factor();
+    const uint64_t kernel_dim = layer.conv().kernel_size();
+    const uint64_t worker_factor = layer.conv().worker_factor();
+    const uint64_t total_iter = calc_total_iterations(layer);
 
     for (int i = 0 ; i < worker_factor ; i++) {
         int total = ((layer.num_inputs() / worker_factor)
@@ -220,6 +261,29 @@ void allign_and_place_kernel_weights(
             }
         }
     }
+
+    /* At this point, the dimension of dest_base is
+     *      num_worker * conv_factor * total_iter * kernel_factor
+     *
+     * We want to change it to:
+     *      num_worker * conv_factor * kernel_factor * total_iter
+     */
+    double *tmp = new double[kernel_ff * total_iter];
+
+    for (uint64_t worker = 0; worker < worker_factor; worker++) {
+        for (uint64_t conv = 0; conv < conv_ff; conv++) {
+            uint64_t offset = ((worker * conv_ff) + conv) * kernel_ff * total_iter;
+            double *ptr = dest_base + offset;
+
+            std::memcpy(tmp, ptr, kernel_ff * total_iter * sizeof(double));
+
+            Eigen::Map<Eigen::MatrixXd> matrix_const(tmp, total_iter, kernel_ff);
+            Eigen::Map<Eigen::MatrixXd> matrix(ptr, kernel_ff, total_iter);
+
+            matrix = matrix_const.transpose().eval();
+        }
+    }
+    delete[] tmp;
 }
 
 uint64_t calc_total_kernel_weights(const protos::LayerParameter & layer)
@@ -233,28 +297,46 @@ uint64_t calc_total_kernel_weights(const protos::LayerParameter & layer)
 }
 
 
+void max_set_single_rom(
+        max_actions_t *action,
+        const protos::LayerParameter & layer,
+        double *worker_kernels,
+        uint64_t worker,
+        uint64_t conv,
+        uint64_t mult)
+{
+    char buffer[100];
+    uint64_t rom_size = calc_total_iterations(layer);
+
+    sprintf(buffer, "layer_%d_kernels_%d_%d_%d", layer.layer_id(), worker, conv, mult);
+    for (int i = 0 ; i < rom_size ; i++) {
+        uint64_t index;
+
+        index = worker;
+        index = (index * layer.conv().conv_folding_factor()) + conv;
+        index = (index * layer.conv().kernel_folding_factor()) + mult;
+        index = (index * rom_size) + i;
+        max_set_param_array_double(action, buffer, worker_kernels[index], i);
+    }
+}
+
+
 void max_set_layer_weights(
         max_actions_t *action,
         const protos::LayerParameter & layer,
-        double *kernels,
+        double *worker_kernels,
         double *bias
 )
 {
-    char buffer[100];
+    char buffer[30];
 
     for (int worker = 0 ; worker < layer.conv().worker_factor() ; worker++) {
-        const uint64_t worker_size =
-                calc_total_kernel_weights(layer)
-                / layer.conv().worker_factor();
-
-        sprintf(buffer, "kernels_%d_worker_%d", layer.layer_id(), worker);
-
-        for (int i = 0 ; i < worker_size ; i++) {
-            max_set_param_array_double(
-                    action,
-                    buffer,
-                    kernels[worker_size * worker + i],
-                    i);
+        for (int conv = 0; conv < layer.conv().conv_folding_factor(); conv++) {
+            for (int mult = 0; mult < layer.conv().kernel_folding_factor(); mult++) {
+                max_set_single_rom(
+                        action, layer, worker_kernels,
+                        worker, conv, mult);
+            }
         }
     }
 

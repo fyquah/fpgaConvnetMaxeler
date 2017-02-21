@@ -1,0 +1,37 @@
+package fpgaconvnet;
+
+import fpgaconvnet.protos.Parameters;
+
+
+public class IterationCounter {
+
+    private final Parameters.LayerParameter layerParams;
+
+    public IterationCounter(Parameters.LayerParameter argLayerParams) {
+        layerParams = argLayerParams;
+    }
+
+    public int getTotalIterations() {
+        return getKernelIterations() * getConvolutionIterations() * getSchedulerIterations();
+    }
+
+    /* The number of cycles to perform _one_ convolution */
+    public int getKernelIterations() {
+        int kernelDim = layerParams.getConv().getKernelSize();
+        return Utils.divCeil(kernelDim * kernelDim, layerParams.getConv().getKernelFoldingFactor());
+    }
+
+    /* The number of loop iterations required to convolve a input channel's window with all
+     * the the filters that concerned it.
+     */
+    public int getConvolutionIterations() {
+        return Utils.divCeil(
+                layerParams.getNumOutputs(), layerParams.getConv().getConvFoldingFactor()); 
+    }
+
+    /* The number of input channels a worker needs to handle. */
+    public int getSchedulerIterations() {
+        return Utils.divCeil(layerParams.getNumInputs(), layerParams.getConv().getWorkerFactor());
+    }
+
+}
