@@ -53,7 +53,16 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
         for (int i = 0 ; i < layerParams.getConv().getWorkerFactor() ; i++) {
             inputVectors.add(io.input(getInputName(i), inputVectorType, inputControlFlag));
         }
-        io.output(getOutputName(), output, outputVectorType, outputControlFlag);
+
+        if (layerParams.getIsLastLayer()) {
+            /* Last layer - cast from fixed point to dfe float. */
+            DFEVectorType rawOutputVectorType = new DFEVectorType<DFEVar>(
+                    GlobalConfig.cpuType, layerParams.getNumOutputs());
+            io.output(getOutputName(), output.cast(rawOutputVectorType),
+                    outputVectorType, outputControlFlag);
+        } else {
+            io.output(getOutputName(), output, outputVectorType, outputControlFlag);
+        }
 
         OffsetExpr loopOffsetExpr = stream.makeOffsetAutoLoop(getOffsetExprName());
         DFEVar pipelineLengthVar = loopOffsetExpr.getDFEVar(this,dfeUInt(32));

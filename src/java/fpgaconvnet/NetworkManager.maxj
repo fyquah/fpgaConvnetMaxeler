@@ -33,9 +33,6 @@ public class NetworkManager extends CustomManager {
     private List<ConvolutionLayer> convolutionLayers;
     private List<PoolingLayerKernel> poolingKernels;
     private List<KernelBlock> poolingKernelBlocks;
-    private DfeInputAlligner inputAllignerKernel;
-    private DfeOutputAlligner outputAllignerKernel;
-    private KernelBlock inputAllignerBlock, outputAllignerBlock;
     /* NetworkParameters here are completely filled, (ie: earlier stages of the compilation process
      * has populated the parameters appropriately.
      */
@@ -66,8 +63,7 @@ public class NetworkManager extends CustomManager {
         InterfaceParam N = ei.addParam("N", CPUTypes.UINT64);
         InterfaceParam addr_images = ei.addParam("address_images", CPUTypes.UINT64);
         InterfaceParam addr_features = ei.addParam("address_features", CPUTypes.UINT64);
-        ei.setTicks("DfeInputAlligner", N * inputDimension().totalSize());
-        ei.setTicks("DfeOutputAlligner", N * outputDimension().totalSize());
+
         for (int i = 0 ; i < convolutionLayers.size() ; i++) {
             convolutionLayers[i].setKernelTimings(ei, N);
         }
@@ -164,8 +160,6 @@ public class NetworkManager extends CustomManager {
     }
 
     private void setupKernels() {
-        inputAllignerKernel = new DfeInputAlligner(
-            makeKernelParameters("DfeInputAlligner"), inputDimension().channels());
         for (int i = 0 ; i < networkParameters.getLayerCount() ; i++) {
             Parameters.LayerParameter layer = networkParameters.getLayer(i);
             if (isConvLayer(layer)) {
@@ -175,8 +169,6 @@ public class NetworkManager extends CustomManager {
                 poolingKernels.add(new PoolingLayerKernel(kernelParameters , layer));
             }
         }
-        outputAllignerKernel = new DfeOutputAlligner(
-            makeKernelParameters("DfeOutputAlligner"), outputDimension().channels());
     }
 
     private void linkKernels() {
@@ -197,8 +189,8 @@ public class NetworkManager extends CustomManager {
         int poolingUnitId = 0;
         int convLayerId = 0;
 
-        inputAllignerBlock.getInput("x") <== lmemInputLink;
-        DFELink prevOutput = inputAllignerBlock.getOutput("y");
+        DFELink prevOutput = lmemInputLink;
+
         for (int i = 0 ; i < networkParameters.getLayerCount() ; i++) {
             Parameters.LayerParameter layer = networkParameters.getLayer(i);
             if (isConvLayer(layer)) {
@@ -211,8 +203,7 @@ public class NetworkManager extends CustomManager {
                 poolingUnitId++;
             }
         }
-        outputAllignerBlock.getInput("x") <== prevOutput;
-        lmemOutputLink <== outputAllignerBlock.getOutput("y");
+        lmemOutputLink <== prevOutput;
     }
 
     public NetworkManager(EngineParameters engineParameters, Parameters.Network networkParametersIn) {
@@ -230,8 +221,6 @@ public class NetworkManager extends CustomManager {
         setupKernels();
 
         // TODO(fyq14): Make PoolingLayer class to wrap around the pooling layers kernel too.
-        inputAllignerBlock = addKernel(inputAllignerKernel);
-        outputAllignerBlock = addKernel(outputAllignerKernel);
         poolingKernelBlocks = new ArrayList<KernelBlock>();
         for (int i = 0 ; i < poolingKernels.size() ; i++) {
             poolingKernelBlocks.add(addKernel(poolingKernels[i]));
