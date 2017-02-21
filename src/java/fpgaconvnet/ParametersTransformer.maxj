@@ -135,7 +135,8 @@ public class ParametersTransformer {
         builder.setLayerId(layer_id);
         if (networkParameters.getLayerCount() - 1 == layer_id) {
             builder.setIsLastLayer(true);
-        } else if (layer_id == 0) {
+        }
+        if (layer_id == 0) {
             builder.setIsFirstLayer(true);
         }
         return builder.build();
