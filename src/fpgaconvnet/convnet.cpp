@@ -280,9 +280,14 @@ void allign_and_place_kernel_weights(
             Eigen::Map<Eigen::MatrixXd> matrix_const(tmp, total_iter, kernel_ff);
             Eigen::Map<Eigen::MatrixXd> matrix(ptr, kernel_ff, total_iter);
 
-            matrix = matrix_const.transpose().eval();
+            for (int i = 0 ; i < total_iter ; i++) {
+                for (int j = 0 ; j < kernel_ff ; j++) {
+                    ptr[j * total_iter + i] = tmp[i * kernel_ff + j];
+                }
+            }
         }
     }
+
     delete[] tmp;
 }
 
