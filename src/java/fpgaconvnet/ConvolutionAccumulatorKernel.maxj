@@ -59,7 +59,7 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
             DFEVectorType rawOutputVectorType = new DFEVectorType<DFEVar>(
                     GlobalConfig.cpuType, layerParams.getNumOutputs());
             io.output(getOutputName(), output.cast(rawOutputVectorType),
-                    outputVectorType, outputControlFlag);
+                    rawOutputVectorType, outputControlFlag);
         } else {
             io.output(getOutputName(), output, outputVectorType, outputControlFlag);
         }
