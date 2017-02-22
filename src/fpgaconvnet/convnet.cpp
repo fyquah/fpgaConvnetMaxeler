@@ -313,7 +313,7 @@ void max_set_single_rom(
     char buffer[100];
     uint64_t rom_size = calc_total_iterations(layer);
 
-    sprintf(buffer, "layer_%d_kernels_%d_%d_%d", layer.layer_id(), worker, conv, mult);
+    sprintf(buffer, "layer_%d_kernels_%d_%d_%d", layer.layer_id(), worker, conv, 100);
     for (int i = 0 ; i < rom_size ; i++) {
         uint64_t index;
 
@@ -422,7 +422,7 @@ void Convnet::max_init_weights()
             i++;
         }
     }
-    max_disable_validation(memory_action);
+    // max_disable_validation(memory_action);
     max_run(dfe, memory_action);
     max_actions_free(memory_action);
 }
@@ -439,7 +439,7 @@ void Convnet::max_load_input_data(const std::vector<float> & images, uint64_t N)
     max_queue_input(
             load_action, "fromcpu",
             (void*) &images[0], sizeof(float) * N * input_size);
-    max_disable_validation(load_action);
+    // max_disable_validation(load_action);
     max_run(dfe, load_action);
     max_actions_free(load_action);
 }
@@ -454,7 +454,7 @@ void Convnet::max_run_inference(uint64_t N) {
     max_set_param_uint64t(run_action, "N", N);
     max_set_param_uint64t(run_action, "address_images", address_images);
     max_set_param_uint64t(run_action, "address_features", address_features);
-    max_disable_validation(run_action);
+    // max_disable_validation(run_action);
     __sync_synchronize();
     gettimeofday(&t_begin, NULL);
     max_run(dfe, run_action);
@@ -477,7 +477,7 @@ std::vector<float> Convnet::max_retrieve_features(uint64_t N) {
             "tocpu",
             &features[0],
             N * output_size * sizeof(float));
-    max_disable_validation(read_action);
+    // max_disable_validation(read_action);
     max_run(dfe, read_action);
 
     return features;

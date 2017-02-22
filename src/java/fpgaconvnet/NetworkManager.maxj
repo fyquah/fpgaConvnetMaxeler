@@ -81,7 +81,7 @@ public class NetworkManager extends CustomManager {
         ei.setLMemLinear("images", addr_images, N * inputSize * CPUTypes.FLOAT.sizeInBytes());
         ei.setLMemLinear("features", addr_features, N * outputSize * CPUTypes.FLOAT.sizeInBytes());
         ei.ignoreAll(Direction.IN_OUT);
-        return ignoreMem(ei);
+        return ei;
     }
 
     private void ignoreConvFMem(EngineInterface ei, Parameters.LayerParameter layer, int layerId) {
@@ -118,7 +118,7 @@ public class NetworkManager extends CustomManager {
         ei.setStream("fromcpu", type, sizeInBytes);
         ei.setLMemLinear("cpu2lmem", address, sizeInBytes);
         ei.ignoreAll(Direction.IN_OUT);
-        return ignoreMem(ei);
+        return ei;
     }
 
     private EngineInterface buildGetResultsInterface() {
@@ -131,17 +131,13 @@ public class NetworkManager extends CustomManager {
         ei.setLMemLinear("lmem2cpu", address, sizeInBytes);
         ei.setStream("tocpu", type, sizeInBytes);
         ei.ignoreAll(Direction.IN_OUT);
-        return ignoreMem(ei);
+        return ei;
     }
 
     private void initSingleConvRom(
             EngineInterface ei,
             Parameters.LayerParameter layer,
             int worker, int convUnit, int multId) {
-
-        /* Find the ConvolutionLayer whose layerId is the same as the layer.getLayerId().
-         * This is very hacky, but this is the quickest solution to code sharing.
-         */
 
         String blockName = String.format("ConvolutionUnit_%d", layer.getLayerId());
         String memoryName = String.format("kernels_%d_%d_%d", worker, convUnit, multId);
