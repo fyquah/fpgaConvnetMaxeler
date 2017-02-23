@@ -9,7 +9,7 @@ layer {
         kernel_size: 5
 
         worker_factor: 30
-        conv_folding_factor: 2
+        conv_folding_factor: 8
         kernel_folding_factor: 5
     }
 }
