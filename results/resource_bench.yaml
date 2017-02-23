@@ -46,3 +46,43 @@ data:
     multiplier: 540
     dsp_block: 300
     block_memory: 1155
+- commit_hash: 5b7869d1171c144555fa488a06609c40a47a635f
+  name: resource_bench_9_MAIA_DFE
+  time: '2017-02-22 22:35:37.778566'
+  usage:
+    logic_utilization: 98022
+    primary_ff: 196577
+    seconday_ff: 11094
+    multiplier: 1470
+    dsp_block: 750
+    block_memory: 2429
+- commit_hash: 5b7869d1171c144555fa488a06609c40a47a635f
+  name: resource_bench_5_MAIA_DFE
+  time: '2017-02-22 03:42:49.837358'
+  usage:
+    logic_utilization: 108211
+    primary_ff: 189754
+    seconday_ff: 12089
+    multiplier: 2352
+    dsp_block: 1200
+    block_memory: 2498
+- commit_hash: 5b7869d1171c144555fa488a06609c40a47a635f
+  name: resource_bench_6_MAIA_DFE
+  time: '2017-02-22 09:06:41.811664'
+  usage:
+    logic_utilization: 97468
+    primary_ff: 189130
+    seconday_ff: 8053
+    multiplier: 1470
+    dsp_block: 750
+    block_memory: 1945
+- commit_hash: 5b7869d1171c144555fa488a06609c40a47a635f
+  name: resource_bench_8_MAIA_DFE
+  time: '2017-02-22 17:12:43.584696'
+  usage:
+    logic_utilization: 87950
+    primary_ff: 167469
+    seconday_ff: 9462
+    multiplier: 980
+    dsp_block: 500
+    block_memory: 1715
