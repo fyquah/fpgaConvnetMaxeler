@@ -6,7 +6,7 @@ resources:
   dsp_block: 1963
   block_memory: 2567
 data:
-- commit_hash: 5b7869d1171c144555fa488a06609c40a47a635f
+- commit_hash: cb9630b16c43a8bcc290179164367f8f1f922ecb
   name: resource_bench_9_MAIA_DFE
   time: '2017-02-22 22:35:37.778566'
   usage:
@@ -16,7 +16,7 @@ data:
     multiplier: 1470
     dsp_block: 750
     block_memory: 2429
-- commit_hash: 5b7869d1171c144555fa488a06609c40a47a635f
+- commit_hash: cb9630b16c43a8bcc290179164367f8f1f922ecb
   name: resource_bench_5_MAIA_DFE
   time: '2017-02-22 03:42:49.837358'
   usage:
@@ -26,7 +26,7 @@ data:
     multiplier: 2352
     dsp_block: 1200
     block_memory: 2498
-- commit_hash: 5b7869d1171c144555fa488a06609c40a47a635f
+- commit_hash: cb9630b16c43a8bcc290179164367f8f1f922ecb
   name: resource_bench_6_MAIA_DFE
   time: '2017-02-22 09:06:41.811664'
   usage:
@@ -36,7 +36,7 @@ data:
     multiplier: 1470
     dsp_block: 750
     block_memory: 1945
-- commit_hash: 5b7869d1171c144555fa488a06609c40a47a635f
+- commit_hash: cb9630b16c43a8bcc290179164367f8f1f922ecb
   name: resource_bench_8_MAIA_DFE
   time: '2017-02-22 17:12:43.584696'
   usage:
@@ -46,7 +46,7 @@ data:
     multiplier: 980
     dsp_block: 500
     block_memory: 1715
-- commit_hash: 5b7869d1171c144555fa488a06609c40a47a635f
+- commit_hash: cb9630b16c43a8bcc290179164367f8f1f922ecb
   name: resource_bench_7_MAIA_DFE
   time: '2017-02-24 09:33:57.934477'
   usage:
@@ -56,7 +56,7 @@ data:
     multiplier: 1960
     dsp_block: 1000
     block_memory: 2438
-- commit_hash: 5b7869d1171c144555fa488a06609c40a47a635f
+- commit_hash: cb9630b16c43a8bcc290179164367f8f1f922ecb
   name: resource_bench_9_MAIA_DFE
   time: '2017-02-24 10:13:34.577504'
   usage:
@@ -66,7 +66,7 @@ data:
     multiplier: 1470
     dsp_block: 750
     block_memory: 2429
-- commit_hash: 5b7869d1171c144555fa488a06609c40a47a635f
+- commit_hash: cb9630b16c43a8bcc290179164367f8f1f922ecb
   name: resource_bench_1_MAIA_DFE
   time: '2017-02-23 12:30:06.638677'
   usage:
@@ -76,7 +76,7 @@ data:
     multiplier: 1728
     dsp_block: 960
     block_memory: 2234
-- commit_hash: 5b7869d1171c144555fa488a06609c40a47a635f
+- commit_hash: cb9630b16c43a8bcc290179164367f8f1f922ecb
   name: resource_bench_5_MAIA_DFE
   time: '2017-02-24 09:46:15.142677'
   usage:
@@ -86,7 +86,7 @@ data:
     multiplier: 2352
     dsp_block: 1200
     block_memory: 2498
-- commit_hash: 5b7869d1171c144555fa488a06609c40a47a635f
+- commit_hash: cb9630b16c43a8bcc290179164367f8f1f922ecb
   name: resource_bench_6_MAIA_DFE
   time: '2017-02-24 09:55:53.550801'
   usage:
@@ -96,7 +96,7 @@ data:
     multiplier: 1470
     dsp_block: 750
     block_memory: 1945
-- commit_hash: 5b7869d1171c144555fa488a06609c40a47a635f
+- commit_hash: cb9630b16c43a8bcc290179164367f8f1f922ecb
   name: resource_bench_3_MAIA_DFE
   time: '2017-02-23 21:34:13.061533'
   usage:
@@ -106,7 +106,7 @@ data:
     multiplier: 1080
     dsp_block: 600
     block_memory: 1859
-- commit_hash: 5b7869d1171c144555fa488a06609c40a47a635f
+- commit_hash: cb9630b16c43a8bcc290179164367f8f1f922ecb
   name: resource_bench_8_MAIA_DFE
   time: '2017-02-24 10:03:47.423677'
   usage:
@@ -116,7 +116,7 @@ data:
     multiplier: 980
     dsp_block: 500
     block_memory: 1715
-- commit_hash: 5b7869d1171c144555fa488a06609c40a47a635f
+- commit_hash: cb9630b16c43a8bcc290179164367f8f1f922ecb
   name: resource_bench_0_MAIA_DFE
   time: '2017-02-23 07:11:11.460691'
   usage:
@@ -126,7 +126,7 @@ data:
     multiplier: 2160
     dsp_block: 1200
     block_memory: 2275
-- commit_hash: 5b7869d1171c144555fa488a06609c40a47a635f
+- commit_hash: cb9630b16c43a8bcc290179164367f8f1f922ecb
   name: resource_bench_4_MAIA_DFE
   time: '2017-02-24 03:55:48.411695'
   usage:
@@ -136,7 +136,7 @@ data:
     multiplier: 2160
     dsp_block: 1200
     block_memory: 2519
-- commit_hash: 5b7869d1171c144555fa488a06609c40a47a635f
+- commit_hash: cb9630b16c43a8bcc290179164367f8f1f922ecb
   name: resource_bench_2_MAIA_DFE
   time: '2017-02-24 15:10:48.723493'
   usage:
