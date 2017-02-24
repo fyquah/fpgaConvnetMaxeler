@@ -90,6 +90,26 @@ static uint64_t calc_total_iterations(const protos::LayerParameter &layer)
 }
 
 
+uint64_t calc_total_kernel_weights(const protos::LayerParameter & layer)
+{
+    if (!layer.has_conv()) {
+        return 0;
+    }
+    auto & conv = layer.conv();
+    return layer.num_inputs() * layer.num_outputs()
+            * conv.kernel_size() * conv.kernel_size();
+}
+
+
+uint64_t calc_total_rom_size(const protos::LayerParameter & layer)
+{
+    return layer.conv().worker_factor()
+            * layer.conv().conv_folding_factor()
+            * layer.conv().kernel_folding_factor()
+            * calc_total_iterations(layer);
+}
+
+
 protos::Network load_network_proto(const std::string & filename)
 {
     protos::Network network;
@@ -224,15 +244,17 @@ void allign_and_place_kernel_weights(
     const uint64_t kernel_dim = layer.conv().kernel_size();
     const uint64_t worker_factor = layer.conv().worker_factor();
     const uint64_t total_iter = calc_total_iterations(layer);
+    const uint64_t rom_per_worker =
+            calc_total_rom_size(layer) / layer.conv().worker_factor();
 
     for (int i = 0 ; i < worker_factor ; i++) {
-        double *dest = dest_base + (i * total_iter);
+        double *dest = dest_base + (i * rom_per_worker);
         double *src = src_base + (i * kernel_dim * kernel_dim);
 
         for (int w = 0; w < calc_scheduler_iterations(layer); w++) {
             const int worker_iter = w;  // the w-th channel that the worker's handling.
 
-            if (worker_iter * worker_factor >= layer.num_inputs()) {
+            if (i + worker_iter * worker_factor >= layer.num_inputs()) {
                 continue;
             }
 
@@ -289,25 +311,6 @@ void allign_and_place_kernel_weights(
     }
 
     delete[] tmp;
-}
-
-uint64_t calc_total_kernel_weights(const protos::LayerParameter & layer)
-{
-    if (!layer.has_conv()) {
-        return 0;
-    }
-    auto & conv = layer.conv();
-    return layer.num_inputs() * layer.num_outputs()
-            * conv.kernel_size() * conv.kernel_size();
-}
-
-uint64_t calc_total_rom_size(const protos::LayerParameter & layer)
-{
-    return layer.conv().kernel_size()
-            * layer.conv().kernel_size()
-            * layer.conv().worker_factor()
-            * layer.conv().conv_folding_factor()
-            * calc_total_iterations(layer);
 }
 
 
