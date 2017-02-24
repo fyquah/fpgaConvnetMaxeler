@@ -46,3 +46,93 @@ data:
     multiplier: 980
     dsp_block: 500
     block_memory: 1715
+- commit_hash: 5b7869d1171c144555fa488a06609c40a47a635f
+  name: resource_bench_7_MAIA_DFE
+  time: '2017-02-24 09:33:57.934477'
+  usage:
+    logic_utilization: 100192
+    primary_ff: 176559
+    seconday_ff: 8833
+    multiplier: 1960
+    dsp_block: 1000
+    block_memory: 2438
+- commit_hash: 5b7869d1171c144555fa488a06609c40a47a635f
+  name: resource_bench_9_MAIA_DFE
+  time: '2017-02-24 10:13:34.577504'
+  usage:
+    logic_utilization: 98022
+    primary_ff: 196577
+    seconday_ff: 11094
+    multiplier: 1470
+    dsp_block: 750
+    block_memory: 2429
+- commit_hash: 5b7869d1171c144555fa488a06609c40a47a635f
+  name: resource_bench_1_MAIA_DFE
+  time: '2017-02-23 12:30:06.638677'
+  usage:
+    logic_utilization: 100684
+    primary_ff: 176755
+    seconday_ff: 12052
+    multiplier: 1728
+    dsp_block: 960
+    block_memory: 2234
+- commit_hash: 5b7869d1171c144555fa488a06609c40a47a635f
+  name: resource_bench_5_MAIA_DFE
+  time: '2017-02-24 09:46:15.142677'
+  usage:
+    logic_utilization: 108211
+    primary_ff: 189754
+    seconday_ff: 12089
+    multiplier: 2352
+    dsp_block: 1200
+    block_memory: 2498
+- commit_hash: 5b7869d1171c144555fa488a06609c40a47a635f
+  name: resource_bench_6_MAIA_DFE
+  time: '2017-02-24 09:55:53.550801'
+  usage:
+    logic_utilization: 97468
+    primary_ff: 189130
+    seconday_ff: 8053
+    multiplier: 1470
+    dsp_block: 750
+    block_memory: 1945
+- commit_hash: 5b7869d1171c144555fa488a06609c40a47a635f
+  name: resource_bench_3_MAIA_DFE
+  time: '2017-02-23 21:34:13.061533'
+  usage:
+    logic_utilization: 92583
+    primary_ff: 169184
+    seconday_ff: 9170
+    multiplier: 1080
+    dsp_block: 600
+    block_memory: 1859
+- commit_hash: 5b7869d1171c144555fa488a06609c40a47a635f
+  name: resource_bench_8_MAIA_DFE
+  time: '2017-02-24 10:03:47.423677'
+  usage:
+    logic_utilization: 87821
+    primary_ff: 167434
+    seconday_ff: 9511
+    multiplier: 980
+    dsp_block: 500
+    block_memory: 1715
+- commit_hash: 5b7869d1171c144555fa488a06609c40a47a635f
+  name: resource_bench_0_MAIA_DFE
+  time: '2017-02-23 07:11:11.460691'
+  usage:
+    logic_utilization: 110981
+    primary_ff: 203829
+    seconday_ff: 7669
+    multiplier: 2160
+    dsp_block: 1200
+    block_memory: 2275
+- commit_hash: 5b7869d1171c144555fa488a06609c40a47a635f
+  name: resource_bench_4_MAIA_DFE
+  time: '2017-02-24 03:55:48.411695'
+  usage:
+    logic_utilization: 109815
+    primary_ff: 199508
+    seconday_ff: 9560
+    multiplier: 2160
+    dsp_block: 1200
+    block_memory: 2519
