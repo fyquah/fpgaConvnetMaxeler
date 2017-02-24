@@ -146,7 +146,12 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
         final DFEVar[] pixelChoices = new DFEVar[getKernelIterations()];
         for (int i = 0; i < getKernelIterations() ; i++) {
             int idx = multiplierNumber + i * layerParams.getConv().getKernelFoldingFactor();
-            pixelChoices[i] = inputWindow[idx];
+
+            if (idx < inputWindow.getSize()) {
+                pixelChoices[i] = inputWindow[idx];
+            } else {
+                pixelChoices[i] = constant.var(GlobalConfig.dataType, 0);
+            }
         }
         return control.mux(kernelIter, pixelChoices);
     }

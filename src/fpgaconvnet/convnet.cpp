@@ -226,25 +226,31 @@ void allign_and_place_kernel_weights(
     const uint64_t total_iter = calc_total_iterations(layer);
 
     for (int i = 0 ; i < worker_factor ; i++) {
-        int total = ((layer.num_inputs() / worker_factor)
+        int total = calc_scheduler_iterations(layer)
                 * kernel_dim * kernel_dim
-                * layer.num_outputs());
+                * layer.num_outputs();
         double *dest = dest_base + (i * total);
         double *src = src_base + (i * kernel_dim * kernel_dim);
 
-        for (int w = 0; w < layer.num_inputs() / worker_factor; w++) {
+        for (int w = 0; w < calc_scheduler_iterations(layer); w++) {
             const int worker_iter = w;  // the w-th channel that the worker's handling.
+
+            if (worker_iter * worker_factor >= layer.num_inputs()) {
+                continue;
+            }
 
             for (int channel = 0 ; channel < layer.num_outputs() ; channel++) {
                 const int src_offset =
                         (channel * layer.num_inputs() + worker_iter * worker_factor)
                         * kernel_dim * kernel_dim;
+                const int conv_iters = calc_convolution_iterations(layer);
+                const int scheduler_iters = calc_scheduler_iterations(layer);
                 const int dest_offset =
-                        ((worker_iter * (layer.num_outputs() / conv_ff))
-                         + (channel % conv_ff) * (layer.num_outputs() / conv_ff) * (layer.num_inputs() / worker_factor)
+                        ((worker_iter * conv_iters)
+                         + ((channel % conv_ff) * conv_iters * scheduler_iters)
                          + (channel / conv_ff))
-                        * kernel_dim * kernel_dim;
-                
+                        * layer.conv().kernel_folding_factor() * calc_kernel_iterations(layer);
+
                 /*
                  * Useful piece of code to visualize the kernels weights
                  *    -> worker position mapping.
@@ -277,9 +283,6 @@ void allign_and_place_kernel_weights(
 
             std::memcpy(tmp, ptr, kernel_ff * total_iter * sizeof(double));
 
-            Eigen::Map<Eigen::MatrixXd> matrix_const(tmp, total_iter, kernel_ff);
-            Eigen::Map<Eigen::MatrixXd> matrix(ptr, kernel_ff, total_iter);
-
             for (int i = 0 ; i < total_iter ; i++) {
                 for (int j = 0 ; j < kernel_ff ; j++) {
                     ptr[j * total_iter + i] = tmp[i * kernel_ff + j];
@@ -301,6 +304,15 @@ uint64_t calc_total_kernel_weights(const protos::LayerParameter & layer)
             * conv.kernel_size() * conv.kernel_size();
 }
 
+uint64_t calc_total_rom_size(const protos::LayerParameter & layer)
+{
+    return layer.conv().kernel_size()
+            * layer.conv().kernel_size()
+            * layer.conv().worker_factor()
+            * layer.conv().conv_folding_factor()
+            * calc_total_iterations(layer);
+}
+
 
 void max_set_single_rom(
         max_actions_t *action,
@@ -313,7 +325,7 @@ void max_set_single_rom(
     char buffer[100];
     uint64_t rom_size = calc_total_iterations(layer);
 
-    sprintf(buffer, "layer_%d_kernels_%d_%d_%d", layer.layer_id(), worker, conv, 100);
+    sprintf(buffer, "layer_%d_kernels_%d_%d_%d", layer.layer_id(), worker, conv, mult);
     for (int i = 0 ; i < rom_size ; i++) {
         uint64_t index;
 
@@ -366,8 +378,9 @@ Convnet::Convnet(
             conv_layer_params.push_back(*it);
             kernels.push_back(new double[calc_total_kernel_weights(*it)]);
             bias.push_back(new double[it->num_outputs()]);
-            worker_kernels.push_back(
-                    new double[calc_total_kernel_weights(*it)]);
+            worker_kernels.push_back(new double[calc_total_rom_size(*it)]);
+            memset(worker_kernels.back(), 0,
+                   sizeof(double) * calc_total_kernel_weights(*it));
         }
     }
 
