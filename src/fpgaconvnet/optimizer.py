@@ -1,9 +1,29 @@
+import argparse
 import sys
+
+from fpgaconvnet.protos import parameters_pb2
 
 import numpy as np
 from scipy import optimize
 from sklearn import linear_model
 
+
+parser = argparse.ArgumentParser(
+        description="Takes a CNN design (in fpgaconvnet.protos.Paramter.Network"
+                    " protos form) and produces the ideal factor allocations "
+                    " subject to resource constraints.")
+parser.add_argument("design", type=str, nargs="",
+                    help="Path to the protos with the design. *_folding_factor"
+                         " fields in the proto will be ignored.",
+                    required=True)
+parser.add_argument("--resource-bench", dest="resource_bench", type=str,
+                    help=("Path to yaml file with the results from running "
+                          " resource benches."),
+                    required=True)
+parser.add_argument("--output", dest="output", type=str,
+                    help="Path to the protos with the optimized output.",
+                    required=True)
+                     
 
 def make_constraint(func):
     """Returns a constraint dict where func(*args) <= 0."""
