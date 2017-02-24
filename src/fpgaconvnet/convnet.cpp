@@ -226,10 +226,7 @@ void allign_and_place_kernel_weights(
     const uint64_t total_iter = calc_total_iterations(layer);
 
     for (int i = 0 ; i < worker_factor ; i++) {
-        int total = calc_scheduler_iterations(layer)
-                * kernel_dim * kernel_dim
-                * layer.num_outputs();
-        double *dest = dest_base + (i * total);
+        double *dest = dest_base + (i * total_iter);
         double *src = src_base + (i * kernel_dim * kernel_dim);
 
         for (int w = 0; w < calc_scheduler_iterations(layer); w++) {
