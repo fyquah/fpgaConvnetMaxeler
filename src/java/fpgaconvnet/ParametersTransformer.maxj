@@ -100,13 +100,11 @@ public class ParametersTransformer {
             if (!layerParameter.hasNumOutputs() || layerParameter.getNumOutputs() == 0) {
                 raiseError(layer_id, "numOutputs must be a positive integer in conv layers!");
             }
-            if (kernelSize * kernelSize % convParams.getKernelFoldingFactor() != 0) {
-                raiseError(layer_id, "kernelFoldingFactor must be able divide the kernel size!");
-            }
             numOutputs = layerParameter.getNumOutputs();
             expectedHeight = inputHeight + 1 - convParams.getKernelSize();
             expectedWidth = inputWidth + 1 - convParams.getKernelSize();
             builder.setConv(convParams);
+
         } else if (paramsCase.equals(LayerParameter.ParamsCase.POOL)) {
             PoolingParameter poolParams = layerParameter.getPool();
             if (layerParameter.getInputHeight() % poolParams.getDim() != 0 ||
@@ -122,8 +120,10 @@ public class ParametersTransformer {
             expectedHeight = inputHeight / poolParams.getDim();
             expectedWidth = inputWidth / poolParams.getDim();
             builder.setPool(poolParams);
+
         } else {
             raiseError(layer_id, "Either pool of conv has to be set!");
+
         }
 
         builder.setInputHeight(inputHeight);

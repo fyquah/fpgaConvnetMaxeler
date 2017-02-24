@@ -16,8 +16,8 @@ $(LENET_DATA):
 #           Simulation
 # ==============================
 
-$(LENET_SIM_MAXFILE): $(ENGINEFILES) $(JAVA_PROTOS)
-	$(MAXJC) $(JFLAGS) $^
+$(LENET_SIM_MAXFILE): $(ENGINEFILES) $(JAVA_PROTOS) ../descriptors/lenet.prototxt
+	$(MAXJC) $(JFLAGS) $(filter %.java,$^) $(filter %.maxj,$^)
 	MAXAPPJCP='.:$(CP)' MAXSOURCEDIRS=$(SOURCE_DIRS) \
 		  $(MAXJAVARUN) fpgaconvnet.GenericNetworkBuilder \
 		  DFEModel=$(DFEModel) \
