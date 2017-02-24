@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 
+from __future__ import absolute_import
+
 import argparse
 import collections
 import datetime
@@ -8,6 +10,9 @@ import re
 import sys
 
 import yaml
+
+from google.protobuf import text_format
+from fpgaconvnet.protos import parameters_pb2
 
 
 parser = argparse.ArgumentParser(
@@ -140,6 +145,26 @@ def main(argv):
         new_result["commit_hash"] = FLAGS.commit_hash
 
         if new_result["usage"] and not is_duplicate(results["data"], new_result):
+            with open("../descriptors/resource_bench/%s.prototxt"
+                      % new_result["name"].replace("_MAIA_DFE", "")) as f:
+                network = text_format.Parse(
+                        f.read(), parameters_pb2.Network())
+                assert len(network.layer) == 1
+                layer = network.layer[0]
+                assert layer.HasField("conv")
+                
+            new_result["layer"] = {
+                    "input_height": layer.input_height,
+                    "input_width":  layer.input_width,
+                    "num_inputs":   layer.num_inputs,
+                    "num_outputs":  layer.num_outputs,
+                    "kernel_size":  layer.conv.kernel_size
+            }
+            new_result["params"] = {
+                    "conv_folding_factor":   layer.conv.conv_folding_factor,
+                    "worker_factor":         layer.conv.worker_factor,
+                    "kernel_folding_factor": layer.conv.kernel_folding_factor
+            }
             results["data"].append(new_result)
 
     with open(FLAGS.output, "w") as f:
