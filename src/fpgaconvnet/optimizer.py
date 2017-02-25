@@ -4,9 +4,9 @@ import argparse
 import bisect
 import sys
 
-import GPy
-from mpl_toolkits import mplot3d
-from matplotlib import pyplot as plt
+# import GPy
+# from mpl_toolkits import mplot3d
+# from matplotlib import pyplot as plt
 import numpy as np
 from scipy import optimize
 from sklearn import linear_model
@@ -186,7 +186,7 @@ def run_optimizer(network, models, constraints):
             minimizer_kwargs={
                     "method": "cobyla", "constraints": cobyla_constraints},
             x0=np.array(x0),
-            niter=10,
+            niter=200,
             disp=1)
     rounded_xs = [nearest_value(x, vs) for x, vs in zip(results.x, valid_values)]
     return [tuple(rounded_xs[i:i+3]) for i in range(0, len(rounded_xs), 3)]

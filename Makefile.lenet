@@ -15,8 +15,7 @@ $(LENET_DATA):
 
 
 $(LENET_OPTIMIZED_DESCRIPTOR): fpgaconvnet/optimizer.py $(LENET_DESCRIPTOR) $(PYTHON_PROTOS)
-	cp $< ./fpgaconvnet/optimizer_.py
-	python fpgaconvnet/optimizer_.py --resource-bench ../results/resource_bench.yaml --output $@ \
+	python $< --resource-bench ../results/resource_bench.yaml --output $@ \
 	    $(LENET_DESCRIPTOR)
 
 # ==============================
