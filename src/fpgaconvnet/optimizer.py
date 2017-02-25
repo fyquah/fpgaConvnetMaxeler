@@ -1,6 +1,7 @@
 from __future__ import absolute_import
 
 import argparse
+import bisect
 import sys
 
 import GPy
@@ -46,13 +47,20 @@ def make_negate_fn(fn):
     return new_fn
 
 
-def constrainted_rng(lo, hi, x, stepsize):
-    x = int(x + np.random.normal(stepsize / 2.3 * (hi - lo)))
-    if x < lo:
-        x = lo
-    if x > hi:
-        x = hi
-    return x
+def compute_valid_values(N):
+    ret = [1]
+    for i in range(2, N + 1):
+        if div_ceil(N, i) < div_ceil(N, ret[-1]):
+            ret.append(i)
+    return ret
+
+
+def random_displacement(x, stepsize, values):
+    pos = bisect.bisect_left(values, x)
+    flag = 1 if np.random.rand() > 0.5 else -1
+    new_pos = min(bisect.bisect_right(
+            values, x + flag * np.random.normal(stepsize)), len(values) - 1)
+    return values[new_pos]
 
 
 class TakeStep(object):
@@ -60,19 +68,17 @@ class TakeStep(object):
     def __init__(self, conv_layers):
         self._conv_layers = tuple(conv_layers)
         self.stepsize = 1
+        self._valid_values = []
 
-    def __call__(self, x):
-        ret = []
-        for i in range(0, len(x), 3):
-            kernel_size = (self._conv_layers[i / 3].conv.kernel_size
-                    * self._conv_layers[i / 3].conv.kernel_size)
-            ret.append(constrainted_rng(
-                    1, self._conv_layers[i / 3].num_inputs, x[i], self.stepsize))
-            ret.append(constrainted_rng(
-                    1, self._conv_layers[i / 3].num_outputs, x[i + 1], self.stepsize))
-            ret.append(constrainted_rng(
-                    1, kernel_size, x[i + 2], self.stepsize))
-        return np.array(ret)
+        for layer in self._conv_layers:
+            self._valid_values.append(compute_valid_values(layer.num_inputs))
+            self._valid_values.append(compute_valid_values(layer.num_outputs))
+            self._valid_values.append(compute_valid_values(
+                layer.conv.kernel_size * layer.conv.kernel_size))
+
+    def __call__(self, xs):
+        return [random_displacement(x, self.stepsize, values)
+                for x, values in zip(xs, self._valid_values)]
 
 
 def curry(func, *args):
@@ -82,10 +88,21 @@ def curry(func, *args):
     return fn
 
 
+def nearest_value(x, vs):
+    return vs[np.argmin(abs(np.array(vs) - x))]
+
+
+def make_presence_constraint(idx, values):
+    def fn(x):
+        return max(1 - np.log(2 + abs(x[idx] - v))
+                   for v in values)
+
+    return {"type": "ineq", "fun": fn}
+
+
 def run_optimizer(network, models, constraints):
 
     def scale_x(x_new):
-        """Scales x from integer factors to floating point factors."""
         return [(x_new[i], x_new[i+1], x_new[i+2])
                 for i in range(0, len(x_new), 3)]
 
@@ -106,14 +123,21 @@ def run_optimizer(network, models, constraints):
                        + base_bram_usage
         return constraints["block_memory"] - block_memory
 
+
     base_bram_usage = 0
     conv_layers = []
     x0 = []
     cobyla_constraints = []
+    valid_values = []
     i = 0
     for layer in network.layer:
         if layer.HasField("conv"):
             conv_layers.append(layer)
+            valid_values.append(compute_valid_values(layer.num_inputs))
+            valid_values.append(compute_valid_values(layer.num_outputs))
+            valid_values.append(compute_valid_values(
+                layer.conv.kernel_size * layer.conv.kernel_size))
+
             base_bram_usage += float(
                 layer.num_inputs * layer.num_outputs
                 * layer.conv.kernel_size * layer.conv.kernel_size)
@@ -126,18 +150,24 @@ def run_optimizer(network, models, constraints):
                 {"type": "ineq",                        # wf <= num_inputs
                  "fun": curry(lambda j, layer, x: layer.num_inputs - x[j],
                               i, layer)},
+                make_presence_constraint(i,
+                                         compute_valid_values(layer.num_inputs)),
                 {"type": "ineq",                        # cff >= 1
                  "fun": curry(lambda j, x: x[j] - 1,
                               i + 1)},
                 {"type": "ineq",                        # cff <= num_outputs
                  "fun": curry(lambda j, layer, x: layer.num_outputs - x[j],
                               i + 1, layer)},
+                make_presence_constraint(i + 1,
+                                         compute_valid_values(layer.num_outputs)),
                 {"type": "ineq",                        # kf >= 1
                  "fun": curry(lambda j, x: x[j] - 1,
                               i + 2)},
                 {"type": "ineq",                        # kf <= kernel_size^2
                  "fun": curry(lambda j, total_kernel_size, x: total_kernel_size - x[j],
-                              i + 2, total_kernel_size)}
+                              i + 2, total_kernel_size)},
+                make_presence_constraint(i + 2,
+                                         compute_valid_values(total_kernel_size)),
             ])
             x0.extend([div_ceil(layer.num_inputs, 2),
                        div_ceil(layer.num_outputs, 2),
@@ -147,20 +177,24 @@ def run_optimizer(network, models, constraints):
     base_bram_usage = base_bram_usage * BASE_M20K_FACTOR
 
     cobyla_constraints.extend([
-        {"type": "ineq", "fun": logic_utilization_constraint},
         # {"type": "ineq", "fun": bram_constraint},
+        {"type": "ineq", "fun": logic_utilization_constraint},
         {"type": "ineq", "fun": multiplier_constraint}])
     gops_fn = make_gops_fn(network)
-    print optimize.basinhopping(
+    results = optimize.basinhopping(
             make_negate_fn(gops_fn),
             minimizer_kwargs={
-                    "method": "COBYLA", "constraints": cobyla_constraints},
+                    "method": "cobyla", "constraints": cobyla_constraints},
             x0=np.array(x0),
-            niter=200,
+            niter=10,
             disp=1)
+    rounded_xs = [nearest_value(x, vs) for x, vs in zip(results.x, valid_values)]
+    return [tuple(rounded_xs[i:i+3]) for i in range(0, len(rounded_xs), 3)]
 
 
 def div_ceil(a, b):
+    a = int(a)
+    b = int(b)
     if a % b == 0:
         return a / b
     else:
@@ -214,13 +248,21 @@ def make_gops_fn(network):
     Function assumes a saturated system.
     """
 
+    valid_values = []
+    for layer in network.layer:
+        if layer.HasField("conv"):
+            valid_values.append(compute_valid_values(layer.num_inputs))
+            valid_values.append(compute_valid_values(layer.num_outputs))
+            valid_values.append(compute_valid_values(
+                    layer.conv.kernel_size * layer.conv.kernel_size))
+    valid_values = tuple(valid_values)
+
     def fn(factors):
         """
         Arguments:
             args: List of (wf, cff, kff) in integer form.
         """
         factors = factors[:]
-        total_ops = 0
         clock_rate = network.frequency * 1e6
         acc_pipeline_length = 1
 
@@ -248,8 +290,12 @@ def make_gops_fn(network):
         for layer in network.layer:
             if layer.HasField("conv"):
                 (wf, cff, kff) = factors[factors_ptr:factors_ptr+3]
+                if any(x <= 0 for x in (wf, cff, kff)):
+                    break
+                wf = nearest_value(wf, valid_values[factors_ptr])
+                cff = nearest_value(cff, valid_values[factors_ptr + 1])
+                kff = nearest_value(kff, valid_values[factors_ptr + 2])
                 factors_ptr += 3
-                ops = wf * cff * kff * 2
 
                 # ConvolutionScheduler produces a set of new output at
                 # every non-border cycles.
@@ -257,7 +303,7 @@ def make_gops_fn(network):
                         * (layer.input_height * layer.input_width)
                         / (layer.input_height - layer.conv.kernel_size + 1)
                         / (layer.input_width - layer.conv.kernel_size + 1)
-                        / div_ceil(float(layer.num_inputs), wf))
+                        / div_ceil(layer.num_inputs, wf))
 
                 # ConvolutionUnit produces a new output as fast as it receives
                 conv_unit_cycles = (scheduler_cycles
@@ -361,7 +407,7 @@ def main():
 
     with open(FLAGS.design, "r") as f:
         network = text_format.Parse(f.read(), parameters_pb2.Network())
-    optimized_network = run_optimizer(
+    optimized_params = run_optimizer(
             network=network,
             models={
                 "conv": {
@@ -373,6 +419,18 @@ def main():
             },
             constraints=resource_bench["resources"])
 
+    # Write the results to a new protobuf and flush it to FLAGS.output
+    optimized_network = parameters_pb2.Network()
+    optimized_network.CopyFrom(network)
+    for layer in optimized_network.layer:
+        if layer.HasField("conv"):
+            (wf, cff, kff) = optimized_params.pop(0)
+            layer.conv.worker_factor = wf
+            layer.conv.conv_folding_factor = cff
+            layer.conv.kernel_folding_factor = kff
+
+    with open(FLAGS.output, "w") as f:
+        f.write(text_format.MessageToString(optimized_network))
 
     # GP Model - not very useful unless we have a lot of data.
     # ker = GPy.kern.Poly(input_dim=X.shape[1])
