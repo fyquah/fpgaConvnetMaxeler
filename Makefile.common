@@ -118,6 +118,7 @@ all: runsim build
 $(ALL_GENERATED_PROTOS): $(PROTOS)
 	mkdir -p java/
 	$(PROTOC) $< -I ../protos --java_out=./java --python_out=./ --cpp_out=./
+	touch fpgaconvnet/__init__.py fpgaconvnet/protos/__init__.py
 
 protos: $(ALL_GENERATED_PROTOS)
 
