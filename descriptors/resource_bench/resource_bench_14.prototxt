@@ -1,4 +1,6 @@
 layer {
+    input_height: 28
+    input_width: 28
     num_inputs: 16
     num_outputs: 16
 
