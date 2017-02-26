@@ -9,6 +9,8 @@ import com.maxeler.maxcompiler.v2.managers.custom.CustomManager;
 import com.maxeler.maxcompiler.v2.managers.custom.DFELink;
 import com.maxeler.maxcompiler.v2.managers.custom.blocks.KernelBlock;
 import com.maxeler.maxcompiler.v2.managers.custom.stdlib.MemoryControlGroup;
+import com.maxeler.maxcompiler.v2.managers.custom.stdlib.LMemCommandGroup;
+import com.maxeler.maxcompiler.v2.managers.custom.stdlib.LMemInterface;
 import com.maxeler.maxcompiler.v2.managers.engine_interfaces.CPUTypes;
 import com.maxeler.maxcompiler.v2.managers.engine_interfaces.EngineInterface;
 import com.maxeler.maxcompiler.v2.managers.engine_interfaces.EngineInterface.Direction;
@@ -174,17 +176,18 @@ public class NetworkManager extends CustomManager {
     private void linkKernels() {
 
         /* Data tranfer */
+        LMemInterface iface = addLMemInterface();
         DFELink fromCpu = addStreamFromCPU("fromcpu");
         DFELink toCpu = addStreamToCPU("tocpu");
-        DFELink cpu2lmem = addStreamToOnCardMemory("cpu2lmem", MemoryControlGroup.MemoryAccessPattern.LINEAR_1D);
-        DFELink lmem2cpu = addStreamFromOnCardMemory("lmem2cpu", MemoryControlGroup.MemoryAccessPattern.LINEAR_1D);
+        DFELink cpu2lmem = iface.addStreamToLMem("cpu2lmem", LMemCommandGroup.MemoryAccessPattern.LINEAR_1D);
+        DFELink lmem2cpu = iface.addStreamFromLMem("lmem2cpu", LMemCommandGroup.MemoryAccessPattern.LINEAR_1D);
 
         cpu2lmem <== fromCpu;
         toCpu <== lmem2cpu;
 
         /* Kernel logic transfer */
-        DFELink lmemInputLink = addStreamFromOnCardMemory("images", MemoryControlGroup.MemoryAccessPattern.LINEAR_1D);
-        DFELink lmemOutputLink = addStreamToOnCardMemory("features", MemoryControlGroup.MemoryAccessPattern.LINEAR_1D);
+        DFELink lmemInputLink = iface.addStreamFromLMem("images", LMemCommandGroup.MemoryAccessPattern.LINEAR_1D);
+        DFELink lmemOutputLink = iface.addStreamToLMem("features", LMemCommandGroup.MemoryAccessPattern.LINEAR_1D);
         int poolingUnitId = 0;
         int convLayerId = 0;
 
@@ -227,9 +230,9 @@ public class NetworkManager extends CustomManager {
         linkKernels();
 
         /* Interfaces */
-        createSLiCinterface(buildInitInterface());
-        createSLiCinterface(buildLoadDataInterface());
+        // createSLiCinterface(buildInitInterface());
+        // createSLiCinterface(buildLoadDataInterface());
         createSLiCinterface(interfaceDefault());
-        createSLiCinterface(buildGetResultsInterface());
+        // createSLiCinterface(buildGetResultsInterface());
     }
 }
