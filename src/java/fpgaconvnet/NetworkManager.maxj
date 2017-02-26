@@ -1,22 +1,13 @@
 package fpgaconvnet;
 
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
-import java.io.IOException;
-import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Properties;
-import java.util.Scanner;
-import java.lang.RuntimeException;
 
 import com.maxeler.maxcompiler.v2.build.EngineParameters;
-import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
 import com.maxeler.maxcompiler.v2.kernelcompiler.KernelParameters;
 import com.maxeler.maxcompiler.v2.managers.custom.CustomManager;
 import com.maxeler.maxcompiler.v2.managers.custom.DFELink;
 import com.maxeler.maxcompiler.v2.managers.custom.blocks.KernelBlock;
-import com.maxeler.maxcompiler.v2.managers.custom.stdlib.LMemInterface;
 import com.maxeler.maxcompiler.v2.managers.custom.stdlib.MemoryControlGroup;
 import com.maxeler.maxcompiler.v2.managers.engine_interfaces.CPUTypes;
 import com.maxeler.maxcompiler.v2.managers.engine_interfaces.EngineInterface;
@@ -25,12 +16,10 @@ import com.maxeler.maxcompiler.v2.managers.engine_interfaces.InterfaceParam;
 import com.maxeler.maxcompiler.v2.managers.engine_interfaces.InterfaceParamArray;
 
 import fpgaconvnet.protos.Parameters;
-import fpgaconvnet.protos.Parameters.LayerParameter;
 
 
 public class NetworkManager extends CustomManager {
 
-    private Properties prop;
     private List<ConvolutionLayer> convolutionLayers;
     private List<PoolingLayerKernel> poolingKernels;
     private List<KernelBlock> poolingKernelBlocks;
@@ -45,17 +34,6 @@ public class NetworkManager extends CustomManager {
 
     private static boolean isPoolLayer(Parameters.LayerParameter layer) {
         return layer.getParamsCase().equals(Parameters.LayerParameter.ParamsCase.POOL);
-    }
-
-    private Dimension inputDimension() {
-        Parameters.LayerParameter layer = networkParameters.getLayer(0);
-        return new Dimension(layer.getInputHeight(), layer.getInputWidth(), layer.getNumInputs());
-    }
-
-    private Dimension outputDimension() {
-        Parameters.LayerParameter layer = networkParameters.getLayer(
-                networkParameters.getLayerCount() - 1);
-        return new Dimension(layer.getOutputHeight(), layer.getOutputWidth(), layer.getNumOutputs());
     }
 
     private EngineInterface interfaceDefault () {
@@ -98,15 +76,15 @@ public class NetworkManager extends CustomManager {
         ei.ignoreMem(String.format("ConvolutionAccumulator_%d", layerId), "bias", Direction.IN);
     }
 
-    private EngineInterface ignoreMem(EngineInterface ei) {
-        for (int i = 0 ; i < networkParameters.getLayerCount() ; i++) {
-            Parameters.LayerParameter layer = networkParameters.getLayer(i);
-            if (isConvLayer(layer)) {
-                ignoreConvFMem(ei, layer, i);
-            }
-        }
-        return ei;
-    }
+    // private EngineInterface ignoreMem(EngineInterface ei) {
+    //     for (int i = 0 ; i < networkParameters.getLayerCount() ; i++) {
+    //         Parameters.LayerParameter layer = networkParameters.getLayer(i);
+    //         if (isConvLayer(layer)) {
+    //             ignoreConvFMem(ei, layer, i);
+    //         }
+    //     }
+    //     return ei;
+    // }
 
     private EngineInterface buildLoadDataInterface() {
         EngineInterface ei = new EngineInterface("load_data");
@@ -149,11 +127,6 @@ public class NetworkManager extends CustomManager {
     }
 
     private void initConvLayer(EngineInterface ei, Parameters.LayerParameter layer) {
-
-        final int workerFactor = layer.getConv().getWorkerFactor();
-        final int totalWeights =
-                layer.getNumOutputs() * layer.getNumInputs()
-                * layer.getConv().getKernelSize() * layer.getConv().getKernelSize();
 
         for (int worker = 0 ; worker < layer.getConv().getWorkerFactor(); worker++) {
             for (int convUnit = 0; convUnit < layer.getConv().getConvFoldingFactor(); convUnit++) {

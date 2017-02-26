@@ -11,7 +11,6 @@ import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVector;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVectorType;
 import com.maxeler.maxcompiler.v2.kernelcompiler.KernelParameters;
-import com.maxeler.maxcompiler.v2.managers.engine_interfaces.InterfaceParam;
 
 import fpgaconvnet.protos.Parameters.LayerParameter;
 
@@ -56,7 +55,7 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
 
         if (layerParams.getIsLastLayer()) {
             /* Last layer - cast from fixed point to dfe float. */
-            DFEVectorType rawOutputVectorType = new DFEVectorType<DFEVar>(
+            DFEVectorType<DFEVar> rawOutputVectorType = new DFEVectorType<DFEVar>(
                     GlobalConfig.cpuType, layerParams.getNumOutputs());
             io.output(getOutputName(), output.cast(rawOutputVectorType),
                     rawOutputVectorType, outputControlFlag);

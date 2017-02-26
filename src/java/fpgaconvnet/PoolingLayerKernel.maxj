@@ -9,7 +9,6 @@ import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVector;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVectorType;
 
-import fpgaconvnet.protos.Parameters;
 import fpgaconvnet.protos.Parameters.LayerParameter;
 import fpgaconvnet.protos.Parameters.PoolingParameter;
 
@@ -65,7 +64,7 @@ public class PoolingLayerKernel extends Kernel {
 
         if (layer.getIsLastLayer()) {
             /* Last layer - cast from fixed point to dfe float. */
-            DFEVectorType rawOutputVectorType = new DFEVectorType<DFEVar>(
+            DFEVectorType<DFEVar> rawOutputVectorType = new DFEVectorType<DFEVar>(
                     GlobalConfig.cpuType, outputDimension.channels());
             io.output("y", output.cast(rawOutputVectorType), rawOutputVectorType, outputFlag);
         } else {

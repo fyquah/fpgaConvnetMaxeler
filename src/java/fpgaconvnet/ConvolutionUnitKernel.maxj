@@ -5,13 +5,9 @@ import java.util.List;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVector;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVectorType;
-import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Stream.OffsetExpr;
 import com.maxeler.maxcompiler.v2.kernelcompiler.KernelParameters;
-import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Count;
-import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Count.Counter;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.CounterChain;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.memory.Memory;
-import com.maxeler.maxcompiler.v2.managers.engine_interfaces.InterfaceParam;
 
 import fpgaconvnet.protos.Parameters.LayerParameter;
 
@@ -36,7 +32,6 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
 
         final int convFoldingFactor = layerParams.getConv().getConvFoldingFactor();
         final int kernelFoldingFactor = layerParams.getConv().getKernelFoldingFactor();
-        final int addressIncrement = layerParams.getConv().getKernelFoldingFactor();
         final int totalAddressCount =
                 getSchedulerIterations()
                 * getConvolutionIterations()
@@ -52,7 +47,6 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
 
             DFEVector<DFEVar> inputWindow = inputVectorType.newInstance(this);
             DFEVector<DFEVar> output = outputVectorType.newInstance(this);
-            final List<DFEVar> multiplicationOutputs = new ArrayList<DFEVar>();
             final DFEVar[] pixelVars = new DFEVar[layerParams.getConv().getKernelFoldingFactor()];
             final DFEVar[][] weightVars = new DFEVar[convFoldingFactor][kernelFoldingFactor];
 

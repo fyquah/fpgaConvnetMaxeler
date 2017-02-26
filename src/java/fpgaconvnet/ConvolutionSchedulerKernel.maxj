@@ -1,9 +1,9 @@
 package fpgaconvnet;
+
 import java.util.ArrayList;
 import java.util.List;
 
 import com.maxeler.maxcompiler.v2.kernelcompiler.KernelParameters;
-import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEType;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVector;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVectorType;
@@ -11,7 +11,6 @@ import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.CounterChain;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Stream.OffsetExpr;
 
 import fpgaconvnet.protos.Parameters.LayerParameter;
-import fpgaconvnet.protos.Parameters.ConvolutionParameter;
 
 /* 
  * io.input:
@@ -72,7 +71,7 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
 
         if (layerParams.getIsFirstLayer()) {
             /* First layer - cast from dfefloat to fixed point. */
-            DFEVectorType rawInputVectorType = new DFEVectorType<DFEVar>(
+            DFEVectorType<DFEVar> rawInputVectorType = new DFEVectorType<DFEVar>(
                     GlobalConfig.cpuType, inputDimension.channels());
             DFEVector<DFEVar> rawInput = io.input(
                     getInputName(), rawInputVectorType, iter.eq(0));
@@ -92,7 +91,6 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
         }
 
         /* For debugging only. */
-        DFEVar cycle = control.count.simpleCounter(32);
         String s_kernel = "[\n";
         for (int i = 0 ; i < kernelDim ; i++) {
             s_kernel += "[";
@@ -114,7 +112,7 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
             debug.simPrintf("ConvolutionScheduler[layer = " + layerParams.getLayerId() + "] "
                             + "outputFlag = %d row = %d col = %d worker = " + i + "\n"
                             + "pixel_window = " + s_kernel,
-                            debugValues);
+                            (Object[]) debugValues);
         }
     }
 
