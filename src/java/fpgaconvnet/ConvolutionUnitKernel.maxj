@@ -79,40 +79,40 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
             io.output(getOutputName(workerId), output, outputVectorType);
 
             // debugging
-            String s_window = "[\n";
-            String s_weights = "[\n";
-            String s_output = "[\n";
-            List<Object> debugValues = new ArrayList<Object>();
-            debugValues.add(inputControlFlag);
-            debugValues.add(iter);
-            debugValues.add(kernelIter);
-            for (int i = 0 ; i < layerParams.getConv().getKernelFoldingFactor() ; i++) {
-                s_window += "%.3f, "; 
-                debugValues.add(pixelVars[i]);
-            }
-            s_window += "]\n";
-            for (int convUnitId = 0 ; convUnitId < convFoldingFactor ; convUnitId++) {
-                s_weights += "[";
-                for (int multId = 0; multId < kernelFoldingFactor ; multId++) {
-                    s_weights += "%.3f, "; 
-                    debugValues.add(weightVars[convUnitId][multId]);
-                }
+            // String s_window = "[\n";
+            // String s_weights = "[\n";
+            // String s_output = "[\n";
+            // List<Object> debugValues = new ArrayList<Object>();
+            // debugValues.add(inputControlFlag);
+            // debugValues.add(iter);
+            // debugValues.add(kernelIter);
+            // for (int i = 0 ; i < layerParams.getConv().getKernelFoldingFactor() ; i++) {
+            //     s_window += "%.3f, "; 
+            //     debugValues.add(pixelVars[i]);
+            // }
+            // s_window += "]\n";
+            // for (int convUnitId = 0 ; convUnitId < convFoldingFactor ; convUnitId++) {
+            //     s_weights += "[";
+            //     for (int multId = 0; multId < kernelFoldingFactor ; multId++) {
+            //         s_weights += "%.3f, "; 
+            //         debugValues.add(weightVars[convUnitId][multId]);
+            //     }
 
-                s_weights += "]\n";
-            }
-            s_weights += "]\n";
-            for (int convUnitId = 0 ; convUnitId < convFoldingFactor;  convUnitId++) {
-                debugValues.add(output[convUnitId]);
-                s_output += "%.3f, ";
-            }
-            s_output += "]\n";
-            debug.simPrintf("ConvolutionUnitKernel[layer = " + params.getLayerId()
-                            + "] worker = " + workerId
-                            + " inputControlFlag = %d iter = %d kernelIter = %d\n"
-                            + "input window = " + s_window 
-                            + "weights = " + s_weights
-                            + "outputs = " + s_output,
-                            debugValues.toArray(new Object[1]));
+            //     s_weights += "]\n";
+            // }
+            // s_weights += "]\n";
+            // for (int convUnitId = 0 ; convUnitId < convFoldingFactor;  convUnitId++) {
+            //     debugValues.add(output[convUnitId]);
+            //     s_output += "%.3f, ";
+            // }
+            // s_output += "]\n";
+            // debug.simPrintf("ConvolutionUnitKernel[layer = " + params.getLayerId()
+            //                 + "] worker = " + workerId
+            //                 + " inputControlFlag = %d iter = %d kernelIter = %d\n"
+            //                 + "input window = " + s_window 
+            //                 + "weights = " + s_weights
+            //                 + "outputs = " + s_output,
+            //                 debugValues.toArray(new Object[1]));
         }
     }
 

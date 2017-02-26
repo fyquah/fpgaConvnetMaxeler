@@ -72,16 +72,16 @@ public class PoolingLayerKernel extends Kernel {
         }
 
         // debugging messages
-        String debug_s = "[";
-        List<Object> debugValues = new ArrayList<Object>();
-        for (int i = 0 ; i < inputDimension.channels() ; i++) {
-             debug_s += "%.3f, ";
-             debugValues.add(output[i]);
-        }
-        debug_s += "]";
-        debug.simPrintf(
-                outputFlag,
-                "PoolingLayerKernel[" + layer.getLayerId() + "] output = " + debug_s + "\n",
-                debugValues.toArray(new Object[1]));
+        // String debug_s = "[";
+        // List<Object> debugValues = new ArrayList<Object>();
+        // for (int i = 0 ; i < inputDimension.channels() ; i++) {
+        //      debug_s += "%.3f, ";
+        //      debugValues.add(output[i]);
+        // }
+        // debug_s += "]";
+        // debug.simPrintf(
+        //         outputFlag,
+        //         "PoolingLayerKernel[" + layer.getLayerId() + "] output = " + debug_s + "\n",
+        //         debugValues.toArray(new Object[1]));
     }
 }
