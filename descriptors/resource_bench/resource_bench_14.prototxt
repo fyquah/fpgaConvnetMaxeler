@@ -1,15 +1,13 @@
 layer {
-    input_height: 28
-    input_width: 28
-    num_inputs: 30
-    num_outputs: 32
+    num_inputs: 16
+    num_outputs: 16
 
     conv: {
         activation: Relu
-        kernel_size: 5
+        kernel_size: 7
 
-        worker_factor: 30
-        conv_folding_factor: 1
+        worker_factor: 8
+        conv_folding_factor: 4
         kernel_folding_factor: 25
     }
 }
