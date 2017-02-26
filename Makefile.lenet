@@ -81,11 +81,10 @@ fpgaconvnet/lenet_main_dfe.o: fpgaconvnet/lenet_main.cpp $(LENET_DFE_MAXFILE)
 
 
 lenet_dfe: fpgaconvnet/mnist.o fpgaconvnet/feedforward.o fpgaconvnet/convnet.o \
-	    fpgaconvnet/lenet_dfe.o fpgaconvnet/lenet_main_dfe.o
+	    fpgaconvnet/lenet_dfe.o fpgaconvnet/lenet_main_dfe.o \
+	    fpgaconvnet/protos/parameters.pb.o
 	$(CPUCOMPILER) $(ALL_FLAGS) -o $@ $^ $(LFLAGS)
 
 
-run_lenet_dfe: lenet_dfe $(LENET_DATA)
-	reserve_fpga
-	SLIC_CONF="$(SLIC_CONF)" LD_PRELOAD=$(MAXOS_HW) ./$<
-	release_fpga
+run_lenet_dfe: lenet_dfe $(LENET_DATA) $(LENET_DESCRIPTOR)
+	SLIC_CONF="$(SLIC_CONF)" LD_PRELOAD=$(MAXOS_HW) ./$< $(LENET_DESCRIPTOR)
