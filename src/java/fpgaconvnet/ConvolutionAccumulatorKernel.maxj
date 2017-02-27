@@ -47,11 +47,10 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
         biasRom.mapToCPU(String.format("bias", params.getLayerId()));
 
         DFEVector<DFEVar> output = outputVectorType.newInstance(this);
-        DFEVar inputControlFlag = dfeUInt(1).newInstance(this);
         DFEVar outputControlFlag = dfeUInt(1).newInstance(this);
         List<DFEVector<DFEVar>> inputVectors = new ArrayList<DFEVector<DFEVar>>();
         for (int i = 0 ; i < layerParams.getConv().getWorkerFactor() ; i++) {
-            inputVectors.add(io.input(getInputName(i), inputVectorType, inputControlFlag));
+            inputVectors.add(io.input(getInputName(i), inputVectorType));
         }
 
         if (layerParams.getIsLastLayer()) {
@@ -64,36 +63,40 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
             io.output(getOutputName(), output, outputVectorType, outputControlFlag);
         }
 
-        OffsetExpr loopOffsetExpr = stream.makeOffsetAutoLoop(getOffsetExprName());
-        DFEVar pipelineLengthVar = loopOffsetExpr.getDFEVar(this,dfeUInt(32));
         CounterChain chain = control.count.makeCounterChain();
         DFEVar schedulerIter = Utils.chainCounterOrZero(this, chain, getSchedulerIterations());
         DFEVar convIter = Utils.chainCounterOrZero(this, chain, getConvolutionIterations());
         DFEVar kernelIter = Utils.chainCounterOrZero(this, chain, getKernelIterations());
-        DFEVar pipelineStage = chain.addCounter(pipelineLengthVar, 1);
+        DFEVar streamCounter = control.count.simpleCounter(
+                32,
+                getKernelIterations() * getConvolutionIterations() * getSchedulerIterations());
 
-        inputControlFlag <== pipelineStage.eq(0);
         outputControlFlag <==
                 schedulerIter.eq(getSchedulerIterations() - 1)
                 & convIter.eq(getConvolutionIterations() - 1)
-                & kernelIter.eq(getKernelIterations() - 1)
-                & pipelineStage.eq(pipelineLengthVar - 1);
+                & kernelIter.eq(getKernelIterations() - 1);
+
 
         for (int channel = 0 ; channel < layerParams.getNumOutputs() ; channel++) {
             final int convFoldingFactor = layerParams.getConv().getConvFoldingFactor();
             DFEVar acc = GlobalConfig.dataType.newInstance(this);
             DFEType addressType = dfeUInt(Utils.ceilLog2(layerParams.getNumOutputs()));
-            DFEVar initFlag = (schedulerIter.eq(0)
-                    & convIter.eq(channel / layerParams.getConv().getConvFoldingFactor())
-                    & kernelIter.eq(0));
-            DFEVar prevAcc = (
-                    initFlag ? biasRom.read(constant.var(addressType, channel))
-                    : stream.offset(acc, -loopOffsetExpr));
+            DFEVar initFlag = streamCounter.eq(
+                    (channel / layerParams.getConv().getConvFoldingFactor()));
             DFEVar sumVars = Utils.treeReduceAdd(map(inputVectors, channel % convFoldingFactor));
             DFEVar channelOutputFlag = (
                     convIter.eq(channel / layerParams.getConv().getConvFoldingFactor()));
+            DFEVar muxedSumVars = channelOutputFlag ? sumVars : 0.0;
+            DFEVar bias = biasRom.read(constant.var(addressType, channel));
+            DFEVar carriedSum = stream.offset(acc, -1);
 
-            acc <== (channelOutputFlag ? (prevAcc + sumVars) : prevAcc);
+            // push and pop pipelining factor required to make sure this accumulator runs at
+            // 0-tick latency (i.e: stream.offset(-1) works)
+            optimization.pushPipeliningFactor(0);
+            DFEVar prevAcc = initFlag ? bias : carriedSum;
+            optimization.popPipeliningFactor();
+
+            acc <== muxedSumVars + prevAcc;
             output[channel] <== relu(acc);
         }
 
@@ -102,10 +105,7 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
         String s_conv = "[\n";
         List<Object> debugValues = new ArrayList<Object>();
         debugValues.add((Integer) layerParams.getLayerId());
-        debugValues.add(inputControlFlag);
         debugValues.add(outputControlFlag);
-        debugValues.add(pipelineStage);
-        debugValues.add(pipelineLengthVar);
         debugValues.add(schedulerIter);
         debugValues.add(convIter);
         debugValues.add(kernelIter);
@@ -125,8 +125,7 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
         s_output += "]";
         debug.simPrintf(
                 "ConvolutionAccumulatorKernel[layer = %d]"
-                + " inputControlFlag = %d outputControlFlag = %d"
-                + " pipelineStage = %d pipelineLengthVar = %d"
+                + " outputControlFlag = %d"
                 + " schedulerIter = %d convIter = %d kernelIter = %d"
                 + "\ninputs = " + s_conv + "\n"
                 + "\noutput = " + s_output + "\n",
