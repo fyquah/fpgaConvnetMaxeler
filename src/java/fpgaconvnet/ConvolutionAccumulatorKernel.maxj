@@ -11,7 +11,6 @@ import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVector;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVectorType;
 import com.maxeler.maxcompiler.v2.kernelcompiler.KernelParameters;
-import com.maxeler.maxcompiler.v2.managers.engine_interfaces.InterfaceParam;
 
 import fpgaconvnet.protos.Parameters.LayerParameter;
 
@@ -55,10 +54,15 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
 
         if (layerParams.getIsLastLayer()) {
             /* Last layer - cast from fixed point to dfe float. */
-            DFEVectorType rawOutputVectorType = new DFEVectorType<DFEVar>(
+            DFEVectorType<DFEVar> rawOutputVectorType = new DFEVectorType<DFEVar>(
                     GlobalConfig.cpuType, layerParams.getNumOutputs());
-            io.output(getOutputName(), output.cast(rawOutputVectorType),
-                    rawOutputVectorType, outputControlFlag);
+            DFEVector<DFEVar> rawOutput = rawOutputVectorType.newInstance(this);
+
+            for (int i = 0 ; i < layerParams.getNumOutputs() ; i++) {
+                rawOutput[i] <== output[i].cast(GlobalConfig.cpuType);
+            }
+            io.output(getOutputName(), rawOutput, rawOutputVectorType, outputControlFlag);
+
         } else {
             io.output(getOutputName(), output, outputVectorType, outputControlFlag);
         }
@@ -104,37 +108,39 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
         }
 
         // debugging output
-        String s_output = "[";
-        String s_conv = "[\n";
-        List<Object> debugValues = new ArrayList<Object>();
-        debugValues.add((Integer) layerParams.getLayerId());
-        debugValues.add(pipelineLengthVar);
-        debugValues.add(outputControlFlag);
-        debugValues.add(schedulerIter);
-        debugValues.add(convIter);
-        debugValues.add(kernelIter);
-        for (DFEVector<DFEVar> vector: inputVectors) {
-            s_conv += "[";
-            for (int i = 0 ; i < params.getConv().getConvFoldingFactor() ; i++) {
-                debugValues.add(vector[i]);
-                s_conv += "%.3f, ";
-            }
-            s_conv += "]\n";
-        }
-        for (int i = 0 ; i < params.getNumOutputs() ; i++) {
-            debugValues.add(output[i]);
-            s_output += "%.3f, ";
-        }
-        s_conv += "]";
-        s_output += "]";
-        debug.simPrintf(
-                "ConvolutionAccumulatorKernel[layer = %d]"
-                + " pipelineLength = %d"
-                + " outputControlFlag = %d"
-                + " schedulerIter = %d convIter = %d kernelIter = %d"
-                + "\ninputs = " + s_conv + "\n"
-                + "\noutput = " + s_output + "\n",
-                debugValues.toArray(new Object [1]));
+        // String s_output = "[";
+        // String s_conv = "[\n";
+        // List<Object> debugValues = new ArrayList<Object>();
+        // debugValues.add((Integer) layerParams.getLayerId());
+        // debugValues.add(inputControlFlag);
+        // debugValues.add(outputControlFlag);
+        // debugValues.add(pipelineStage);
+        // debugValues.add(pipelineLengthVar);
+        // debugValues.add(schedulerIter);
+        // debugValues.add(convIter);
+        // debugValues.add(kernelIter);
+        // for (DFEVector<DFEVar> vector: inputVectors) {
+        //     s_conv += "[";
+        //     for (int i = 0 ; i < params.getConv().getConvFoldingFactor() ; i++) {
+        //         debugValues.add(vector[i]);
+        //         s_conv += "%.3f, ";
+        //     }
+        //     s_conv += "]\n";
+        // }
+        // for (int i = 0 ; i < params.getNumOutputs() ; i++) {
+        //     debugValues.add(output[i]);
+        //     s_output += "%.3f, ";
+        // }
+        // s_conv += "]";
+        // s_output += "]";
+        // debug.simPrintf(
+        //         "ConvolutionAccumulatorKernel[layer = %d]"
+        //         + " inputControlFlag = %d outputControlFlag = %d"
+        //         + " pipelineStage = %d pipelineLengthVar = %d"
+        //         + " schedulerIter = %d convIter = %d kernelIter = %d"
+        //         + "\ninputs = " + s_conv + "\n"
+        //         + "\noutput = " + s_output + "\n",
+        //         debugValues.toArray(new Object [1]));
 
         // // Pipelined adder - may or may not be better, but this probably will not
         //                      be the bottle neck of the performance, so there is not much point

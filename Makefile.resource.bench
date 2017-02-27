@@ -7,13 +7,16 @@ RESOURCE_BENCH_NAMES= resource_bench_0 \
   		      resource_bench_6 \
   		      resource_bench_7 \
   		      resource_bench_8 \
-  		      resource_bench_9
+  		      resource_bench_9 \
+  		      resource_bench_10 \
+  		      resource_bench_11 \
+  		      resource_bench_12 \
+  		      resource_bench_13
 # For testing purpose, just put the resource bench that we want to run here.
-RESOURCE_BENCH_NAMES= resource_bench_5 \
-		      resource_bench_6 \
-		      resource_bench_7 \
-		      resource_bench_8 \
-		      resource_bench_9
+RESOURCE_BENCH_NAMES= resource_bench_10 \
+  		      resource_bench_11 \
+  		      resource_bench_12 \
+  		      resource_bench_13
 
 RESOURCE_BENCH_SIMMAXDIRS := $(foreach name,$(RESOURCE_BENCH_NAMES),$(MAXCOMPILER_BUILD_DIR)/$(name)_$(DFEModel)_DFE_SIM/results)
 RESOURCE_BENCH_SIM_MAXFILES := $(foreach name,$(RESOURCE_BENCH_NAMES),$(MAXCOMPILER_BUILD_DIR)/$(name)_$(DFEModel)_DFE_SIM/results/$(name).max)

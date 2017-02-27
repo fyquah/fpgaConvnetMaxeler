@@ -1,14 +1,13 @@
 package fpgaconvnet;
 
-import java.util.ArrayList;
 import java.util.List;
+import java.util.ArrayList;
 
 import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
 import com.maxeler.maxcompiler.v2.kernelcompiler.KernelParameters;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
 
 import fpgaconvnet.protos.Parameters;
-import fpgaconvnet.protos.Parameters.LayerParameter;
 
 
 public abstract class ConvolutionKernelBase extends Kernel {

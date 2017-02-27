@@ -24,8 +24,8 @@ layer {
     input_width: 12
     num_inputs: 20
     num_outputs: 50
-    output_height: 4
-    output_width: 4
+    output_height: 8
+    output_width: 8
 
     conv: {
         worker_factor: 5

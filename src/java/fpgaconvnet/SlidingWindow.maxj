@@ -21,7 +21,7 @@ public class SlidingWindow  {
         int inputHeight,
         int inputWidth,
         int kernelDim,
-        OffsetExpr cyclesToHoldWindow
+        int cyclesToHoldWindow
     ) {
          DFEVectorType<DFEVar> vectorType = new DFEVectorType<DFEVar>(
                  input.getType(),
@@ -31,7 +31,7 @@ public class SlidingWindow  {
         for (int i = 0 ; i < kernelDim ; i++) {
             for (int j = 0 ; j < kernelDim ; j++) {
                 int idx = ((i - kernelDim / 2) * inputWidth + (j - kernelDim / 2));
-                OffsetExpr offset = cyclesToHoldWindow * idx;
+                int offset = cyclesToHoldWindow * idx;
                 output[i * kernelDim + j] <== argKernel.stream.offset(input, offset);
             }
         }

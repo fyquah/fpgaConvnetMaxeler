@@ -6,3 +6,4 @@
 !build/javatest/.gitkeep
 build/
 __pycache__
+venv/
