@@ -457,17 +457,23 @@ void Convnet::max_load_input_data(const std::vector<float> & images, uint64_t N)
     max_actions_free(load_action);
 }
 
-void Convnet::max_run_inference(uint64_t N) {
+std::vector<float> Convnet::max_run_inference(uint64_t N, const std::vector<float> & images) {
     const uint64_t address_images = 0;
     const uint64_t address_features = N * input_size * sizeof(float);
     max_actions_t *run_action = max_actions_init(max_file, "default");
     timeval t_begin, t_end;
+    std::vector<float> ret((N) * output_size , 0);
 
     log_stdout(INFO) << "Running Feature Extraction ... " << std::endl;
     max_set_param_uint64t(run_action, "N", N);
-    max_set_param_uint64t(run_action, "address_images", address_images);
-    max_set_param_uint64t(run_action, "address_features", address_features);
-    // max_disable_validation(run_action);
+    max_queue_input(run_action,
+                    "fromcpu",
+                    (void*) &images[0],
+                    images.size() * sizeof(float));
+    max_queue_output(run_action,
+                     "tocpu",
+                     (void*) &ret[0],
+                     N * output_size * sizeof(float));
     __sync_synchronize();
     gettimeofday(&t_begin, NULL);
     max_run(dfe, run_action);
@@ -475,6 +481,8 @@ void Convnet::max_run_inference(uint64_t N) {
     __sync_synchronize();
     max_actions_free(run_action);
     report_conv_performance(network_params, N, t_begin, t_end);
+
+    return ret;
 }
 
 std::vector<float> Convnet::max_retrieve_features(uint64_t N) {

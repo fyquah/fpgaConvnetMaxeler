@@ -6,7 +6,7 @@ layer {
 
     conv: {
         worker_factor: 1
-        conv_folding_factor: 7
+        conv_folding_factor: 10
         kernel_folding_factor: 13
 
         kernel_size: 5
@@ -28,9 +28,9 @@ layer {
     output_width: 8
 
     conv: {
-        worker_factor: 5
-        conv_folding_factor: 17
-        kernel_folding_factor: 5
+        worker_factor: 7
+        conv_folding_factor: 25
+        kernel_folding_factor: 7
 
         kernel_size: 5
         activation: Relu

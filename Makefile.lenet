@@ -77,7 +77,7 @@ fpgaconvnet/lenet_dfe.o: $(LENET_DFE_MAXFILE)
 fpgaconvnet/lenet_main_dfe.o: fpgaconvnet/lenet_main.cpp $(LENET_DFE_MAXFILE)
 	$(CPUCOMPILER) $< $(ALL_FLAGS) \
 		-I$(MAXCOMPILER_BUILD_DIR) -I$(LENET_DFEMAXDIR) \
-		-D__SIM__ -DDESIGN_NAME=$(LENET_NAME) -c -o $@
+		-DDESIGN_NAME=$(LENET_NAME) -c -o $@
 
 
 lenet_dfe: fpgaconvnet/mnist.o fpgaconvnet/feedforward.o fpgaconvnet/convnet.o \
