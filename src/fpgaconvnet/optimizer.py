@@ -100,7 +100,7 @@ def make_presence_constraint(idx, values):
     return {"type": "ineq", "fun": fn}
 
 
-def run_optimizer(network, models, constraints):
+def run_optimizer(network, models, constraints, iter):
 
     def scale_x(x_new):
         return [(x_new[i], x_new[i+1], x_new[i+2])
@@ -186,10 +186,28 @@ def run_optimizer(network, models, constraints):
             minimizer_kwargs={
                     "method": "cobyla", "constraints": cobyla_constraints},
             x0=np.array(x0),
-            niter=200,
-            disp=1)
+            niter=1000)
     rounded_xs = [nearest_value(x, vs) for x, vs in zip(results.x, valid_values)]
-    return [tuple(rounded_xs[i:i+3]) for i in range(0, len(rounded_xs), 3)]
+
+    total_logic_used = constraints["logic_utilization"] \
+            - logic_utilization_constraint(rounded_xs)
+    total_multipliers = constraints["multiplier"] \
+            - multiplier_constraint(rounded_xs)
+
+
+    parameters = [
+        tuple(rounded_xs[i:i+3]) for i in range(0, len(rounded_xs), 3)]
+    print "Iter", iter
+    print "Estimated total logic utilization: %d (%.3f)" % \
+            (total_logic_used,
+             float(total_logic_used) / constraints["logic_utilization"])
+    print "Estimated total multipliers: %d (%.3f)" % \
+            (total_multipliers,
+             float(total_multipliers) / constraints["multiplier"])
+    print "Optimal params:", parameters
+    print "Estimated GOps:", gops_fn(rounded_xs), "\n"
+
+    return parameters
 
 
 def div_ceil(a, b):
@@ -264,7 +282,7 @@ def make_gops_fn(network):
         """
         factors = factors[:]
         clock_rate = network.frequency * 1e6
-        acc_pipeline_length = 1
+        acc_pipeline_length = 2
 
         # At our clock rate, it is safe to assume that LMem can produce
         # pixel a cycle. The maximum bandwidth of LMem is around 38.4GBps (
@@ -275,8 +293,10 @@ def make_gops_fn(network):
         #   - maximum of (8.53 * 1e9 / num_inputs) inputs per second in the
         #     first layer.
         #   - This is the bottle neck imposed by LMem transfers.
+        # In the case of reading / writing from the PC, that would be 0.5 Gbps
+        # and similar maths follows.
         prev_cycles = float(clock_rate
-                            / (8.5333 * 1e9 * network.layer[0].num_inputs))
+                            / (0.5 * (8. / 18.) * 1e9 * network.layer[0].num_inputs))
         minimum_cycles = prev_cycles
 
         # *_cycles denotes the number of cycles (possibly float) a particular
@@ -402,22 +422,25 @@ def main():
 
     logic_utilization_model = make_model_from_lm(logic_utilization_model)
     base_logic_model = lambda x: base_logic
-    redisual_logic_model = lambda x: logic_utilization_model(x) - base_logic
+    residual_logic_model = lambda x: logic_utilization_model(x) - base_logic
     residual_block_memory_model = make_model_from_lm(residual_block_memory_model)
 
     with open(FLAGS.design, "r") as f:
         network = text_format.Parse(f.read(), parameters_pb2.Network())
-    optimized_params = run_optimizer(
-            network=network,
-            models={
-                "conv": {
-                    "base_logic": base_logic_model,
-                    "residual_logic": logic_utilization_model,
-                    "residual_block_memory": residual_block_memory_model,
-                    "multiplier": lambda a: a[0] * a[1] * a[2] * 2
-                }
-            },
-            constraints=resource_bench["resources"])
+
+    for i in range(10):
+        optimized_params = run_optimizer(
+                network=network,
+                models={
+                    "conv": {
+                        "base_logic": base_logic_model,
+                        "residual_logic": residual_logic_model,
+                        "residual_block_memory": residual_block_memory_model,
+                        "multiplier": lambda a: a[0] * a[1] * a[2] * 2
+                    }
+                },
+                constraints=resource_bench["resources"],
+                iter=i)
 
     # Write the results to a new protobuf and flush it to FLAGS.output
     optimized_network = parameters_pb2.Network()
