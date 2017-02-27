@@ -94,29 +94,29 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
         }
 
         /* For debugging only. */
-        // String s_kernel = "[\n";
-        // for (int i = 0 ; i < kernelDim ; i++) {
-        //     s_kernel += "[";
-        //     for (int j = 0; j < kernelDim ; j++) {
-        //         s_kernel += "%.3f, "; 
-        //     }
-        //     s_kernel += "],\n";
-        // }
-        // s_kernel += "]\n";
-        // for (int i = 0 ; i < workerFactor ; i++) {
-        //     DFEVar[] debugValues = new DFEVar[3 + kernelDim * kernelDim];
-        //     debugValues[0] = outputControlFlag;
-        //     debugValues[1] = row;
-        //     debugValues[2] = col;
+        String s_kernel = "[\n";
+        for (int i = 0 ; i < kernelDim ; i++) {
+            s_kernel += "[";
+            for (int j = 0; j < kernelDim ; j++) {
+                s_kernel += "%.3f, "; 
+            }
+            s_kernel += "],\n";
+        }
+        s_kernel += "]\n";
+        for (int i = 0 ; i < workerFactor ; i++) {
+            DFEVar[] debugValues = new DFEVar[3 + kernelDim * kernelDim];
+            debugValues[0] = outputControlFlag;
+            debugValues[1] = row;
+            debugValues[2] = col;
 
-        //     for (int j = 0 ; j < kernelDim * kernelDim ; j++) {
-        //         debugValues[3 + j] = output_y[i][j];
-        //     }
-        //     debug.simPrintf("ConvolutionScheduler[layer = " + layerParams.getLayerId() + "] "
-        //                     + "outputFlag = %d row = %d col = %d worker = " + i + "\n"
-        //                     + "pixel_window = " + s_kernel,
-        //                     debugValues);
-        // }
+            for (int j = 0 ; j < kernelDim * kernelDim ; j++) {
+                debugValues[3 + j] = output_y[i][j];
+            }
+            debug.simPrintf("ConvolutionScheduler[layer = " + layerParams.getLayerId() + "] "
+                            + "outputFlag = %d row = %d col = %d worker = " + i + "\n"
+                            + "pixel_window = " + s_kernel,
+                            debugValues);
+        }
     }
 
     public int cyclesPerImage() {

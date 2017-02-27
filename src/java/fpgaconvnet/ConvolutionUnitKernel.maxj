@@ -6,6 +6,8 @@ import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVector;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVectorType;
 import com.maxeler.maxcompiler.v2.kernelcompiler.KernelParameters;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Count;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Count.Counter;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.CounterChain;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.memory.Memory;
 
@@ -37,11 +39,34 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
                 * getConvolutionIterations()
                 * getKernelIterations();
 
+        // Counters for initialization
+        CounterChain initChain = control.count.makeCounterChain();
+        DFEVar initConvIter = Utils.chainCounterOrZero(
+                this, initChain, layerParams.getConv().getConvFoldingFactor());
+        DFEVar initAddress = Utils.chainCounterOrZero(this, initChain, totalAddressCount);
+        Counter initializationCompleteCtr = control.count.makeCounter(
+                control.count.makeParams(1)
+                .withInc(0)
+                .withMax(1)
+                .withWrapMode(Count.WrapMode.STOP_AT_MAX)
+                .withEnable(initConvIter.eq(layerParams.getConv().getConvFoldingFactor() - 1)
+                            & initAddress.eq(totalAddressCount - 1)));
+        DFEVar initializationComplete = initializationCompleteCtr.getCount();
+
+        DFEVar initWeightsFlag = io.scalarInput("init", dfeUInt(1));
+        DFEVar isInitializingWeights = initWeightsFlag & ~initializationComplete;
+        initConvIter.simWatch("initConvIter");
+        initAddress.simWatch("initAddress");
+
+        // Runtime counters
         CounterChain chain = control.count.makeCounterChain();
         DFEVar iter = Utils.chainCounterOrZero(this, chain, getConvolutionIterations());
         DFEVar kernelIter = Utils.chainCounterOrZero(this, chain, getKernelIterations());
         DFEVar address = control.count.simpleCounter(
                 Utils.ceilLog2(totalAddressCount), totalAddressCount);
+
+        debug.simPrintf("layer_%d init weights = %d\n",
+                    params.getLayerId(), isInitializingWeights);
 
         for (int workerId = 0 ; workerId < params.getConv().getWorkerFactor() ; workerId++) {
 
@@ -59,12 +84,12 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
 
                 for (int multId = 0; multId < kernelFoldingFactor; multId++) {
                     Memory<DFEVar> filtersRom = mem.alloc(GlobalConfig.dataType, totalAddressCount);
-                    String romName = String.format(
-                            "kernels_%d_%d_%d", workerId, convUnitIndex, multId);
-                    filtersRom.mapToCPU(romName);
 
-                    /* TODO(fyquah): Handle non divisible cases here by passing in a zero output
-                     * - uses less DSP Slices. */
+                    filtersRom.write(
+                            initAddress,
+                            pixelVars[multId],
+                            isInitializingWeights & initConvIter.eq(convUnitIndex));
+
                     weightVars[convUnitIndex][multId] = filtersRom.read(address);
                     convUnitOutput = convUnitOutput
                             + pixelVars[multId] * weightVars[convUnitIndex][multId];
@@ -74,46 +99,65 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
                 output[convUnitIndex] <== convUnitOutput;
             }
 
-            DFEVar inputControlFlag = iter.eq(0) & kernelIter.eq(0);
-            inputWindow <== io.input(getInputName(workerId), inputVectorType, inputControlFlag);
-            io.output(getOutputName(workerId), output, outputVectorType);
+            DFEVar inputControlFlag = ~isInitializingWeights & iter.eq(0) & kernelIter.eq(0);
+            DFEVar outputControlFlag = ~isInitializingWeights;
+            DFEVector<DFEVar> realInputs = io.input(getInputName(workerId),
+                                                    inputVectorType,
+                                                    inputControlFlag);
+            DFEVector<DFEVar> weightsInputs = io.input(getWeightsInputName(workerId),
+                                                       inputVectorType,
+                                                       isInitializingWeights);
+
+            inputWindow <== control.mux(isInitializingWeights, realInputs, weightsInputs);
+            io.output(getOutputName(workerId), output, outputVectorType, outputControlFlag);
 
             // debugging
-            // String s_window = "[\n";
-            // String s_weights = "[\n";
-            // String s_output = "[\n";
-            // List<Object> debugValues = new ArrayList<Object>();
-            // debugValues.add(inputControlFlag);
-            // debugValues.add(iter);
-            // debugValues.add(kernelIter);
-            // for (int i = 0 ; i < layerParams.getConv().getKernelFoldingFactor() ; i++) {
-            //     s_window += "%.3f, "; 
-            //     debugValues.add(pixelVars[i]);
-            // }
-            // s_window += "]\n";
-            // for (int convUnitId = 0 ; convUnitId < convFoldingFactor ; convUnitId++) {
-            //     s_weights += "[";
-            //     for (int multId = 0; multId < kernelFoldingFactor ; multId++) {
-            //         s_weights += "%.3f, "; 
-            //         debugValues.add(weightVars[convUnitId][multId]);
-            //     }
+            String s_window = "[\n";
+            String s_weights = "[\n";
+            String s_output = "[\n";
+            List<Object> debugValues = new ArrayList<Object>();
+            debugValues.add(inputControlFlag);
+            debugValues.add(iter);
+            debugValues.add(kernelIter);
+            for (int i = 0 ; i < layerParams.getConv().getKernelFoldingFactor() ; i++) {
+                s_window += "%.3f, "; 
+                debugValues.add(pixelVars[i]);
+            }
+            s_window += "]\n";
+            for (int convUnitId = 0 ; convUnitId < convFoldingFactor ; convUnitId++) {
+                s_weights += "[";
+                for (int multId = 0; multId < kernelFoldingFactor ; multId++) {
+                    s_weights += "%.3f, "; 
+                    debugValues.add(weightVars[convUnitId][multId]);
+                }
 
-            //     s_weights += "]\n";
-            // }
-            // s_weights += "]\n";
-            // for (int convUnitId = 0 ; convUnitId < convFoldingFactor;  convUnitId++) {
-            //     debugValues.add(output[convUnitId]);
-            //     s_output += "%.3f, ";
-            // }
-            // s_output += "]\n";
-            // debug.simPrintf("ConvolutionUnitKernel[layer = " + params.getLayerId()
-            //                 + "] worker = " + workerId
-            //                 + " inputControlFlag = %d iter = %d kernelIter = %d\n"
-            //                 + "input window = " + s_window 
-            //                 + "weights = " + s_weights
-            //                 + "outputs = " + s_output,
-            //                 debugValues.toArray(new Object[1]));
+                s_weights += "]\n";
+            }
+            s_weights += "]\n";
+            for (int convUnitId = 0 ; convUnitId < convFoldingFactor;  convUnitId++) {
+                debugValues.add(output[convUnitId]);
+                s_output += "%.3f, ";
+            }
+            s_output += "]\n";
+            debug.simPrintf("ConvolutionUnitKernel[layer = " + params.getLayerId()
+                            + "] worker = " + workerId
+                            + " inputControlFlag = %d iter = %d kernelIter = %d\n"
+                            + "input window = " + s_window 
+                            + "weights = " + s_weights
+                            + "outputs = " + s_output,
+                            debugValues.toArray(new Object[1]));
         }
+    }
+
+    public int initCycles() {
+        return layerParams.getConv().getConvFoldingFactor()
+            * getSchedulerIterations() * getConvolutionIterations() * getKernelIterations();
+    }
+
+    public int initStreamSize() {
+        return layerParams.getConv().getConvFoldingFactor()
+            * getSchedulerIterations() * getConvolutionIterations()
+            * layerParams.getConv().getKernelSize() * layerParams.getConv().getKernelSize();
     }
 
     public int cyclesPerImage() {
@@ -126,6 +170,10 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
 
     public String getInputName(int workerId) {
         return "input_" + workerId;
+    }
+
+    public String getWeightsInputName(int workerId) {
+        return "weights_input_" + workerId;
     }
 
     public String getOutputName(int workerId) {

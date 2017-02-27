@@ -8,6 +8,7 @@ import com.maxeler.maxcompiler.v2.kernelcompiler.KernelParameters;
 import com.maxeler.maxcompiler.v2.managers.custom.CustomManager;
 import com.maxeler.maxcompiler.v2.managers.custom.DFELink;
 import com.maxeler.maxcompiler.v2.managers.custom.blocks.KernelBlock;
+import com.maxeler.maxcompiler.v2.managers.custom.stdlib.DebugLevel;
 import com.maxeler.maxcompiler.v2.managers.custom.stdlib.MemoryControlGroup;
 import com.maxeler.maxcompiler.v2.managers.custom.stdlib.LMemCommandGroup;
 import com.maxeler.maxcompiler.v2.managers.custom.stdlib.LMemInterface;
@@ -42,11 +43,10 @@ public class NetworkManager extends CustomManager {
         EngineInterface ei = new EngineInterface();
 
         InterfaceParam N = ei.addParam("N", CPUTypes.UINT64);
-        // InterfaceParam addr_images = ei.addParam("address_images", CPUTypes.UINT64);
-        // InterfaceParam addr_features = ei.addParam("address_features", CPUTypes.UINT64);
+        InterfaceParam init = ei.addParam("init", CPUTypes.UINT8);
 
         for (int i = 0 ; i < convolutionLayers.size() ; i++) {
-            convolutionLayers[i].setKernelTimings(ei, N);
+            convolutionLayers[i].setKernelTimings(ei, N, init);
         }
         for (int i = 0; i < poolingKernels.size() ; i++) {
             ei.setTicks(poolingKernels[i].getName(), N * poolingKernels[i].cyclesPerImage());
@@ -60,79 +60,50 @@ public class NetworkManager extends CustomManager {
 
         ei.setStream("fromcpu", CPUTypes.FLOAT, N * inputSize * CPUTypes.FLOAT.sizeInBytes());
         ei.setStream("tocpu", CPUTypes.FLOAT, N * outputSize * CPUTypes.FLOAT.sizeInBytes());
-        ei.ignoreAll(Direction.IN_OUT);
-        return ei;
-    }
 
-    private void ignoreConvFMem(EngineInterface ei, Parameters.LayerParameter layer, int layerId) {
-        final String kernelName = String.format("ConvolutionUnit_%d", layerId);
-
-        for (int worker = 0 ; worker < layer.getConv().getWorkerFactor(); worker++) {
-            for (int convUnit = 0; convUnit < layer.getConv().getConvFoldingFactor(); convUnit++) {
-                for (int multId = 0; multId < layer.getConv().getKernelFoldingFactor(); multId++) {
-                    String memName = String.format("kernels_%d_%d_%d", worker, convUnit, multId);
-                    ei.ignoreMem(kernelName, memName, Direction.IN);
-                }
-            }
-        }
-        ei.ignoreMem(String.format("ConvolutionAccumulator_%d", layerId), "bias", Direction.IN);
-    }
-
-    // private EngineInterface ignoreMem(EngineInterface ei) {
-    //     for (int i = 0 ; i < networkParameters.getLayerCount() ; i++) {
-    //         Parameters.LayerParameter layer = networkParameters.getLayer(i);
-    //         if (isConvLayer(layer)) {
-    //             ignoreConvFMem(ei, layer, i);
-    //         }
-    //     }
-    //     return ei;
-    // }
-
-    private void initSingleConvRom(
-            EngineInterface ei,
-            Parameters.LayerParameter layer,
-            int worker, int convUnit, int multId) {
-
-        String blockName = String.format("ConvolutionUnit_%d", layer.getLayerId());
-        String memoryName = String.format("kernels_%d_%d_%d", worker, convUnit, multId);
-        String paramName = String.format("layer_%d_%s", layer.getLayerId(), memoryName);
-        InterfaceParamArray paramArray = ei.addParamArray(paramName, CPUTypes.DOUBLE);
-        final int arraySize = new IterationCounter(layer).getTotalIterations();
-
-        ei.setMem(blockName, memoryName, 0, arraySize, paramArray);
-    }
-
-    private void initConvLayer(EngineInterface ei, Parameters.LayerParameter layer) {
-
-        for (int worker = 0 ; worker < layer.getConv().getWorkerFactor(); worker++) {
-            for (int convUnit = 0; convUnit < layer.getConv().getConvFoldingFactor(); convUnit++) {
-                for (int multId = 0; multId < layer.getConv().getKernelFoldingFactor(); multId++) {
-                    initSingleConvRom(ei, layer, worker, convUnit, multId);
-                }
-            }
-        }
-
-        String paramName = String.format("bias_%d", layer.getLayerId());
-        InterfaceParamArray paramArray = ei.addParamArray(paramName, CPUTypes.DOUBLE);
-        String name = String.format("ConvolutionAccumulator_%d", layer.getLayerId());
-
-        for (int j = 0 ; j < layer.getNumOutputs() ; j++) {
-            ei.setMem(name, "bias", j, paramArray[j]);
-        }
-    }
-
-    private EngineInterface buildInitInterface() {
-        EngineInterface ei = new EngineInterface("init_convnet");
+        // configuring streams for ConvolutionLayers.
+        int convLayerIndex = 0;
 
         for (int i = 0 ; i < networkParameters.getLayerCount() ; i++) {
-            Parameters.LayerParameter layer = networkParameters.getLayer(i);
-            if (isConvLayer(layer)) {
-                initConvLayer(ei, layer);
+            Parameters.LayerParameter layerParams = networkParameters.getLayer(i);
+
+            if (isConvLayer(layerParams)) {
+                String kernelName = convolutionLayers[convLayerIndex]
+                        .getConvolutionUnit()
+                        .getKernel()
+                        .getName();
+
+                ei.setScalar(kernelName, "init", init);
+                initConvLayer(ei, layerParams, convolutionLayers[convLayerIndex]);
+
+                convLayerIndex++;
             }
         }
 
         ei.ignoreAll(Direction.IN_OUT);
         return ei;
+    }
+
+    private void initConvLayer(
+            EngineInterface ei,
+            Parameters.LayerParameter layerParams,
+            ConvolutionLayer layer) {
+
+        for (int worker = 0 ; worker < layerParams.getConv().getWorkerFactor(); worker++) {
+            final int streamSize = layer.getConvolutionUnit().getKernel().initStreamSize();
+
+            ei.setStream(String.format("kernel_%d_%d", layerParams.getLayerId(), worker),
+                         CPUTypes.FLOAT,
+                         streamSize * CPUTypes.FLOAT.sizeInBytes());
+        }
+
+        String paramName = String.format("bias_%d", layerParams.getLayerId());
+        InterfaceParamArray paramArray = ei.addParamArray(paramName, CPUTypes.DOUBLE);
+        String name = String.format("ConvolutionAccumulator_%d", layerParams.getLayerId());
+
+        for (int j = 0 ; j < layerParams.getNumOutputs() ; j++) {
+            ei.setMem(name, "bias", j, paramArray[j]);
+        }
     }
 
     private void setupKernels() {
@@ -165,13 +136,37 @@ public class NetworkManager extends CustomManager {
                 convolutionLayers[convLayerId].getInput() <== prevOutput;
                 prevOutput = convolutionLayers[convLayerId].getOutput();
                 convLayerId++;
+
             } else if (isPoolLayer(layer)) {
                 poolingKernelBlocks[poolingUnitId].getInput("x") <== prevOutput;
                 prevOutput = poolingKernelBlocks[poolingUnitId].getOutput("y");
                 poolingUnitId++;
+
             }
         }
         toCpu <== prevOutput;
+
+
+        /* Weight initialization. */
+        convLayerId = 0;
+        for (int i = 0 ; i < networkParameters.getLayerCount() ; i++) {
+            Parameters.LayerParameter layer = networkParameters.getLayer(i);
+
+            if (isConvLayer(layer)) {
+                for (int j = 0 ; j < layer.getConv().getWorkerFactor(); j++) {
+                    DFELink dataStream = addStreamFromCPU(
+                            String.format("kernel_%d_%d", layer.getLayerId(), j));
+
+                    convolutionLayers[convLayerId].getFiltersInput(j) <== dataStream;
+                }
+
+                // DFELink stream = addStreamFromCPU(
+                //         String.format("bias_%d", layer.getLayerId(), bias));
+                // convolutionLayers[convLayerId].getBiasInput(workerId) <== 
+
+                convLayerId++;
+            }
+        }
     }
 
     public NetworkManager(EngineParameters engineParameters, Parameters.Network networkParametersIn) {
@@ -182,6 +177,7 @@ public class NetworkManager extends CustomManager {
         poolingKernelBlocks = new ArrayList<KernelBlock>();
 
         config.setAllowNonMultipleTransitions(true);
+        debug.setDebugLevel(new DebugLevel().setHasStreamStatus(true));
         config.setDefaultStreamClockFrequency(networkParameters.getFrequency());
         System.out.println("Network compilation target:");
         System.out.println(networkParameters.toString());
@@ -196,7 +192,6 @@ public class NetworkManager extends CustomManager {
         linkKernels();
 
         /* Interfaces */
-        createSLiCinterface(buildInitInterface());
         createSLiCinterface(interfaceDefault());
     }
 }
