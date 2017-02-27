@@ -63,10 +63,13 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
             io.output(getOutputName(), output, outputVectorType, outputControlFlag);
         }
 
+        OffsetExpr loopOffsetExpr = stream.makeOffsetAutoLoop(getOffsetExprName());
+        DFEVar pipelineLengthVar = loopOffsetExpr.getDFEVar(this,dfeUInt(32));
         CounterChain chain = control.count.makeCounterChain();
         DFEVar schedulerIter = Utils.chainCounterOrZero(this, chain, getSchedulerIterations());
         DFEVar convIter = Utils.chainCounterOrZero(this, chain, getConvolutionIterations());
         DFEVar kernelIter = Utils.chainCounterOrZero(this, chain, getKernelIterations());
+        DFEVar pipelineStage = chain.addCounter(pipelineLengthVar, 1);
         DFEVar streamCounter = control.count.simpleCounter(
                 32,
                 getKernelIterations() * getConvolutionIterations() * getSchedulerIterations());
@@ -88,7 +91,7 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
                     convIter.eq(channel / layerParams.getConv().getConvFoldingFactor()));
             DFEVar muxedSumVars = channelOutputFlag ? sumVars : 0.0;
             DFEVar bias = biasRom.read(constant.var(addressType, channel));
-            DFEVar carriedSum = stream.offset(acc, -1);
+            DFEVar carriedSum = stream.offset(acc, -loopOffsetExpr);
 
             // push and pop pipelining factor required to make sure this accumulator runs at
             // 0-tick latency (i.e: stream.offset(-1) works)
@@ -105,6 +108,7 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
         String s_conv = "[\n";
         List<Object> debugValues = new ArrayList<Object>();
         debugValues.add((Integer) layerParams.getLayerId());
+        debugValues.add(pipelineLengthVar);
         debugValues.add(outputControlFlag);
         debugValues.add(schedulerIter);
         debugValues.add(convIter);
@@ -125,6 +129,7 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
         s_output += "]";
         debug.simPrintf(
                 "ConvolutionAccumulatorKernel[layer = %d]"
+                + " pipelineLength = %d"
                 + " outputControlFlag = %d"
                 + " schedulerIter = %d convIter = %d kernelIter = %d"
                 + "\ninputs = " + s_conv + "\n"
