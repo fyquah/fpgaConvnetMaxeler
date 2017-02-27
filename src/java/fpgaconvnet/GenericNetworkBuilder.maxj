@@ -1,19 +1,11 @@
 package fpgaconvnet;
 
-import java.io.IOException;
-import java.util.List;
-
 import com.google.protobuf.TextFormat;
 
 import com.maxeler.maxcompiler.v2.build.EngineParameters;
 import com.maxeler.maxcompiler.v2.managers.BuildConfig;
-import com.maxeler.maxcompiler.v2.managers.custom.CustomManager;
 
 import fpgaconvnet.protos.Parameters;
-import fpgaconvnet.protos.Parameters.Network;
-import fpgaconvnet.protos.Parameters.LayerParameter;
-import fpgaconvnet.protos.Parameters.ConvolutionParameter;
-import fpgaconvnet.protos.Parameters.PoolingParameter;
 
 
 public class GenericNetworkBuilder {

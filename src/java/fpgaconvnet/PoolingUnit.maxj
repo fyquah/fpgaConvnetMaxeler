@@ -48,7 +48,7 @@ public class PoolingUnit extends KernelLib {
             inputHeight,
             inputWidth,
             kernelDim,
-            new OffsetExpr(1));
+            1);
         CounterChain chain = control.count.makeCounterChain();
         row = chain.addCounter(inputHeight, 1);
         col = chain.addCounter(inputWidth, 1);

@@ -5,13 +5,9 @@ import java.util.List;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVector;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVectorType;
-import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Stream.OffsetExpr;
 import com.maxeler.maxcompiler.v2.kernelcompiler.KernelParameters;
-import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Count;
-import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Count.Counter;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.CounterChain;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.memory.Memory;
-import com.maxeler.maxcompiler.v2.managers.engine_interfaces.InterfaceParam;
 
 import fpgaconvnet.protos.Parameters.LayerParameter;
 
@@ -36,7 +32,6 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
 
         final int convFoldingFactor = layerParams.getConv().getConvFoldingFactor();
         final int kernelFoldingFactor = layerParams.getConv().getKernelFoldingFactor();
-        final int addressIncrement = layerParams.getConv().getKernelFoldingFactor();
         final int totalAddressCount =
                 getSchedulerIterations()
                 * getConvolutionIterations()
@@ -52,7 +47,6 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
 
             DFEVector<DFEVar> inputWindow = inputVectorType.newInstance(this);
             DFEVector<DFEVar> output = outputVectorType.newInstance(this);
-            final List<DFEVar> multiplicationOutputs = new ArrayList<DFEVar>();
             final DFEVar[] pixelVars = new DFEVar[layerParams.getConv().getKernelFoldingFactor()];
             final DFEVar[][] weightVars = new DFEVar[convFoldingFactor][kernelFoldingFactor];
 
@@ -85,40 +79,40 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
             io.output(getOutputName(workerId), output, outputVectorType);
 
             // debugging
-            String s_window = "[\n";
-            String s_weights = "[\n";
-            String s_output = "[\n";
-            List<Object> debugValues = new ArrayList<Object>();
-            debugValues.add(inputControlFlag);
-            debugValues.add(iter);
-            debugValues.add(kernelIter);
-            for (int i = 0 ; i < layerParams.getConv().getKernelFoldingFactor() ; i++) {
-                s_window += "%.3f, "; 
-                debugValues.add(pixelVars[i]);
-            }
-            s_window += "]\n";
-            for (int convUnitId = 0 ; convUnitId < convFoldingFactor ; convUnitId++) {
-                s_weights += "[";
-                for (int multId = 0; multId < kernelFoldingFactor ; multId++) {
-                    s_weights += "%.3f, "; 
-                    debugValues.add(weightVars[convUnitId][multId]);
-                }
+            // String s_window = "[\n";
+            // String s_weights = "[\n";
+            // String s_output = "[\n";
+            // List<Object> debugValues = new ArrayList<Object>();
+            // debugValues.add(inputControlFlag);
+            // debugValues.add(iter);
+            // debugValues.add(kernelIter);
+            // for (int i = 0 ; i < layerParams.getConv().getKernelFoldingFactor() ; i++) {
+            //     s_window += "%.3f, "; 
+            //     debugValues.add(pixelVars[i]);
+            // }
+            // s_window += "]\n";
+            // for (int convUnitId = 0 ; convUnitId < convFoldingFactor ; convUnitId++) {
+            //     s_weights += "[";
+            //     for (int multId = 0; multId < kernelFoldingFactor ; multId++) {
+            //         s_weights += "%.3f, "; 
+            //         debugValues.add(weightVars[convUnitId][multId]);
+            //     }
 
-                s_weights += "]\n";
-            }
-            s_weights += "]\n";
-            for (int convUnitId = 0 ; convUnitId < convFoldingFactor;  convUnitId++) {
-                debugValues.add(output[convUnitId]);
-                s_output += "%.3f, ";
-            }
-            s_output += "]\n";
-            debug.simPrintf("ConvolutionUnitKernel[layer = " + params.getLayerId()
-                            + "] worker = " + workerId
-                            + " inputControlFlag = %d iter = %d kernelIter = %d\n"
-                            + "input window = " + s_window 
-                            + "weights = " + s_weights
-                            + "outputs = " + s_output,
-                            debugValues.toArray(new Object[1]));
+            //     s_weights += "]\n";
+            // }
+            // s_weights += "]\n";
+            // for (int convUnitId = 0 ; convUnitId < convFoldingFactor;  convUnitId++) {
+            //     debugValues.add(output[convUnitId]);
+            //     s_output += "%.3f, ";
+            // }
+            // s_output += "]\n";
+            // debug.simPrintf("ConvolutionUnitKernel[layer = " + params.getLayerId()
+            //                 + "] worker = " + workerId
+            //                 + " inputControlFlag = %d iter = %d kernelIter = %d\n"
+            //                 + "input window = " + s_window 
+            //                 + "weights = " + s_weights
+            //                 + "outputs = " + s_output,
+            //                 debugValues.toArray(new Object[1]));
         }
     }
 

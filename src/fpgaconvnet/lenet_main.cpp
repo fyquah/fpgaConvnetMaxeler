@@ -76,14 +76,13 @@ std::vector<float> run_feature_extraction(
             "../test_data/lenet/weights/conv2_kernels.txt",
             "../test_data/lenet/weights/conv2_bias.txt"};
     max_file_t *max_file = lenet_init();
+    std::vector<float> extracted_features;
     fpgaconvnet::Convnet convnet(network_parameters, max_file, "");
 
     convnet.load_weights_from_files(filenames);
     convnet.max_init_weights();
-    convnet.max_load_input_data(images, N);
-    convnet.max_run_inference(N);
-    std::vector<float> extracted_features = convnet.max_retrieve_features(N);
-
+    extracted_features = convnet.max_run_inference(N, images);
+    // std::vector<float> extracted_features = convnet.max_retrieve_features(N);
     fpgaconvnet::verify_conv_output(
             network_parameters,
             N,

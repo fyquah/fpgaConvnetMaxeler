@@ -97,7 +97,8 @@ public:
 
     void max_init_weights();
     void max_load_input_data(const std::vector<float> & images, uint64_t N);
-    void max_run_inference(uint64_t N);
+    std::vector<float> max_run_inference(
+            uint64_t N, const std::vector<float> & images);
     std::vector<float> max_retrieve_features(uint64_t N);
 };
 

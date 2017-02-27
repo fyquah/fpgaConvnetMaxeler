@@ -1,0 +1,85 @@
+layer {
+    input_height: 32
+    input_width: 32
+    num_inputs: 3
+    num_outputs: 32
+
+    conv: {
+        pad: 2
+        kernel_size: 5
+    }
+}
+
+layer {
+    pool: {
+        type: Max
+        dim: 3
+        stride: 2
+    }
+    activation: Relu
+}
+
+layer {
+    lrn: {
+        norm_region: 
+        local_size: 3
+        alpha: 5e-5
+        beta: 0.75
+        norm_region: WITHIN_CHANNEL
+    }
+}
+
+layer {
+    num_inputs: 32
+    num_outputs: 32
+
+    conv: {
+        pad: 2
+        kernel_size: 5
+        activation: Relu
+    }
+
+    activation: Relu
+}
+
+layer {
+    pool: {
+        type: Average
+        dim: 3
+        stride: 2
+    }
+    activation: Relu
+}
+
+layer {
+    lrn: {
+        norm_region: 
+        local_size: 3
+        alpha: 5e-5
+        beta: 0.75
+        norm_region: WITHIN_CHANNEL
+    }
+}
+
+layer {
+    input_height: 32
+    input_width: 32
+    num_inputs: 3
+    num_outputs: 64
+
+    conv: {
+        pad: 2
+        kernel_size: 5
+    }
+
+    activation: Relu
+}
+
+layer {
+    pool: {
+        type: Average
+        stride: 2
+        dim: 3
+    }
+    activation: Relu
+}

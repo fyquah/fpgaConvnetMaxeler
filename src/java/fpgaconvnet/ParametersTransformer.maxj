@@ -5,7 +5,6 @@ package fpgaconvnet;
 import java.lang.RuntimeException;
 
 import fpgaconvnet.protos.Parameters;
-import fpgaconvnet.protos.Parameters.Network;
 import fpgaconvnet.protos.Parameters.LayerParameter;
 import fpgaconvnet.protos.Parameters.ConvolutionParameter;
 import fpgaconvnet.protos.Parameters.PoolingParameter;
@@ -56,10 +55,6 @@ public class ParametersTransformer {
             if (layer_id - 1 != previousLayer.getLayerId()) {
                 raiseError(layer_id, "previousLayer.getLayerId() != layer_id - 1.");
             }
-            if (previousLayer == null) {
-                raiseError(layer_id, "previousLayer in layer other than the first layer must not "
-                                     + "be null");
-            }
             if (layerParameter.hasInputHeight()
                     && previousLayer.getOutputHeight() != layerParameter.getInputHeight()) {
                 raiseError(layer_id,
@@ -93,7 +88,6 @@ public class ParametersTransformer {
         int expectedWidth = -1;
         if (paramsCase.equals(LayerParameter.ParamsCase.CONV)) {
             ConvolutionParameter convParams = layerParameter.getConv();
-            int kernelSize = convParams.getKernelSize();
             if (!convParams.hasKernelSize() || convParams.getKernelSize() % 2 == 0) {
                 raiseError(layer_id, "Missing /invalid conv kernel_size");
             }

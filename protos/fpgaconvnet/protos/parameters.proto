@@ -11,6 +11,7 @@ message Network
 
 message LayerParameter
 {
+
     optional uint32 input_height = 3;
     optional uint32 input_width = 4;
     optional uint32 num_inputs = 5;
@@ -64,4 +65,19 @@ message PoolingParameter
     optional PoolingType type = 1 [default = Max];
     /* 2D Pooling supported only */
     optional uint32 dim = 2;
+}
+
+
+message LrnParameter
+{
+    enum LrnRegion
+    {
+        WITHIN_CHANNEL = 1;
+        ACROSS_CHANNELS = 2;
+    }
+
+    optional uint32 local_size = 1;
+    optional float alpha = 2;
+    optional float beta = 3;
+    optional LrnRegion norm_region = 4;
 }
