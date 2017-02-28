@@ -416,6 +416,7 @@ std::vector<float> Convnet::max_run_inference(
         max_set_param_uint64t(run_action, "init", 1);
         initialized_weights = 1;
     }
+
     int i = 0;
     for (auto it = network_params.layer().begin();
             it != network_params.layer().end();
