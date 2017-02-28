@@ -305,7 +305,6 @@ void max_set_layer_weights(
 
     for (int worker = 0 ; worker < layer.conv().worker_factor() ; worker++) {
         sprintf(buffer, "kernel_%d_%d", layer.layer_id(), worker);
-        std::cout << buffer << std::endl;
         max_queue_input(
                 action, buffer,
                 worker_kernels + (worker * worker_rom_size),

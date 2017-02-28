@@ -17,6 +17,7 @@ import fpgaconvnet.protos.Parameters.LayerParameter;
 public class ConvolutionUnitKernel extends ConvolutionKernelBase {
 
     private final int kernelDim;
+    private final DFEVectorType<DFEVar> rawWeightInputVectorType;
     private final DFEVectorType<DFEVar> weightInputVectorType;
     private final DFEVectorType<DFEVar> inputVectorType;
     private final DFEVectorType<DFEVar> outputVectorType;
@@ -31,6 +32,8 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
         inputVectorType = new DFEVectorType<DFEVar>(GlobalConfig.dataType, kernelDim * kernelDim);
         weightInputVectorType = new DFEVectorType<DFEVar>(
                 GlobalConfig.dataType, params.getConv().getKernelFoldingFactor());
+        rawWeightInputVectorType = new DFEVectorType<DFEVar>(
+                GlobalConfig.cpuType, params.getConv().getKernelFoldingFactor());
         outputVectorType = new DFEVectorType<DFEVar>(
                 GlobalConfig.dataType, layerParams.getConv().getConvFoldingFactor());
         filtersRomList = new ArrayList<Memory<DFEVar>>();
@@ -82,11 +85,12 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
             DFEVar inputControlFlag = ~isInitializingWeights & iter.eq(0) & kernelIter.eq(0);
             DFEVar outputControlFlag = ~isInitializingWeights;
             DFEVector<DFEVar> inputWindow = io.input(getInputName(workerId),
-                                                      inputVectorType,
-                                                      inputControlFlag);
-            DFEVector<DFEVar> weightsInputs = io.input(getWeightsInputName(workerId),
-                                                       weightInputVectorType,
-                                                       isInitializingWeights);
+                                                     inputVectorType,
+                                                     inputControlFlag);
+            DFEVector<DFEVar> rawWeightsInputs = io.input(getWeightsInputName(workerId),
+                                                          rawWeightInputVectorType,
+                                                          isInitializingWeights);
+            DFEVector<DFEVar> weightsInputs = rawWeightsInputs.cast(weightInputVectorType);
 
             DFEVector<DFEVar> output = outputVectorType.newInstance(this);
             final DFEVar[] pixelVars = new DFEVar[layerParams.getConv().getKernelFoldingFactor()];
@@ -106,6 +110,9 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
                             initAddress,
                             weightsInputs[multId],
                             isInitializingWeights & initConvIter.eq(convUnitIndex));
+                    debug.simPrintf(isInitializingWeights & initConvIter.eq(convUnitIndex),
+                            "ConvolutionUnit | Writing %.3f to %d in conv %d mult %d\n",
+                            weightsInputs[multId], initAddress, convUnitIndex, multId);
 
                     weightVars[convUnitIndex][multId] = filtersRom.read(address);
                     convUnitOutput = convUnitOutput
