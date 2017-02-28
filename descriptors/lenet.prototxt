@@ -30,7 +30,7 @@ layer {
     conv: {
         worker_factor: 7
         conv_folding_factor: 25
-        kernel_folding_factor: 7
+        kernel_folding_factor: 9
 
         kernel_size: 5
         activation: Relu
