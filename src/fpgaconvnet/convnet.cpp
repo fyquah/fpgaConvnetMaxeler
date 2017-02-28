@@ -309,7 +309,7 @@ void allign_and_place_kernel_weights(
 }
 
 
-void max_set_layer_weights(
+void Convnet::set_layer_weights(
         max_actions_t *action,
         const protos::LayerParameter & layer,
         float *worker_kernels,
@@ -329,15 +329,14 @@ void max_set_layer_weights(
     uint64_t padded_num_iters = div_ceil(num_iters, multiple_base) * multiple_base;
     uint64_t padded_worker_rom_size =
             padded_num_iters * layer.conv().kernel_folding_factor();
-    float *values = new float[padded_worker_rom_size];
-    std::cout << "worker_rom_size: " << worker_rom_size << std::endl;
-    std::cout << "padded size: " << padded_worker_rom_size << std::endl;
 
     for (int worker = 0 ; worker < layer.conv().worker_factor() ; worker++) {
+        float *values = new float[padded_worker_rom_size];
+
+        queue_weights.push_back(values);
         std::memcpy(values, 
                 worker_kernels + (worker * worker_rom_size),
                 sizeof(float) * worker_rom_size);
-
         sprintf(buffer, "kernel_%d_%d", layer.layer_id(), worker);
         max_queue_input(
                 action,
@@ -346,7 +345,6 @@ void max_set_layer_weights(
                 sizeof(float) * padded_worker_rom_size);
     }
 
-    delete[] values;
     sprintf(buffer, "bias_%d", layer.layer_id());
     max_queue_input(action, buffer, bias,
                     sizeof(float) * div_ceil(layer.num_outputs(), 4) * 4);
@@ -392,6 +390,9 @@ Convnet::~Convnet ()
         delete[] kernels[i];
         delete[] bias[i];
         delete[] worker_kernels[i];
+    }
+    for (int i = 0 ; i < queue_weights.size(); i++) {
+        delete[] queue_weights[i];
     }
     if (dfe) {
         max_unload(dfe);
@@ -456,7 +457,7 @@ std::vector<float> Convnet::max_run_inference(
             it != network_params.layer().end();
             it++) {
         if (it->has_conv()) {
-            max_set_layer_weights(
+            set_layer_weights(
                     run_action, *it, worker_kernels[i], bias[i]);
             i++;
         }

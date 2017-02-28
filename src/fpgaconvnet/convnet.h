@@ -57,13 +57,6 @@ void allign_and_place_kernel_weights(
         float *src_base
 );
 
-void max_set_layer_weights(
-        max_actions_t *action,
-        const protos::LayerParameter & layer,
-        float *kernels,
-        float *bias
-);
-
 void set_log_prefix(const std::string & prefix);
 
 uint64_t calc_total_kernel_weights(const protos::LayerParameter & layer);
@@ -78,6 +71,7 @@ private:
     std::vector<float*> kernels;
     std::vector<float*> worker_kernels;
     std::vector<float*> bias;
+    std::vector<float*> queue_weights;
     std::vector<protos::LayerParameter> conv_layer_params;
 
     uint64_t input_size;
@@ -88,6 +82,13 @@ private:
     max_file_t *max_file;
 
     Convnet(const Convnet &) {}
+    void set_layer_weights(
+        max_actions_t *action,
+        const protos::LayerParameter & layer,
+        float *kernels,
+        float *bias
+    );
+
 public:
     Convnet(const protos::Network & network_params,
             max_file_t *max_file,
