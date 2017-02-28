@@ -1,0 +1,30 @@
+layer {
+    input_height: 28
+    input_width: 28
+    num_inputs: 32
+    num_outputs: 32
+
+    conv: {
+        activation: Relu
+        kernel_size: 5
+
+        worker_factor: 7
+        conv_folding_factor: 32
+        kernel_folding_factor: 5
+    }
+}
+layer {
+    input_height: 24
+    input_width: 24
+    num_inputs: 32
+    num_outputs: 32
+
+    conv: {
+        activation: Relu
+        kernel_size: 5
+
+        worker_factor: 7
+        conv_folding_factor: 32
+        kernel_folding_factor: 5
+    }
+}
