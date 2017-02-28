@@ -155,14 +155,10 @@ void load_kernels_from_file(
 void load_bias_from_file(
     std::string filename,
     const protos::LayerParameter & layer,
-    double *output
+    float *output
 )
 {
-    std::ifstream fin(filename.c_str());
-    for (int i = 0 ; i < layer.num_outputs() ; i++) {
-        fin >> output[i];
-    }
-    fin.close();
+    generic_load(filename, layer.num_outputs(), output);
 }
 
 
@@ -228,6 +224,7 @@ void verify_conv_output(
             total_error += std::abs(obtained  - expected);
             total_pixels += 1;
 
+            log_stdout(INFO) << "Obtained " << obtained << ", expected " << expected << std::endl;
             if (std::abs(obtained - expected) > 0.01) {
                 log_stdout(WARNING) << "Error > 0.01 while verifying output!" << std::endl;
             }
@@ -297,7 +294,7 @@ void max_set_layer_weights(
         max_actions_t *action,
         const protos::LayerParameter & layer,
         float *worker_kernels,
-        double *bias
+        float *bias
 )
 {
     char buffer[30];
@@ -311,10 +308,9 @@ void max_set_layer_weights(
                 sizeof(float) * worker_rom_size);
     }
 
-    for (int i = 0 ; i < layer.num_outputs() ; i++) {
-        sprintf(buffer, "bias_%d", layer.layer_id());
-        max_set_param_array_double(action, buffer, bias[i], i);
-    }
+    sprintf(buffer, "bias_%d", layer.layer_id());
+    max_queue_input(action, buffer, bias,
+                    sizeof(float) * div_ceil(layer.num_outputs(), 4) * 4);
 }
 
 
@@ -332,7 +328,7 @@ Convnet::Convnet(
         if (it->has_conv()) {
             conv_layer_params.push_back(*it);
             kernels.push_back(new float[calc_total_kernel_weights(*it)]);
-            bias.push_back(new double[it->num_outputs()]);
+            bias.push_back(new float[div_ceil(it->num_outputs(), 4) * 4]);
             worker_kernels.push_back(new float[calc_total_rom_size(*it)]);
             memset(worker_kernels.back(), 0,
                    sizeof(float) * calc_total_kernel_weights(*it));

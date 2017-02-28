@@ -68,12 +68,17 @@ public class NetworkManager extends CustomManager {
             Parameters.LayerParameter layerParams = networkParameters.getLayer(i);
 
             if (isConvLayer(layerParams)) {
-                String kernelName = convolutionLayers[convLayerIndex]
+                String convUnitKernelName = convolutionLayers[convLayerIndex]
                         .getConvolutionUnit()
                         .getKernel()
                         .getName();
+                String accKernelName = convolutionLayers[convLayerIndex]
+                        .getAccumulator()
+                        .getKernel()
+                        .getName();
 
-                ei.setScalar(kernelName, "init", init);
+                ei.setScalar(convUnitKernelName, "init", init);
+                ei.setScalar(accKernelName, "init", init);
                 initConvLayer(ei, layerParams, convolutionLayers[convLayerIndex]);
 
                 convLayerIndex++;
@@ -97,13 +102,9 @@ public class NetworkManager extends CustomManager {
                          streamSize * CPUTypes.FLOAT.sizeInBytes());
         }
 
-        String paramName = String.format("bias_%d", layerParams.getLayerId());
-        InterfaceParamArray paramArray = ei.addParamArray(paramName, CPUTypes.DOUBLE);
-        String name = String.format("ConvolutionAccumulator_%d", layerParams.getLayerId());
-
-        for (int j = 0 ; j < layerParams.getNumOutputs() ; j++) {
-            ei.setMem(name, "bias", j, paramArray[j]);
-        }
+        ei.setStream(String.format("bias_%d", layerParams.getLayerId()),
+                     CPUTypes.FLOAT,
+                     layer.getAccumulator().getKernel().initCycles() * CPUTypes.FLOAT.sizeInBytes());
     }
 
     private void setupKernels() {
@@ -160,9 +161,9 @@ public class NetworkManager extends CustomManager {
                     convolutionLayers[convLayerId].getFiltersInput(j) <== dataStream;
                 }
 
-                // DFELink stream = addStreamFromCPU(
-                //         String.format("bias_%d", layer.getLayerId(), bias));
-                // convolutionLayers[convLayerId].getBiasInput(workerId) <== 
+                DFELink biasDataStream = addStreamFromCPU(
+                        String.format("bias_%d", layer.getLayerId()));
+                convolutionLayers[convLayerId].getBiasInput() <== biasDataStream;
 
                 convLayerId++;
             }

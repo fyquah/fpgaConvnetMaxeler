@@ -70,7 +70,8 @@ public class ConvolutionLayer {
         ei.ignoreAutoLoopOffset(accumulator.getKernel().getName(),
                                 accumulator.getKernel().getOffsetExprName());
         ei.setTicks(accumulator.getKernel().getName(),
-                    numberOfImages * accumulator.getKernel().cyclesPerImage() * latency);
+                    numberOfImages * accumulator.getKernel().cyclesPerImage() * latency
+                    + (init ? accumulator.getKernel().initCycles() : 0));
     }
 
     /*
@@ -120,6 +121,11 @@ public class ConvolutionLayer {
     public DFELink getFiltersInput(int workerId) {
         return convolutionUnit.getBlock().getInput(
                 convolutionUnit.getKernel().getWeightsInputName(workerId));
+    }
+
+    public DFELink getBiasInput() {
+        return accumulator.getBlock().getInput(
+                accumulator.getKernel().getBiasInputName());
     }
 
     public BoxedKernelBlock<ConvolutionSchedulerKernel> getScheduler()
