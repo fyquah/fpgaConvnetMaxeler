@@ -148,6 +148,8 @@ public class ParametersTransformer {
             previousLayer = parseLayer(i, networkParameters.getLayer(i), previousLayer);
             networkBuilder.addLayer(previousLayer);
         }
+
+        networkBuilder.setFrequency(networkParameters.getFrequency());
         return networkBuilder.build();
     }
 }
