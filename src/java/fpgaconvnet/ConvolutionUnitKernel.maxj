@@ -79,12 +79,12 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
                 Utils.ceilLog2(totalAddressCount), totalAddressCount);
 
 
-        iter.simWatch("iter");
-        kernelIter.simWatch("kernelIter");
         isInitializingWeights.simWatch("isInitializingWeights");
         initializationComplete.simWatch("initializationComplete");
+        isPaddingInit.simWatch("isPadding");
         initConvIter.simWatch("initConvIter");
         initAddress.simWatch("initAddress");
+
         debug.simPrintf("layer_%d init weights = %d iter = %d kernelIter = %d\n",
                     params.getLayerId(), isInitializingWeights, iter, kernelIter);
 
@@ -156,8 +156,6 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
 
     public int initStreamSize() {
         // size of every weight input Vector.
-        System.out.println(
-                "cycles = " + initCycles() * layerParams.getConv().getKernelFoldingFactor());
         return initCycles() * layerParams.getConv().getKernelFoldingFactor();
     }
 
