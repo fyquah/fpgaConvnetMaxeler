@@ -1,6 +1,7 @@
 #include <cmath>
 #include <cstring>
 
+#include <algorithm>
 #include <fstream>
 #include <iostream>
 #include <string>
@@ -10,6 +11,24 @@
 
 #include "fpgaconvnet/convnet.h"
 #include "fpgaconvnet/protos/parameters.pb.h"
+
+
+static uint64_t gcd(uint64_t a, uint64_t b)
+{
+    if (b > a) {
+        std::swap(a, b);
+    }
+    if (b == 0) {
+        return a;
+    } else {
+        return gcd(b, a % b);
+    }
+}
+
+static uint64_t lcm(uint64_t a, uint64_t b)
+{
+    return a / gcd(a, b) * b;
+}
 
 
 static void generic_load(std::string filename, int count, float *output)
@@ -297,17 +316,37 @@ void max_set_layer_weights(
         float *bias
 )
 {
+    /* Requirements:
+     * - stream to be a multiple of 16 bytes = 4 * 4 floats
+     * - As input vector is of size layer.conv().kernel_folding_factor(), let's call this number
+     *   kff.
+     */
     char buffer[30];
+    uint64_t multiple_base = lcm(4, layer.conv().kernel_folding_factor())
+            / layer.conv().kernel_folding_factor();
     uint64_t worker_rom_size = calc_total_rom_size(layer) / layer.conv().worker_factor();
+    uint64_t num_iters = worker_rom_size / layer.conv().kernel_folding_factor();
+    uint64_t padded_num_iters = div_ceil(num_iters, multiple_base) * multiple_base;
+    uint64_t padded_worker_rom_size =
+            padded_num_iters * layer.conv().kernel_folding_factor();
+    float *values = new float[padded_worker_rom_size];
+    std::cout << "worker_rom_size: " << worker_rom_size << std::endl;
+    std::cout << "padded size: " << padded_worker_rom_size << std::endl;
 
     for (int worker = 0 ; worker < layer.conv().worker_factor() ; worker++) {
-        sprintf(buffer, "kernel_%d_%d", layer.layer_id(), worker);
-        max_queue_input(
-                action, buffer,
+        std::memcpy(values, 
                 worker_kernels + (worker * worker_rom_size),
                 sizeof(float) * worker_rom_size);
+
+        sprintf(buffer, "kernel_%d_%d", layer.layer_id(), worker);
+        max_queue_input(
+                action,
+                buffer,
+                values,
+                sizeof(float) * padded_worker_rom_size);
     }
 
+    delete[] values;
     sprintf(buffer, "bias_%d", layer.layer_id());
     max_queue_input(action, buffer, bias,
                     sizeof(float) * div_ceil(layer.num_outputs(), 4) * 4);

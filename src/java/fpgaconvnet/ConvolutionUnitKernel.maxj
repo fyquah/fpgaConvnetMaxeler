@@ -47,6 +47,8 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
 
         // Counters for initialization
         CounterChain initChain = control.count.makeCounterChain();
+        DFEVar initCycleIter = control.count.simpleCounter(
+                Utils.ceilLog2(initCycles()), initCycles());
         DFEVar initConvIter = Utils.chainCounterOrZero(
                 this, initChain, layerParams.getConv().getConvFoldingFactor());
         DFEVar initAddress = Utils.chainCounterOrZero(this, initChain, totalAddressCount);
@@ -55,13 +57,19 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
                 .withInc(1)
                 .withMax(1)
                 .withWrapMode(Count.WrapMode.STOP_AT_MAX)
-                .withEnable(initConvIter.eq(layerParams.getConv().getConvFoldingFactor() - 1)
-                            & initAddress.eq(totalAddressCount - 1)));
-
+                .withEnable(initCycleIter.eq(initCycles() - 1)));
+        Counter paddingInitCtr = control.count.makeCounter(
+                control.count.makeParams(1)
+                .withInc(1)
+                .withMax(1)
+                .withWrapMode(Count.WrapMode.STOP_AT_MAX)
+                .withEnable(initAddress.eq(totalAddressCount - 1) &
+                            initConvIter.eq(layerParams.getConv().getConvFoldingFactor() - 1)));
 
         DFEVar initWeightsFlag = io.scalarInput("init", dfeUInt(1));
         DFEVar initializationComplete = initializationCompleteCtr.getCount();
         DFEVar isInitializingWeights = initWeightsFlag & ~initializationComplete;
+        DFEVar isPaddingInit = paddingInitCtr.getCount();
 
         // Runtime counters
         CounterChain chain = control.count.makeCounterChain(~isInitializingWeights);
@@ -109,7 +117,9 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
                     filtersRom.write(
                             initAddress,
                             weightsInputs[multId],
-                            isInitializingWeights & initConvIter.eq(convUnitIndex));
+                            isInitializingWeights
+                            & initConvIter.eq(convUnitIndex)
+                            & ~isPaddingInit);
                     debug.simPrintf(isInitializingWeights & initConvIter.eq(convUnitIndex),
                             "ConvolutionUnit | Writing %.3f to %d in conv %d mult %d\n",
                             weightsInputs[multId], initAddress, convUnitIndex, multId);
@@ -123,20 +133,32 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
                 output[convUnitIndex] <== convUnitOutput;
             }
 
-            io.output(getOutputName(workerId), output, outputVectorType, outputControlFlag);
-        }
+            io.output(getOutputName(workerId), output, outputVectorType, outputControlFlag); }
+    }
+
+    public int stallInitCycles() {
+        return initCycles() - realInitCycles();
+    }
+
+    public int realInitCycles() {
+        return layerParams.getConv().getConvFoldingFactor()
+                * getSchedulerIterations()
+                * getConvolutionIterations()
+                * getKernelIterations();
     }
 
     public int initCycles() {
-        return layerParams.getConv().getConvFoldingFactor()
-            * getSchedulerIterations() * getConvolutionIterations() * getKernelIterations();
+        int multipleBase =
+                ((int) Utils.lcm(4, layerParams.getConv().getKernelFoldingFactor()))
+                / layerParams.getConv().getKernelFoldingFactor();
+        return Utils.divCeil(realInitCycles(), multipleBase) * multipleBase;
     }
 
     public int initStreamSize() {
-        return layerParams.getConv().getConvFoldingFactor()
-            * getSchedulerIterations() * getConvolutionIterations()
-            * getKernelIterations()
-            * layerParams.getConv().getKernelFoldingFactor(); // size of every weight input Vector.
+        // size of every weight input Vector.
+        System.out.println(
+                "cycles = " + initCycles() * layerParams.getConv().getKernelFoldingFactor());
+        return initCycles() * layerParams.getConv().getKernelFoldingFactor();
     }
 
     public int cyclesPerImage() {
