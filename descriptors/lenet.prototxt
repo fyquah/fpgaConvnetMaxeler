@@ -13,32 +13,3 @@ layer {
         activation: Relu
     }
 }
-layer {
-    pool: {
-        type: Max
-        dim: 2
-    }
-}
-layer {
-    input_height: 12
-    input_width: 12
-    num_inputs: 20
-    num_outputs: 50
-    output_height: 8
-    output_width: 8
-
-    conv: {
-        worker_factor: 7
-        conv_folding_factor: 25
-        kernel_folding_factor: 7
-
-        kernel_size: 5
-        activation: Relu
-    }
-}
-layer {
-    pool: {
-        type: Max
-        dim: 2
-    }
-}

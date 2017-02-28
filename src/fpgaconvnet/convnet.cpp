@@ -413,7 +413,7 @@ std::vector<float> Convnet::max_run_inference(
     if (initialized_weights) {
         max_set_param_uint64t(run_action, "init", 0);
     } else {
-        max_set_param_uint64t(run_action, "init", 0);
+        max_set_param_uint64t(run_action, "init", 1);
         initialized_weights = 1;
     }
     int i = 0;

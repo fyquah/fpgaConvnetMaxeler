@@ -115,7 +115,7 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
             debug.simPrintf("ConvolutionScheduler[layer = " + layerParams.getLayerId() + "] "
                             + "outputFlag = %d row = %d col = %d worker = " + i + "\n"
                             + "pixel_window = " + s_kernel,
-                            debugValues);
+                            (Object[]) debugValues);
         }
     }
 
