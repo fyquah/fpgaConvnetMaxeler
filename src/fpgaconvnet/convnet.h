@@ -21,12 +21,12 @@ protos::Network load_network_proto(const std::string & filename);
 void load_kernels_from_file(
     std::string filename,
     const protos::LayerParameter & layer,
-    double *output
+    float *output
 );
 void load_bias_from_file(
     std::string filename,
     const protos::LayerParameter & layer,
-    double *output
+    float *output
 );
 
 
@@ -53,15 +53,15 @@ void verify_conv_output(
  */
 void allign_and_place_kernel_weights(
         const protos::LayerParameter & layer,
-        double *dest_base,
-        double *src_base
+        float *dest_base,
+        float *src_base
 );
 
 void max_set_layer_weights(
         max_actions_t *action,
         const protos::LayerParameter & layer,
-        double *kernels,
-        double *bias
+        float *kernels,
+        float *bias
 );
 
 void set_log_prefix(const std::string & prefix);
@@ -75,13 +75,14 @@ uint64_t calc_total_kernel_weights(const protos::LayerParameter & layer);
 class Convnet {
 private:
     protos::Network network_params;
-    std::vector<double*> kernels;
-    std::vector<double*> worker_kernels;
-    std::vector<double*> bias;
+    std::vector<float*> kernels;
+    std::vector<float*> worker_kernels;
+    std::vector<float*> bias;
     std::vector<protos::LayerParameter> conv_layer_params;
 
     uint64_t input_size;
     uint64_t output_size;
+    bool initialized_weights;
 
     max_engine_t *dfe;
     max_file_t *max_file;
@@ -98,7 +99,7 @@ public:
     void max_init_weights();
     void max_load_input_data(const std::vector<float> & images, uint64_t N);
     std::vector<float> max_run_inference(
-            uint64_t N, const std::vector<float> & images);
+            uint64_t N, const std::vector<float> & images, const bool benchmark);
     std::vector<float> max_retrieve_features(uint64_t N);
 };
 

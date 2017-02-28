@@ -194,7 +194,6 @@ def run_optimizer(network, models, constraints, iter):
     total_multipliers = constraints["multiplier"] \
             - multiplier_constraint(rounded_xs)
 
-
     parameters = [
         tuple(rounded_xs[i:i+3]) for i in range(0, len(rounded_xs), 3)]
     print "Iter", iter
@@ -282,7 +281,7 @@ def make_gops_fn(network):
         """
         factors = factors[:]
         clock_rate = network.frequency * 1e6
-        acc_pipeline_length = 2
+        acc_pipeline_length = 1
 
         # At our clock rate, it is safe to assume that LMem can produce
         # pixel a cycle. The maximum bandwidth of LMem is around 38.4GBps (

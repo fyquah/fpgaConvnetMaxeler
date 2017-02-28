@@ -12,7 +12,7 @@
 #include "fpgaconvnet/protos/parameters.pb.h"
 
 
-static void generic_load(std::string filename, int count, double *output)
+static void generic_load(std::string filename, int count, float *output)
 {
     std::ifstream fin(filename.c_str());
     for (int i = 0 ; i < count ; i++) {
@@ -145,7 +145,7 @@ protos::Network load_network_proto(const std::string & filename)
 void load_kernels_from_file(
     std::string filename,
     const protos::LayerParameter & layer,
-    double *output
+    float *output
 )
 {
     generic_load(filename, calc_total_kernel_weights(layer), output);
@@ -155,7 +155,7 @@ void load_kernels_from_file(
 void load_bias_from_file(
     std::string filename,
     const protos::LayerParameter & layer,
-    double *output
+    float *output
 )
 {
     generic_load(filename, layer.num_outputs(), output);
@@ -224,6 +224,7 @@ void verify_conv_output(
             total_error += std::abs(obtained  - expected);
             total_pixels += 1;
 
+            log_stdout(INFO) << "Obtained " << obtained << ", expected " << expected << std::endl;
             if (std::abs(obtained - expected) > 0.01) {
                 log_stdout(WARNING) << "Error > 0.01 while verifying output!" << std::endl;
             }
@@ -235,8 +236,8 @@ void verify_conv_output(
 
 void allign_and_place_kernel_weights(
         const protos::LayerParameter & layer,
-        double *dest_base,
-        double *src_base
+        float *dest_base,
+        float *src_base
 )
 {
     const uint64_t kernel_ff = layer.conv().kernel_folding_factor();
@@ -248,8 +249,8 @@ void allign_and_place_kernel_weights(
             calc_total_rom_size(layer) / layer.conv().worker_factor();
 
     for (int i = 0 ; i < worker_factor ; i++) {
-        double *dest = dest_base + (i * rom_per_worker);
-        double *src = src_base + (i * kernel_dim * kernel_dim);
+        float *dest = dest_base + (i * rom_per_worker);
+        float *src = src_base + (i * kernel_dim * kernel_dim);
 
         for (int w = 0; w < calc_scheduler_iterations(layer); w++) {
             const int worker_iter = w;  // the w-th channel that the worker's handling.
@@ -282,58 +283,9 @@ void allign_and_place_kernel_weights(
                 std::memcpy(
                         dest + dest_offset,
                         src + src_offset,
-                        sizeof(double) * kernel_dim * kernel_dim);
+                        sizeof(float) * kernel_dim * kernel_dim);
             }
         }
-    }
-
-    /* At this point, the dimension of dest_base is
-     *      num_worker * conv_factor * total_iter * kernel_factor
-     *
-     * We want to change it to:
-     *      num_worker * conv_factor * kernel_factor * total_iter
-     */
-    double *tmp = new double[kernel_ff * total_iter];
-
-    for (uint64_t worker = 0; worker < worker_factor; worker++) {
-        for (uint64_t conv = 0; conv < conv_ff; conv++) {
-            uint64_t offset = ((worker * conv_ff) + conv) * kernel_ff * total_iter;
-            double *ptr = dest_base + offset;
-
-            std::memcpy(tmp, ptr, kernel_ff * total_iter * sizeof(double));
-
-            for (int i = 0 ; i < total_iter ; i++) {
-                for (int j = 0 ; j < kernel_ff ; j++) {
-                    ptr[j * total_iter + i] = tmp[i * kernel_ff + j];
-                }
-            }
-        }
-    }
-
-    delete[] tmp;
-}
-
-
-void max_set_single_rom(
-        max_actions_t *action,
-        const protos::LayerParameter & layer,
-        double *worker_kernels,
-        uint64_t worker,
-        uint64_t conv,
-        uint64_t mult)
-{
-    char buffer[100];
-    uint64_t rom_size = calc_total_iterations(layer);
-
-    sprintf(buffer, "layer_%d_kernels_%d_%d_%d", layer.layer_id(), worker, conv, mult);
-    for (int i = 0 ; i < rom_size ; i++) {
-        uint64_t index;
-
-        index = worker;
-        index = (index * layer.conv().conv_folding_factor()) + conv;
-        index = (index * layer.conv().kernel_folding_factor()) + mult;
-        index = (index * rom_size) + i;
-        max_set_param_array_double(action, buffer, worker_kernels[index], i);
     }
 }
 
@@ -341,26 +293,24 @@ void max_set_single_rom(
 void max_set_layer_weights(
         max_actions_t *action,
         const protos::LayerParameter & layer,
-        double *worker_kernels,
-        double *bias
+        float *worker_kernels,
+        float *bias
 )
 {
     char buffer[30];
+    uint64_t worker_rom_size = calc_total_rom_size(layer) / layer.conv().worker_factor();
 
     for (int worker = 0 ; worker < layer.conv().worker_factor() ; worker++) {
-        for (int conv = 0; conv < layer.conv().conv_folding_factor(); conv++) {
-            for (int mult = 0; mult < layer.conv().kernel_folding_factor(); mult++) {
-                max_set_single_rom(
-                        action, layer, worker_kernels,
-                        worker, conv, mult);
-            }
-        }
+        sprintf(buffer, "kernel_%d_%d", layer.layer_id(), worker);
+        max_queue_input(
+                action, buffer,
+                worker_kernels + (worker * worker_rom_size),
+                sizeof(float) * worker_rom_size);
     }
 
-    for (int i = 0 ; i < layer.num_outputs() ; i++) {
-        sprintf(buffer, "bias_%d", layer.layer_id());
-        max_set_param_array_double(action, buffer, bias[i], i);
-    }
+    sprintf(buffer, "bias_%d", layer.layer_id());
+    max_queue_input(action, buffer, bias,
+                    sizeof(float) * div_ceil(layer.num_outputs(), 4) * 4);
 }
 
 
@@ -369,6 +319,7 @@ Convnet::Convnet(
         max_file_t *max_file,
         const char* load_spec) :
     network_params(network_params), max_file(max_file),
+    initialized_weights(false),
     dfe(max_load(max_file,load_spec))
 {
     for (auto it = network_params.layer().begin();
@@ -376,11 +327,11 @@ Convnet::Convnet(
             it++) {
         if (it->has_conv()) {
             conv_layer_params.push_back(*it);
-            kernels.push_back(new double[calc_total_kernel_weights(*it)]);
-            bias.push_back(new double[it->num_outputs()]);
-            worker_kernels.push_back(new double[calc_total_rom_size(*it)]);
+            kernels.push_back(new float[calc_total_kernel_weights(*it)]);
+            bias.push_back(new float[div_ceil(it->num_outputs(), 4) * 4]);
+            worker_kernels.push_back(new float[calc_total_rom_size(*it)]);
             memset(worker_kernels.back(), 0,
-                   sizeof(double) * calc_total_kernel_weights(*it));
+                   sizeof(float) * calc_total_kernel_weights(*it));
         }
     }
 
@@ -420,25 +371,6 @@ void Convnet::load_weights_from_files(std::vector<std::string> filenames)
     }
 }
 
-void Convnet::max_init_weights()
-{
-    log_stdout(INFO) << "Initializing net weights in DFE." << std::endl;
-    max_actions_t *memory_action = max_actions_init(max_file, "init_convnet");
-
-    int i = 0;
-    for (auto it = network_params.layer().begin();
-            it != network_params.layer().end();
-            it++) {
-        if (it->has_conv()) {
-            max_set_layer_weights(
-                    memory_action, *it, worker_kernels[i], bias[i]);
-            i++;
-        }
-    }
-    // max_disable_validation(memory_action);
-    max_run(dfe, memory_action);
-    max_actions_free(memory_action);
-}
 
 void Convnet::max_load_input_data(const std::vector<float> & images, uint64_t N)
 {
@@ -457,7 +389,13 @@ void Convnet::max_load_input_data(const std::vector<float> & images, uint64_t N)
     max_actions_free(load_action);
 }
 
-std::vector<float> Convnet::max_run_inference(uint64_t N, const std::vector<float> & images) {
+
+std::vector<float> Convnet::max_run_inference(
+        uint64_t N,
+        const std::vector<float> & images,
+        const bool benchmark
+)
+{
     const uint64_t address_images = 0;
     const uint64_t address_features = N * input_size * sizeof(float);
     max_actions_t *run_action = max_actions_init(max_file, "default");
@@ -466,6 +404,25 @@ std::vector<float> Convnet::max_run_inference(uint64_t N, const std::vector<floa
 
     log_stdout(INFO) << "Running Feature Extraction ... " << std::endl;
     max_set_param_uint64t(run_action, "N", N);
+
+    if (initialized_weights) {
+        max_set_param_uint64t(run_action, "init", 0);
+    } else {
+        max_set_param_uint64t(run_action, "init", 1);
+        initialized_weights = 1;
+    }
+
+    int i = 0;
+    for (auto it = network_params.layer().begin();
+            it != network_params.layer().end();
+            it++) {
+        if (it->has_conv()) {
+            max_set_layer_weights(
+                    run_action, *it, worker_kernels[i], bias[i]);
+            i++;
+        }
+    }
+
     max_queue_input(run_action,
                     "fromcpu",
                     (void*) &images[0],
@@ -480,7 +437,10 @@ std::vector<float> Convnet::max_run_inference(uint64_t N, const std::vector<floa
     gettimeofday(&t_end, NULL);
     __sync_synchronize();
     max_actions_free(run_action);
-    report_conv_performance(network_params, N, t_begin, t_end);
+
+    if (benchmark) {
+        report_conv_performance(network_params, N, t_begin, t_end);
+    }
 
     return ret;
 }

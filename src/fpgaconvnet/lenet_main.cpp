@@ -80,9 +80,10 @@ std::vector<float> run_feature_extraction(
     fpgaconvnet::Convnet convnet(network_parameters, max_file, "");
 
     convnet.load_weights_from_files(filenames);
-    convnet.max_init_weights();
-    extracted_features = convnet.max_run_inference(N, images);
-    // std::vector<float> extracted_features = convnet.max_retrieve_features(N);
+
+    // warm up the DFE with the weights.
+    extracted_features = convnet.max_run_inference(N, images, false);
+    extracted_features = convnet.max_run_inference(N, images, false);
     fpgaconvnet::verify_conv_output(
             network_parameters,
             N,

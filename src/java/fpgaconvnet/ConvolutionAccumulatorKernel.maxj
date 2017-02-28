@@ -3,6 +3,8 @@ package fpgaconvnet;
 import java.util.List;
 import java.util.ArrayList;
 
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Count;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Count.Counter;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.CounterChain;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Stream.OffsetExpr;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.memory.Memory;
@@ -43,15 +45,52 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
         outputVectorType = new DFEVectorType<DFEVar>(
                 GlobalConfig.dataType, layerParams.getNumOutputs());
         biasRom = mem.alloc(GlobalConfig.dataType, params.getNumOutputs());
-        biasRom.mapToCPU(String.format("bias", params.getLayerId()));
 
         DFEVector<DFEVar> output = outputVectorType.newInstance(this);
-        DFEVar outputControlFlag = dfeUInt(1).newInstance(this);
         List<DFEVector<DFEVar>> inputVectors = new ArrayList<DFEVector<DFEVar>>();
-        for (int i = 0 ; i < layerParams.getConv().getWorkerFactor() ; i++) {
-            inputVectors.add(io.input(getInputName(i), inputVectorType));
-        }
 
+        // Counters for initialization
+        DFEVar initChannel = control.count.simpleCounter(
+                Utils.ceilLog2(initCycles()),
+                initCycles());
+        Counter initializationCompleteCtr = control.count.makeCounter(
+                control.count.makeParams(1)
+                .withInc(1)
+                .withMax(1)
+                .withWrapMode(Count.WrapMode.STOP_AT_MAX)
+                .withEnable(initChannel.eq(initCycles() - 1)));
+
+        DFEVar initWeightsFlag = io.scalarInput("init", dfeUInt(1));
+        DFEVar initializationComplete = initializationCompleteCtr.getCount();
+        DFEVar isInitializingWeights = initWeightsFlag & ~initializationComplete;
+
+        // Runtime Counters and loop variables
+        OffsetExpr loopOffsetExpr = stream.makeOffsetAutoLoop(getOffsetExprName());
+        DFEVar pipelineLengthVar = loopOffsetExpr.getDFEVar(this,dfeUInt(32));
+        CounterChain chain = control.count.makeCounterChain(~isInitializingWeights);
+        DFEVar schedulerIter = Utils.chainCounterOrZero(this, chain, getSchedulerIterations());
+        DFEVar convIter = Utils.chainCounterOrZero(this, chain, getConvolutionIterations());
+        DFEVar kernelIter = Utils.chainCounterOrZero(this, chain, getKernelIterations());
+        DFEVar pipelineStage = chain.addCounter(pipelineLengthVar, 1);
+        DFEVar streamCounter = control.count.simpleCounter(
+                32,
+                getKernelIterations() * getConvolutionIterations() * getSchedulerIterations());
+
+        // Kernel IO interfaces
+        DFEVar rawBiasInput = io.input(getBiasInputName(),
+                                       GlobalConfig.cpuType,
+                                       isInitializingWeights);
+        DFEVar biasInput = rawBiasInput.cast(GlobalConfig.dataType);
+        DFEVar inputControlFlag = ~isInitializingWeights;
+        DFEVar outputControlFlag =
+                ~isInitializingWeights
+                & schedulerIter.eq(getSchedulerIterations() - 1)
+                & convIter.eq(getConvolutionIterations() - 1)
+                & kernelIter.eq(getKernelIterations() - 1);
+
+        for (int i = 0 ; i < layerParams.getConv().getWorkerFactor() ; i++) {
+            inputVectors.add(io.input(getInputName(i), inputVectorType, inputControlFlag));
+        }
         if (layerParams.getIsLastLayer()) {
             /* Last layer - cast from fixed point to dfe float. */
             DFEVectorType<DFEVar> rawOutputVectorType = new DFEVectorType<DFEVar>(
@@ -67,23 +106,18 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
             io.output(getOutputName(), output, outputVectorType, outputControlFlag);
         }
 
-        OffsetExpr loopOffsetExpr = stream.makeOffsetAutoLoop(getOffsetExprName());
-        DFEVar pipelineLengthVar = loopOffsetExpr.getDFEVar(this,dfeUInt(32));
-        CounterChain chain = control.count.makeCounterChain();
-        DFEVar schedulerIter = Utils.chainCounterOrZero(this, chain, getSchedulerIterations());
-        DFEVar convIter = Utils.chainCounterOrZero(this, chain, getConvolutionIterations());
-        DFEVar kernelIter = Utils.chainCounterOrZero(this, chain, getKernelIterations());
-        DFEVar pipelineStage = chain.addCounter(pipelineLengthVar, 1);
-        DFEVar streamCounter = control.count.simpleCounter(
-                32,
-                getKernelIterations() * getConvolutionIterations() * getSchedulerIterations());
+        // logic for initializing weights
+        debug.simPrintf(
+                isInitializingWeights & (initChannel < params.getNumOutputs()),
+                "AccumulatorInit | layer %d | Writing %.3f to %d\n",
+                params.getLayerId(),
+                biasInput,
+                initChannel.cast(dfeUInt(Utils.ceilLog2(params.getNumOutputs()))));
+        biasRom.write(initChannel.cast(dfeUInt(Utils.ceilLog2(params.getNumOutputs()))),
+                      biasInput,
+                      isInitializingWeights & (initChannel < params.getNumOutputs()));
 
-        outputControlFlag <==
-                schedulerIter.eq(getSchedulerIterations() - 1)
-                & convIter.eq(getConvolutionIterations() - 1)
-                & kernelIter.eq(getKernelIterations() - 1);
-
-
+        // logic for accumulating outputs
         for (int channel = 0 ; channel < layerParams.getNumOutputs() ; channel++) {
             final int convFoldingFactor = layerParams.getConv().getConvFoldingFactor();
             DFEVar acc = GlobalConfig.dataType.newInstance(this);
@@ -108,56 +142,42 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
         }
 
         // debugging output
-        // String s_output = "[";
-        // String s_conv = "[\n";
-        // List<Object> debugValues = new ArrayList<Object>();
-        // debugValues.add((Integer) layerParams.getLayerId());
-        // debugValues.add(inputControlFlag);
-        // debugValues.add(outputControlFlag);
-        // debugValues.add(pipelineStage);
-        // debugValues.add(pipelineLengthVar);
-        // debugValues.add(schedulerIter);
-        // debugValues.add(convIter);
-        // debugValues.add(kernelIter);
-        // for (DFEVector<DFEVar> vector: inputVectors) {
-        //     s_conv += "[";
-        //     for (int i = 0 ; i < params.getConv().getConvFoldingFactor() ; i++) {
-        //         debugValues.add(vector[i]);
-        //         s_conv += "%.3f, ";
-        //     }
-        //     s_conv += "]\n";
-        // }
-        // for (int i = 0 ; i < params.getNumOutputs() ; i++) {
-        //     debugValues.add(output[i]);
-        //     s_output += "%.3f, ";
-        // }
-        // s_conv += "]";
-        // s_output += "]";
-        // debug.simPrintf(
-        //         "ConvolutionAccumulatorKernel[layer = %d]"
-        //         + " inputControlFlag = %d outputControlFlag = %d"
-        //         + " pipelineStage = %d pipelineLengthVar = %d"
-        //         + " schedulerIter = %d convIter = %d kernelIter = %d"
-        //         + "\ninputs = " + s_conv + "\n"
-        //         + "\noutput = " + s_output + "\n",
-        //         debugValues.toArray(new Object [1]));
+        String s_output = "[";
+        String s_conv = "[\n";
+        List<Object> debugValues = new ArrayList<Object>();
+        debugValues.add((Integer) layerParams.getLayerId());
+        debugValues.add(outputControlFlag);
+        debugValues.add(pipelineStage);
+        debugValues.add(pipelineLengthVar);
+        debugValues.add(schedulerIter);
+        debugValues.add(convIter);
+        debugValues.add(kernelIter);
+        for (DFEVector<DFEVar> vector: inputVectors) {
+            s_conv += "[";
+            for (int i = 0 ; i < params.getConv().getConvFoldingFactor() ; i++) {
+                debugValues.add(vector[i]);
+                s_conv += "%.3f, ";
+            }
+            s_conv += "]\n";
+        }
+        for (int i = 0 ; i < params.getNumOutputs() ; i++) {
+            debugValues.add(output[i]);
+            s_output += "%.3f, ";
+        }
+        s_conv += "]";
+        s_output += "]";
+        debug.simPrintf(
+                "ConvolutionAccumulatorKernel[layer = %d]"
+                + " outputControlFlag = %d"
+                + " pipelineStage = %d pipelineLengthVar = %d"
+                + " schedulerIter = %d convIter = %d kernelIter = %d"
+                + "\ninputs = " + s_conv + "\n"
+                + "\noutput = " + s_output + "\n",
+                debugValues.toArray(new Object [1]));
+    }
 
-        // // Pipelined adder - may or may not be better, but this probably will not
-        //                      be the bottle neck of the performance, so there is not much point
-        //                      pouring too much work into this.
-        // DFEParLoop loop = new DFEParLoop(this, "loop");
-        // List<DFEVar> inputVars = new ArrayList<DFEVar>();
-        // List<DFEVar> transposedInputVars = new ArrayList<DFEVar>();
-        // for (int i = 0 ; i < layerParams.getConv().getWorkerFactor() ; i++) {
-        //     DFEVar input = io.input(getInputName(i), GlobalConfig.dataType, loop.ndone);
-        //     inputVars.add(input);
-        //     transposedInputVars.add(transpose(input, abc, loop.pipeline_len));
-        // }
-        // loop.set_input(biasRom.read(address));
-
-        // DFEVar result = loop.feedback + Utils.treeReduceAdd(transposedInputVars);
-        // loop.set_output(result);
-        // io.output("result", result, GlobalConfig.dataType, loop.done);
+    public String getBiasInputName() {
+        return "input_bias";
     }
 
     public String getInputName(int workerId) {
@@ -170,6 +190,11 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
 
     public String getOffsetExprName() {
         return String.format("offset");
+    }
+
+    public int initCycles() {
+        // maxeler requires streams to be a multiple of 16 bytes = 4 * 4 bytes.
+        return Utils.divCeil(layerParams.getNumOutputs(), 4) * 4;
     }
 
     public int cyclesPerImage() {

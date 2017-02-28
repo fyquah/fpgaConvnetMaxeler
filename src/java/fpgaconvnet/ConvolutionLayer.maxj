@@ -51,7 +51,7 @@ public class ConvolutionLayer {
 
     // TODO(fyq14): Once pipelining is introduced, this function probably needs some
     //              rewriting w.r.t. the cycles required.
-    protected void setKernelTimings(EngineInterface ei, InterfaceParam numberOfImages) {
+    protected void setKernelTimings(EngineInterface ei, InterfaceParam numberOfImages, InterfaceParam init) {
         /*
          * scheduler and convolution units do not have a loop offset, so we will not
          * need to deal with ei.getAutoLoopOffset.
@@ -60,7 +60,8 @@ public class ConvolutionLayer {
                     numberOfImages * scheduler.getKernel().cyclesPerImage());
 
         ei.setTicks(convolutionUnit.getKernel().getName(),
-                    numberOfImages * convolutionUnit.getKernel().cyclesPerImage());
+                    numberOfImages * convolutionUnit.getKernel().cyclesPerImage()
+                    + (init ? convolutionUnit.getKernel().initCycles() : 0));
 
         /* Accumulator */
         InterfaceParam latency = ei.getAutoLoopOffset(
@@ -69,7 +70,8 @@ public class ConvolutionLayer {
         ei.ignoreAutoLoopOffset(accumulator.getKernel().getName(),
                                 accumulator.getKernel().getOffsetExprName());
         ei.setTicks(accumulator.getKernel().getName(),
-                    numberOfImages * accumulator.getKernel().cyclesPerImage() * latency);
+                    numberOfImages * accumulator.getKernel().cyclesPerImage() * latency
+                    + (init ? accumulator.getKernel().initCycles() : 0));
     }
 
     /*
@@ -114,5 +116,30 @@ public class ConvolutionLayer {
         public KernelBlock getBlock() {
             return block;
         }
+    }
+
+    public DFELink getFiltersInput(int workerId) {
+        return convolutionUnit.getBlock().getInput(
+                convolutionUnit.getKernel().getWeightsInputName(workerId));
+    }
+
+    public DFELink getBiasInput() {
+        return accumulator.getBlock().getInput(
+                accumulator.getKernel().getBiasInputName());
+    }
+
+    public BoxedKernelBlock<ConvolutionSchedulerKernel> getScheduler()
+    {
+        return scheduler;
+    }
+
+    public BoxedKernelBlock<ConvolutionUnitKernel> getConvolutionUnit()
+    {
+        return convolutionUnit;
+    }
+
+    public BoxedKernelBlock<ConvolutionAccumulatorKernel> getAccumulator()
+    {
+        return accumulator;
     }
 }
