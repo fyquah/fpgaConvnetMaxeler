@@ -206,3 +206,103 @@ data:
     multiplier: 2160
     dsp_block: 1200
     block_memory: 2519
+- commit_hash: a4a61df
+  layer:
+    input_height: 28
+    input_width: 28
+    kernel_size: 5
+    num_inputs: 30
+    num_outputs: 32
+  name: resource_bench_11_MAIA_DFE
+  params:
+    conv_folding_factor: 1
+    kernel_folding_factor: 1
+    worker_factor: 1
+  time: '2017-02-26 03:25:00.108352'
+  usage:
+    logic_utilization: 66361
+    primary_ff: 105894
+    seconday_ff: 6163
+    multiplier: 1
+    dsp_block: 1
+    block_memory: 936
+- commit_hash: a4a61df
+  layer:
+    input_height: 28
+    input_width: 28
+    kernel_size: 5
+    num_inputs: 30
+    num_outputs: 32
+  name: resource_bench_12_MAIA_DFE
+  params:
+    conv_folding_factor: 4
+    kernel_folding_factor: 7
+    worker_factor: 8
+  time: '2017-02-26 07:16:57.286591'
+  usage:
+    logic_utilization: 80439
+    primary_ff: 141760
+    seconday_ff: 14095
+    multiplier: 416
+    dsp_block: 224
+    block_memory: 1387
+- commit_hash: a4a61df
+  layer:
+    input_height: 28
+    input_width: 28
+    kernel_size: 7
+    num_inputs: 16
+    num_outputs: 16
+  name: resource_bench_13_MAIA_DFE
+  params:
+    conv_folding_factor: 4
+    kernel_folding_factor: 25
+    worker_factor: 8
+  time: '2017-02-26 19:46:21.691699'
+  usage:
+    logic_utilization: 137496
+    primary_ff: 262919
+    seconday_ff: 8753
+    multiplier: 3136
+    dsp_block: 1600
+    block_memory: 2567
+- commit_hash: a4a61df
+  layer:
+    input_height: 28
+    input_width: 28
+    kernel_size: 7
+    num_inputs: 16
+    num_outputs: 16
+  name: resource_bench_14_MAIA_DFE
+  params:
+    conv_folding_factor: 4
+    kernel_folding_factor: 25
+    worker_factor: 8
+  time: '2017-02-27 00:14:31.036697'
+  usage:
+    logic_utilization: 91262
+    primary_ff: 169605
+    seconday_ff: 7027
+    multiplier: 1568
+    dsp_block: 800
+    block_memory: 1600
+- commit_hash: a4a61df
+  layer:
+    input_height: 28
+    input_width: 28
+    kernel_size: 5
+    num_inputs: 32
+    num_outputs: 32
+  name: resource_bench_16_MAIA_DFE
+  params:
+    conv_folding_factor: 32
+    kernel_folding_factor: 5
+    worker_factor: 7
+  time: '2017-02-27 10:00:55.585696'
+  usage:
+    logic_utilization: 103774
+    primary_ff: 178889
+    seconday_ff: 14999
+    multiplier: 2016
+    dsp_block: 1120
+    block_memory: 2332
