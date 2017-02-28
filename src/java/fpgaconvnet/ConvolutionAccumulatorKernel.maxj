@@ -18,7 +18,7 @@ import fpgaconvnet.protos.Parameters.LayerParameter;
 
 
 public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
-    private final Memory<DFEVar> biasRom;
+    private final List<Memory<DFEVar>> biasRoms;
     private final LayerParameter layerParams;
     private final DFEVectorType<DFEVar> inputVectorType;
     private final DFEVectorType<DFEVar> outputVectorType;
@@ -44,7 +44,11 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
                 GlobalConfig.dataType, layerParams.getConv().getConvFoldingFactor());
         outputVectorType = new DFEVectorType<DFEVar>(
                 GlobalConfig.dataType, layerParams.getNumOutputs());
-        biasRom = mem.alloc(GlobalConfig.dataType, params.getNumOutputs());
+        biasRoms = new ArrayList<Memory<DFEVar>>();
+
+        for (int i = 0; i < params.getNumOutputs() ; i++) {
+            biasRoms.add(mem.alloc(GlobalConfig.dataType, 2));
+        }
 
         DFEVector<DFEVar> output = outputVectorType.newInstance(this);
         List<DFEVector<DFEVar>> inputVectors = new ArrayList<DFEVector<DFEVar>>();
@@ -113,22 +117,24 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
                 params.getLayerId(),
                 biasInput,
                 initChannel.cast(dfeUInt(Utils.ceilLog2(params.getNumOutputs()))));
-        biasRom.write(initChannel.cast(dfeUInt(Utils.ceilLog2(params.getNumOutputs()))),
-                      biasInput,
-                      isInitializingWeights & (initChannel < params.getNumOutputs()));
+        for (int i = 0 ; i < params.getNumOutputs() ; i++) {
+            biasRoms[i].write(
+                    constant.var(dfeUInt(1), 0),
+                    biasInput,
+                    isInitializingWeights & (initChannel.eq(i)));
+        }
 
         // logic for accumulating outputs
         for (int channel = 0 ; channel < layerParams.getNumOutputs() ; channel++) {
             final int convFoldingFactor = layerParams.getConv().getConvFoldingFactor();
             DFEVar acc = GlobalConfig.dataType.newInstance(this);
-            DFEType addressType = dfeUInt(Utils.ceilLog2(layerParams.getNumOutputs()));
             DFEVar initFlag = streamCounter.eq(
                     (channel / layerParams.getConv().getConvFoldingFactor()));
             DFEVar sumVars = Utils.treeReduceAdd(map(inputVectors, channel % convFoldingFactor));
             DFEVar channelOutputFlag = (
                     convIter.eq(channel / layerParams.getConv().getConvFoldingFactor()));
             DFEVar muxedSumVars = channelOutputFlag ? sumVars : 0.0;
-            DFEVar bias = biasRom.read(constant.var(addressType, channel));
+            DFEVar bias = biasRoms[channel].read(constant.var(dfeUInt(1), 0));
             DFEVar carriedSum = stream.offset(acc, -loopOffsetExpr);
 
             // push and pop pipelining factor required to make sure this accumulator runs at
