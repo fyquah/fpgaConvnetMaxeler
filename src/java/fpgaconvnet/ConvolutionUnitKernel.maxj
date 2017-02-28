@@ -49,29 +49,33 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
         DFEVar initAddress = Utils.chainCounterOrZero(this, initChain, totalAddressCount);
         Counter initializationCompleteCtr = control.count.makeCounter(
                 control.count.makeParams(1)
-                .withInc(0)
-                .withMax(2)
+                .withInc(1)
+                .withMax(1)
                 .withWrapMode(Count.WrapMode.STOP_AT_MAX)
                 .withEnable(initConvIter.eq(layerParams.getConv().getConvFoldingFactor() - 1)
                             & initAddress.eq(totalAddressCount - 1)));
-        DFEVar initializationComplete = initializationCompleteCtr.getCount();
+
 
         DFEVar initWeightsFlag = io.scalarInput("init", dfeUInt(1));
+        DFEVar initializationComplete = initializationCompleteCtr.getCount();
         DFEVar isInitializingWeights = initWeightsFlag & ~initializationComplete;
-        isInitializingWeights.simWatch("isInitializingWeights");
-        initializationComplete.simWatch("initializationComplete");
-        initConvIter.simWatch("initConvIter");
-        initAddress.simWatch("initAddress");
-        debug.simPrintf("layer_%d init weights = %d\n",
-                    params.getLayerId(), isInitializingWeights);
 
         // Runtime counters
-        CounterChain chain = control.count.makeCounterChain(initializationComplete);
+        CounterChain chain = control.count.makeCounterChain(~isInitializingWeights);
         DFEVar iter = Utils.chainCounterOrZero(this, chain, getConvolutionIterations());
         DFEVar kernelIter = Utils.chainCounterOrZero(this, chain, getKernelIterations());
         DFEVar address = control.count.simpleCounter(
                 Utils.ceilLog2(totalAddressCount), totalAddressCount);
 
+
+        iter.simWatch("iter");
+        kernelIter.simWatch("kernelIter");
+        isInitializingWeights.simWatch("isInitializingWeights");
+        initializationComplete.simWatch("initializationComplete");
+        initConvIter.simWatch("initConvIter");
+        initAddress.simWatch("initAddress");
+        debug.simPrintf("layer_%d init weights = %d iter = %d kernelIter = %d\n",
+                    params.getLayerId(), isInitializingWeights, iter, kernelIter);
 
         for (int workerId = 0 ; workerId < params.getConv().getWorkerFactor() ; workerId++) {
 
@@ -124,7 +128,8 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
     public int initStreamSize() {
         return layerParams.getConv().getConvFoldingFactor()
             * getSchedulerIterations() * getConvolutionIterations()
-            * layerParams.getConv().getKernelSize() * layerParams.getConv().getKernelSize();
+            * getKernelIterations()
+            * layerParams.getConv().getKernelFoldingFactor(); // size of every weight input Vector.
     }
 
     public int cyclesPerImage() {
