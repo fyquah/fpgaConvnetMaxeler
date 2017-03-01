@@ -1,6 +1,7 @@
 #include <cmath>
 #include <cstring>
 
+#include <algorithm>
 #include <fstream>
 #include <iostream>
 #include <string>
@@ -10,6 +11,24 @@
 
 #include "fpgaconvnet/convnet.h"
 #include "fpgaconvnet/protos/parameters.pb.h"
+
+
+static uint64_t gcd(uint64_t a, uint64_t b)
+{
+    if (b > a) {
+        std::swap(a, b);
+    }
+    if (b == 0) {
+        return a;
+    } else {
+        return gcd(b, a % b);
+    }
+}
+
+static uint64_t lcm(uint64_t a, uint64_t b)
+{
+    return a / gcd(a, b) * b;
+}
 
 
 static void generic_load(std::string filename, int count, float *output)
@@ -290,22 +309,40 @@ void allign_and_place_kernel_weights(
 }
 
 
-void max_set_layer_weights(
+void Convnet::set_layer_weights(
         max_actions_t *action,
         const protos::LayerParameter & layer,
         float *worker_kernels,
         float *bias
 )
 {
+    /* Requirements:
+     * - stream to be a multiple of 16 bytes = 4 * 4 floats
+     * - As input vector is of size layer.conv().kernel_folding_factor(), let's call this number
+     *   kff.
+     */
     char buffer[30];
+    uint64_t multiple_base = lcm(4, layer.conv().kernel_folding_factor())
+            / layer.conv().kernel_folding_factor();
     uint64_t worker_rom_size = calc_total_rom_size(layer) / layer.conv().worker_factor();
+    uint64_t num_iters = worker_rom_size / layer.conv().kernel_folding_factor();
+    uint64_t padded_num_iters = div_ceil(num_iters, multiple_base) * multiple_base;
+    uint64_t padded_worker_rom_size =
+            padded_num_iters * layer.conv().kernel_folding_factor();
 
     for (int worker = 0 ; worker < layer.conv().worker_factor() ; worker++) {
-        sprintf(buffer, "kernel_%d_%d", layer.layer_id(), worker);
-        max_queue_input(
-                action, buffer,
+        float *values = new float[padded_worker_rom_size];
+
+        queue_weights.push_back(values);
+        std::memcpy(values, 
                 worker_kernels + (worker * worker_rom_size),
                 sizeof(float) * worker_rom_size);
+        sprintf(buffer, "kernel_%d_%d", layer.layer_id(), worker);
+        max_queue_input(
+                action,
+                buffer,
+                values,
+                sizeof(float) * padded_worker_rom_size);
     }
 
     sprintf(buffer, "bias_%d", layer.layer_id());
@@ -353,6 +390,9 @@ Convnet::~Convnet ()
         delete[] kernels[i];
         delete[] bias[i];
         delete[] worker_kernels[i];
+    }
+    for (int i = 0 ; i < queue_weights.size(); i++) {
+        delete[] queue_weights[i];
     }
     if (dfe) {
         max_unload(dfe);
@@ -417,7 +457,7 @@ std::vector<float> Convnet::max_run_inference(
             it != network_params.layer().end();
             it++) {
         if (it->has_conv()) {
-            max_set_layer_weights(
+            set_layer_weights(
                     run_action, *it, worker_kernels[i], bias[i]);
             i++;
         }

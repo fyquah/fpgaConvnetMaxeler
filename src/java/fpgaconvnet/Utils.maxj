@@ -21,6 +21,25 @@ import fpgaconvnet.protos.Parameters;
 
 
 public class Utils {
+
+    public static long lcm(long a, long b) {
+        return a / gcd(a, b) * b;
+    }
+
+    public static long gcd(long a, long b) {
+        if (b > a) {
+            long tmp = a;
+            a = b;
+            b = tmp;
+        }
+
+        if (b == 0) {
+            return a;
+        } else {
+            return gcd(b, a % b);
+        }
+    }
+
     public static int divCeil(int a, int b) {
         if (a % b == 0) {
             return a / b;
