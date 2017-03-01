@@ -243,8 +243,8 @@ void verify_conv_output(
             total_error += std::abs(obtained  - expected);
             total_pixels += 1;
 
-            log_stdout(INFO) << "Obtained " << obtained << ", expected " << expected << std::endl;
             if (std::abs(obtained - expected) > 0.01) {
+                log_stdout(INFO) << "Obtained " << obtained << ", expected " << expected << std::endl;
                 log_stdout(WARNING) << "Error > 0.01 while verifying output!" << std::endl;
             }
         }
