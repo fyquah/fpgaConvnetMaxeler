@@ -6,12 +6,19 @@ import java.util.List;
 
 import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEType;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVector;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVectorType;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Count.Counter;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.CounterChain;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Stream.OffsetExpr;
 
 public class SlidingWindow  {
     public final DFEVector<DFEVar> output;
+    private final DFEVar row;
+    private final DFEVar col;
+    private final DFEVar cycle;
+    private final CounterChain chain;
 
     // slides a 2d convolution window
     // around a input stream
@@ -23,16 +30,31 @@ public class SlidingWindow  {
         int kernelDim,
         int cyclesToHoldWindow
     ) {
-         DFEVectorType<DFEVar> vectorType = new DFEVectorType<DFEVar>(
-                 input.getType(),
-                 kernelDim * kernelDim);
-         output = vectorType.newInstance(argKernel);
+        DFEVectorType<DFEVar> vectorType = new DFEVectorType<DFEVar>(
+                input.getType(),
+                kernelDim * kernelDim);
+        output = vectorType.newInstance(argKernel);
+
+        chain = argKernel.control.count.makeCounterChain();
+        row = Utils.chainCounterOrZero(argKernel, chain, inputHeight);
+        col = Utils.chainCounterOrZero(argKernel, chain, inputWidth);
+        cycle = Utils.chainCounterOrZero(argKernel, chain, cyclesToHoldWindow);
 
         for (int i = 0 ; i < kernelDim ; i++) {
             for (int j = 0 ; j < kernelDim ; j++) {
-                int idx = ((i - kernelDim / 2) * inputWidth + (j - kernelDim / 2));
-                int offset = cyclesToHoldWindow * idx;
-                output[i * kernelDim + j] <== argKernel.stream.offset(input, offset);
+                final int idx = (
+                        (i - kernelDim / 2) * inputWidth + (j - kernelDim / 2));
+                final int offset = cyclesToHoldWindow * idx;
+                final DFEType rowType = argKernel.dfeInt(Utils.ceilLog2(inputHeight) + 1);
+                final DFEType colType = argKernel.dfeInt(Utils.ceilLog2(inputWidth) + 1);
+                final DFEVar flag =
+                        (row.cast(rowType) + (i - kernelDim / 2) >= 0
+                         & row.cast(rowType) + (i - kernelDim / 2) < inputHeight
+                         & col.cast(colType) + (j - kernelDim / 2) >= 0
+                         & col.cast(colType) + (j - kernelDim / 2) < inputWidth);
+
+                output[i * kernelDim + j] <==
+                        flag ? argKernel.stream.offset(input, offset) : 0.0;
             }
         }
     }

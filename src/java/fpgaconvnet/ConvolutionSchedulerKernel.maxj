@@ -7,6 +7,8 @@ import com.maxeler.maxcompiler.v2.kernelcompiler.KernelParameters;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVector;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVectorType;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Count;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Count.Counter;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.CounterChain;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Stream.OffsetExpr;
 
@@ -69,6 +71,13 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
         col = Utils.chainCounterOrZero(this, masterChain, inputDimension.width());
         iter = Utils.chainCounterOrZero(this, masterChain, getSchedulerIterations());
 
+        DFEVar rowStrideCounter = buildRowStrideCounter(row, col);
+        DFEVar colStrideCounter = buildColStrideCounter(row, col);
+        DFEVar outputControlFlag =
+                ~isBorder(row, col)
+                & rowStrideCounter.eq(0)
+                & colStrideCounter.eq(0);
+
         if (layerParams.getIsFirstLayer()) {
             /* First layer - cast from dfefloat to fixed point. */
             DFEVectorType<DFEVar> rawInputVectorType = new DFEVectorType<DFEVar>(
@@ -83,7 +92,6 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
             input <== io.input(getInputName(), inputVectorType, iter.eq(0));
         }
 
-        DFEVar outputControlFlag = ~isBorder(row, col);
         for (int workerId = 0 ; workerId < workerFactor ; workerId++) {
             List<Integer> channelList = getSchedulerChannels(workerId);
             output_y[workerId] <== toMuxedPixel(iter, channelList);
@@ -119,6 +127,39 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
         }
     }
 
+    private DFEVar buildRowStrideCounter(DFEVar row, DFEVar col) {
+        if (layerParams.getConv().getStride() == 1) {
+            return constant.var(dfeBool(), 0);
+
+        } else {
+            return control.count.makeCounter(
+                    control.count.makeParams(Utils.ceilLog2(layerParams.getConv().getStride()))
+                    .withMax(layerParams.getConv().getStride())
+                    .withInc(1)
+                    .withEnable(col.eq(inputDimension.width() - 1)
+                                & iter.eq(getSchedulerIterations() - 1)
+                                & isBorder(row, col)))
+                        .getCount();
+
+        }
+    }
+
+    private DFEVar buildColStrideCounter(DFEVar row, DFEVar col) {
+        if (layerParams.getConv().getStride() == 1) {
+            return constant.var(dfeBool(), 0);
+
+        } else {
+            return control.count.makeCounter(
+                    control.count.makeParams(Utils.ceilLog2(layerParams.getConv().getStride()))
+                    .withMax(layerParams.getConv().getStride())
+                    .withInc(1)
+                    .withEnable(iter.eq(getSchedulerIterations() - 1)
+                                & isBorder(row, col)))
+                        .getCount();
+
+        }
+    }
+
     public int cyclesPerImage() {
         return (inputDimension.width() * inputDimension.height() * getSchedulerIterations());
     }
@@ -133,7 +174,7 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
 
     protected DFEVar isBorder(DFEVar row, DFEVar col) {
         DFEVar flag = constant.var(dfeBool(), 0);
-        for (int i = 0 ; i < (kernelDim - 1) / 2 ; i++) {
+        for (int i = 0 ; i < ((kernelDim - 1) / 2) - layerParams.getConv().getPad() ; i++) {
             flag = flag | row.eq(i) | col.eq(i)
                 | row.eq(inputDimension.height() - 1 - i)
                 | col.eq(inputDimension.width() - 1 - i);
