@@ -207,7 +207,7 @@ void verify_conv_output(
                                final_layer.output_width() *
                                final_layer.num_outputs());
 
-    for (uint32_t i = 0 ; i < N ; i++) {
+    for (uint32_t i = 0 ; i < std::min(N, 10ul) ; i++) {
         for (uint32_t j = 0 ; j < conv_out_size; j++) {
             float expected;
             float obtained = conv_out[conv_out_size * i + j];
