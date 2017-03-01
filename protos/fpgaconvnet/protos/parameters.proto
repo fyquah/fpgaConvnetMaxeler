@@ -11,11 +11,17 @@ message Network
 
 message LayerParameter
 {
-
     optional uint32 input_height = 3;
     optional uint32 input_width = 4;
     optional uint32 num_inputs = 5;
+
+    enum Activation
+    {
+        None = 1;
+        Relu = 2;
+    }
     optional uint32 num_outputs = 6;
+    optional Activation activation = 8 [default = None];
 
     oneof params {
         ConvolutionParameter conv = 1;
@@ -35,11 +41,6 @@ message LayerParameter
 
 message ConvolutionParameter
 {
-    enum Activation
-    {
-        None = 1;
-        Relu = 2;
-    }
     optional uint32 worker_factor = 1;         // 1 <= x <= num_inputs
     optional uint32 conv_folding_factor = 2;    // 1 <= x <= num_outputs
                                               // - number of convoluters per worker.
@@ -50,7 +51,8 @@ message ConvolutionParameter
      * optional at subsequent layers. They will be used for checking if they are provided.
      */
     optional uint32 kernel_size = 7;
-    optional Activation activation = 8 [default = None];
+    optional uint32 stride = 8 [default = 1];
+    optional uint32 pad = 9 [default = 0];
 }
 
 
@@ -65,6 +67,8 @@ message PoolingParameter
     optional PoolingType type = 1 [default = Max];
     /* 2D Pooling supported only */
     optional uint32 dim = 2;
+    /* when stride is not given, stride will be assiged to dim. */
+    optional uint32 stride = 3;
 }
 
 

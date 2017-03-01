@@ -10,8 +10,9 @@ layer {
         kernel_folding_factor: 13
 
         kernel_size: 5
-        activation: Relu
     }
+
+    activation: Relu
 }
 layer {
     pool: {
@@ -33,8 +34,9 @@ layer {
         kernel_folding_factor: 7
 
         kernel_size: 5
-        activation: Relu
     }
+
+    activation: Relu
 }
 layer {
     pool: {

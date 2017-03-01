@@ -22,6 +22,10 @@ public class ParametersTransformer {
                                          layer_id, message));
     }
 
+    private void checkLayerDims() {
+
+    }
+
     private LayerParameter parseLayer(int layer_id, LayerParameter layerParameter,
                                       LayerParameter previousLayer) {
         LayerParameter.Builder builder = LayerParameter.newBuilder();
@@ -84,40 +88,72 @@ public class ParametersTransformer {
 
         /* Calculate the new dimensions based on the data that we have on the ops. */
         LayerParameter.ParamsCase paramsCase = layerParameter.getParamsCase();
-        int expectedHeight = -1;
-        int expectedWidth = -1;
+        int stride = -1;
+        int pad = -1;
+        int kernelSize = -1;
+
         if (paramsCase.equals(LayerParameter.ParamsCase.CONV)) {
             ConvolutionParameter convParams = layerParameter.getConv();
+
             if (!convParams.hasKernelSize() || convParams.getKernelSize() % 2 == 0) {
-                raiseError(layer_id, "Missing /invalid conv kernel_size");
+                raiseError(layer_id, ("Missing /invalid conv kernel_size. Conv's Kernel size "
+                                      + "has to be an odd number."));
             }
             if (!layerParameter.hasNumOutputs() || layerParameter.getNumOutputs() == 0) {
                 raiseError(layer_id, "numOutputs must be a positive integer in conv layers!");
             }
+
+            stride = convParams.getStride();
+            pad = convParams.getPad();
+            stride = convParams.hasStride() ? convParams.getStride() : 1;
+            kernelSize = convParams.getKernelSize();
             numOutputs = layerParameter.getNumOutputs();
-            expectedHeight = inputHeight + 1 - convParams.getKernelSize();
-            expectedWidth = inputWidth + 1 - convParams.getKernelSize();
-            builder.setConv(convParams);
+
+            builder.setConv(
+                    ConvolutionParameter.newBuilder()
+                    .mergeFrom(convParams)
+                    .setStride(stride)
+                    .build());
 
         } else if (paramsCase.equals(LayerParameter.ParamsCase.POOL)) {
             PoolingParameter poolParams = layerParameter.getPool();
-            if (layerParameter.getInputHeight() % poolParams.getDim() != 0 ||
-                        layerParameter.getInputWidth() % poolParams.getDim() != 0) {
-                raiseError(layer_id, "Pool dim doesn't divide the layer height / width.");
-            }
+
             if (layerParameter.hasNumOutputs() &&
                     layerParameter.getNumOutputs() != numInputs) {
                     raiseError(layer_id,
                                "num_inputs and num_outputs for pooling layer should be the same");
             }
+
+            pad = 0;
+            kernelSize = poolParams.getDim();
+            stride = poolParams.hasStride() ? poolParams.getStride() : kernelSize;
             numOutputs = numInputs;
-            expectedHeight = inputHeight / poolParams.getDim();
-            expectedWidth = inputWidth / poolParams.getDim();
-            builder.setPool(poolParams);
+
+            builder.setPool(
+                    PoolingParameter.newBuilder()
+                    .mergeFrom(poolParams)
+                    .setStride(stride)
+                    .build());
 
         } else {
             raiseError(layer_id, "Either pool of conv has to be set!");
 
+        }
+
+        final int unstridedHeight = inputHeight - kernelSize + 2 * pad;
+        final int unstridedWidth = inputWidth - kernelSize + 2 * pad;
+        final int expectedHeight = unstridedHeight / stride + 1;
+        final int expectedWidth = unstridedWidth / stride + 1;
+
+        if (unstridedHeight % stride != 0) {
+            raiseError(layer_id,
+                       ("`stride` doesn't divide "
+                        + "`input_height - kernel_size + 2 * pad`!"));
+        }
+        if (unstridedWidth % stride != 0) {
+            raiseError(layer_id,
+                       ("`stride` doesn't divide "
+                        + "`input_width - kernel_size + 2 * pad`!"));
         }
 
         builder.setInputHeight(inputHeight);

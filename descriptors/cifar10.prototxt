@@ -22,7 +22,6 @@ layer {
 
 
 layer {
-    num_inputs: 32
     num_outputs: 32
 
     conv: {
@@ -43,9 +42,6 @@ layer {
 }
 
 layer {
-    input_height: 32
-    input_width: 32
-    num_inputs: 3
     num_outputs: 64
 
     conv: {
