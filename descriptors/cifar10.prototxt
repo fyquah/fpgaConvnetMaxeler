@@ -1,0 +1,66 @@
+layer {
+    input_height: 32
+    input_width: 32
+    num_inputs: 3
+
+    num_outputs: 32
+
+    conv: {
+        pad: 2
+        kernel_size: 5
+    }
+}
+
+layer {
+    pool: {
+        type: Max
+        dim: 3
+        stride: 2
+    }
+    activation: Relu
+}
+
+
+layer {
+    num_inputs: 32
+    num_outputs: 32
+
+    conv: {
+        stride: 1
+        pad: 2
+        kernel_size: 5
+    }
+
+    activation: Relu
+}
+
+layer {
+    pool: {
+        type: Average
+        dim: 3
+        stride: 2
+    }
+}
+
+layer {
+    input_height: 32
+    input_width: 32
+    num_inputs: 3
+    num_outputs: 64
+
+    conv: {
+        pad: 2
+        kernel_size: 5
+        stride: 1
+    }
+
+    activation: Relu
+}
+
+layer {
+    pool: {
+        type: Average
+        dim: 3
+        stride: 2
+    }
+}
