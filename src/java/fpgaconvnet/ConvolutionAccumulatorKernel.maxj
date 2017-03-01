@@ -148,38 +148,38 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
         }
 
         // debugging output
-        String s_output = "[";
-        String s_conv = "[\n";
-        List<Object> debugValues = new ArrayList<Object>();
-        debugValues.add((Integer) layerParams.getLayerId());
-        debugValues.add(outputControlFlag);
-        debugValues.add(pipelineStage);
-        debugValues.add(pipelineLengthVar);
-        debugValues.add(schedulerIter);
-        debugValues.add(convIter);
-        debugValues.add(kernelIter);
-        for (DFEVector<DFEVar> vector: inputVectors) {
-            s_conv += "[";
-            for (int i = 0 ; i < params.getConv().getConvFoldingFactor() ; i++) {
-                debugValues.add(vector[i]);
-                s_conv += "%.3f, ";
-            }
-            s_conv += "]\n";
-        }
-        for (int i = 0 ; i < params.getNumOutputs() ; i++) {
-            debugValues.add(output[i]);
-            s_output += "%.3f, ";
-        }
-        s_conv += "]";
-        s_output += "]";
-        debug.simPrintf(
-                "ConvolutionAccumulatorKernel[layer = %d]"
-                + " outputControlFlag = %d"
-                + " pipelineStage = %d pipelineLengthVar = %d"
-                + " schedulerIter = %d convIter = %d kernelIter = %d"
-                + "\ninputs = " + s_conv + "\n"
-                + "\noutput = " + s_output + "\n",
-                debugValues.toArray(new Object [1]));
+        // String s_output = "[";
+        // String s_conv = "[\n";
+        // List<Object> debugValues = new ArrayList<Object>();
+        // debugValues.add((Integer) layerParams.getLayerId());
+        // debugValues.add(outputControlFlag);
+        // debugValues.add(pipelineStage);
+        // debugValues.add(pipelineLengthVar);
+        // debugValues.add(schedulerIter);
+        // debugValues.add(convIter);
+        // debugValues.add(kernelIter);
+        // for (DFEVector<DFEVar> vector: inputVectors) {
+        //     s_conv += "[";
+        //     for (int i = 0 ; i < params.getConv().getConvFoldingFactor() ; i++) {
+        //         debugValues.add(vector[i]);
+        //         s_conv += "%.3f, ";
+        //     }
+        //     s_conv += "]\n";
+        // }
+        // for (int i = 0 ; i < params.getNumOutputs() ; i++) {
+        //     debugValues.add(output[i]);
+        //     s_output += "%.3f, ";
+        // }
+        // s_conv += "]";
+        // s_output += "]";
+        // debug.simPrintf(
+        //         "ConvolutionAccumulatorKernel[layer = %d]"
+        //         + " outputControlFlag = %d"
+        //         + " pipelineStage = %d pipelineLengthVar = %d"
+        //         + " schedulerIter = %d convIter = %d kernelIter = %d"
+        //         + "\ninputs = " + s_conv + "\n"
+        //         + "\noutput = " + s_output + "\n",
+        //         debugValues.toArray(new Object [1]));
     }
 
     public String getBiasInputName() {

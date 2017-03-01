@@ -85,9 +85,6 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
         initConvIter.simWatch("initConvIter");
         initAddress.simWatch("initAddress");
 
-        debug.simPrintf("layer_%d init weights = %d iter = %d kernelIter = %d\n",
-                    params.getLayerId(), isInitializingWeights, iter, kernelIter);
-
         for (int workerId = 0 ; workerId < params.getConv().getWorkerFactor() ; workerId++) {
 
             DFEVar inputControlFlag = ~isInitializingWeights & iter.eq(0) & kernelIter.eq(0);
