@@ -13,6 +13,7 @@ import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.CounterChain;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Stream.OffsetExpr;
 
 import fpgaconvnet.protos.Parameters.LayerParameter;
+import fpgaconvnet.lib.StrideCounter;
 
 /* 
  * io.input:
@@ -71,18 +72,19 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
         col = Utils.chainCounterOrZero(this, masterChain, inputDimension.width());
         iter = Utils.chainCounterOrZero(this, masterChain, getSchedulerIterations());
 
-        DFEVar rowStrideCounter = buildRowStrideCounter(row, col, iter);
-        DFEVar colStrideCounter = buildColStrideCounter(row, col, iter);
-        DFEVar outputControlFlag =
+        StrideCounter strideCounter = new StrideCounter(
+                this,
+                layerParams.getConv().getStride(),
                 ~isBorder(row, col)
-                & rowStrideCounter.eq(0)
-                & colStrideCounter.eq(0);
+                    & col.eq(inputDimension.width() - 1)
+                    & iter.eq(getSchedulerIterations() - 1),
+                ~isBorder(row, col)
+                    & iter.eq(getSchedulerIterations() - 1));
+        DFEVar outputControlFlag = strideCounter.isOutputReady() & ~isBorder(row, col);
 
         row.simWatch("row");
         col.simWatch("col");
         iter.simWatch("iter");
-        rowStrideCounter.simWatch("row_stride");
-        colStrideCounter.simWatch("col_stride");
         outputControlFlag.simWatch("outputControlFlag");
 
         if (layerParams.getIsFirstLayer()) {
@@ -106,64 +108,6 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
                       output_y[workerId],
                       outputVectorType,
                       outputControlFlag);
-        }
-
-        /* For debugging only. */
-        // String s_kernel = "[\n";
-        // for (int i = 0 ; i < kernelDim ; i++) {
-        //     s_kernel += "[";
-        //     for (int j = 0; j < kernelDim ; j++) {
-        //         s_kernel += "%.3f, "; 
-        //     }
-        //     s_kernel += "],\n";
-        // }
-        // s_kernel += "]\n";
-        // for (int i = 0 ; i < workerFactor ; i++) {
-        //     DFEVar[] debugValues = new DFEVar[3 + kernelDim * kernelDim];
-        //     debugValues[0] = outputControlFlag;
-        //     debugValues[1] = row;
-        //     debugValues[2] = col;
-
-        //     for (int j = 0 ; j < kernelDim * kernelDim ; j++) {
-        //         debugValues[3 + j] = output_y[i][j];
-        //     }
-        //     debug.simPrintf("ConvolutionScheduler[layer = " + layerParams.getLayerId() + "] "
-        //                     + "outputFlag = %d row = %d col = %d worker = " + i + "\n"
-        //                     + "pixel_window = " + s_kernel,
-        //                     (Object[]) debugValues);
-        // }
-    }
-
-    private DFEVar buildRowStrideCounter(DFEVar row, DFEVar col, DFEVar iter) {
-        if (layerParams.getConv().getStride() == 1) {
-            return constant.var(dfeBool(), 0);
-
-        } else {
-            return control.count.makeCounter(
-                    control.count.makeParams(Utils.ceilLog2(layerParams.getConv().getStride()))
-                    .withMax(layerParams.getConv().getStride())
-                    .withInc(1)
-                    .withEnable(col.eq(inputDimension.width() - 1)
-                                & iter.eq(getSchedulerIterations() - 1)
-                                & isBorder(row, col)))
-                        .getCount();
-
-        }
-    }
-
-    private DFEVar buildColStrideCounter(DFEVar row, DFEVar col, DFEVar iter) {
-        if (layerParams.getConv().getStride() == 1) {
-            return constant.var(dfeBool(), 0);
-
-        } else {
-            return control.count.makeCounter(
-                    control.count.makeParams(Utils.ceilLog2(layerParams.getConv().getStride()))
-                    .withMax(layerParams.getConv().getStride())
-                    .withInc(1)
-                    .withEnable(iter.eq(getSchedulerIterations() - 1)
-                                & isBorder(row, col)))
-                        .getCount();
-
         }
     }
 

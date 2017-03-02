@@ -59,16 +59,13 @@ public class SlidingWindow extends KernelLib {
         col = Utils.chainCounterOrZero(this, chain, inputWidth);
         cycle = Utils.chainCounterOrZero(this, chain, cyclesToHoldWindow);
 
-        row.simWatch("row");
-        col.simWatch("col");
-
         for (int i = 0 ; i < kernelDim ; i++) {
             for (int j = 0 ; j < kernelDim ; j++) {
                 final int idx = ((i - kernelDim / 2) * inputWidth + (j - kernelDim / 2));
                 final int offset = cyclesToHoldWindow * idx;
-                final DFEType rowType = argKernel.dfeInt(
+                final DFEType rowType = dfeInt(
                         Utils.ceilLog2(inputHeight + kernelDim / 2) + 1);
-                final DFEType colType = argKernel.dfeInt(
+                final DFEType colType = dfeInt(
                         Utils.ceilLog2(inputWidth + kernelDim / 2) + 1);
                 final DFEVar flag =
                         ((row.cast(rowType) + (i - kernelDim / 2) >= 0)
@@ -78,10 +75,6 @@ public class SlidingWindow extends KernelLib {
 
                 output[i * kernelDim + j] <==
                         flag ? stream.offset(input, offset) : 0.0;
-
-                flag.simWatch(String.format("flag_%d_%d", i, j));
-                argKernel.stream.offset(input, offset).simWatch(String.format("actual_%d_%d", i, j));
-                output[i * kernelDim + j].simWatch(String.format("output_%d_%d", i, j));
             }
         }
     }

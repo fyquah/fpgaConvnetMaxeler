@@ -1,0 +1,50 @@
+package fpgaconvnet.lib;
+
+
+import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
+import com.maxeler.maxcompiler.v2.kernelcompiler.KernelLib;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
+
+import fpgaconvnet.Utils;
+
+public class StrideCounter extends KernelLib {
+
+    final int stride;
+    DFEVar rowStrideCtr;
+    DFEVar colStrideCtr;
+    DFEVar rowTrigger;
+    DFEVar colTrigger;
+
+    public StrideCounter(
+            Kernel kernel, int argStride, DFEVar argRowTrigger, DFEVar argColTrigger) {
+        super(kernel);
+        stride = argStride;
+        rowTrigger = argRowTrigger;
+        colTrigger = argColTrigger;
+        rowStrideCtr = makeStrideCtr(rowTrigger);
+        colStrideCtr = makeStrideCtr(colTrigger);
+    }
+
+    public DFEVar isOutputReady() {
+        /* colTrigger here, since if we cannoy increment the col counter at the next iteration,
+         * it means we will be at eq(0) again.
+         */
+        return rowStrideCtr.eq(0) & colStrideCtr.eq(0);
+    }
+
+    private DFEVar makeStrideCtr(DFEVar trigger) {
+
+        if (stride == 1) {
+            return constant.var(dfeBool(), 0);
+
+        } else {
+            return control.count.makeCounter(
+                    control.count.makeParams(Utils.ceilLog2(stride))
+                    .withMax(stride)
+                    .withInc(1)
+                    .withEnable(trigger))
+                        .getCount();
+
+        }
+    }
+}
