@@ -60,6 +60,7 @@ public class PoolingLayerKernel extends Kernel {
 
         // set the kernel I/O interface
         DFEVar outputFlag = poolingUnits[0].isOutputReady();
+        outputFlag.simWatch("outputFlag");
         input <== io.input("x", inputType);
 
         if (layer.getIsLastLayer()) {

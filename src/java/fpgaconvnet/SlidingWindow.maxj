@@ -13,6 +13,23 @@ import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Count.Counter;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.CounterChain;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Stream.OffsetExpr;
 
+/* For odd-number sliding windows, the windows are centered around the center pixel:
+ * 
+ * [ (-2, -2), (-1, -2), (0, -2), (1, -2), (2, -2),
+ *   (-2, -1), (-1, -1), (0, -1), (1, -1), (2, -1),
+ *   (-2, 0), (-1, 0), (0, 0), (1, 0), (2, 0),
+ *   (-2, 1), (-1, 1), (0, 1), (1, 1), (2, 1),
+ *   (-2, 2), (-2, 2), (0, 2), (1, 2), (2, 2) ]
+ *
+ * For even-number sliding windows, the windows are centered around the bottom-right center pixel:
+ *
+ * [ (-2, -2), (-1, -2), (0, -2), (1, -2)
+ *   (-2, -1), (-1, -1), (0, -1), (1, -1)
+ *   (-2, 0), (-1, 0), (0, 0), (1, 0)
+ *   (-2, 1), (-1, 1), (0, 1), (1, 1) ]
+ *
+ */
+
 public class SlidingWindow  {
     public final DFEVector<DFEVar> output;
     private final DFEVar row;
@@ -40,21 +57,29 @@ public class SlidingWindow  {
         col = Utils.chainCounterOrZero(argKernel, chain, inputWidth);
         cycle = Utils.chainCounterOrZero(argKernel, chain, cyclesToHoldWindow);
 
+        row.simWatch("row");
+        col.simWatch("col");
+
         for (int i = 0 ; i < kernelDim ; i++) {
             for (int j = 0 ; j < kernelDim ; j++) {
-                final int idx = (
-                        (i - kernelDim / 2) * inputWidth + (j - kernelDim / 2));
+                final int idx = ((i - kernelDim / 2) * inputWidth + (j - kernelDim / 2));
                 final int offset = cyclesToHoldWindow * idx;
-                final DFEType rowType = argKernel.dfeInt(Utils.ceilLog2(inputHeight) + 1);
-                final DFEType colType = argKernel.dfeInt(Utils.ceilLog2(inputWidth) + 1);
+                final DFEType rowType = argKernel.dfeInt(
+                        Utils.ceilLog2(inputHeight + kernelDim / 2) + 1);
+                final DFEType colType = argKernel.dfeInt(
+                        Utils.ceilLog2(inputWidth + kernelDim / 2) + 1);
                 final DFEVar flag =
-                        (row.cast(rowType) + (i - kernelDim / 2) >= 0
-                         & row.cast(rowType) + (i - kernelDim / 2) < inputHeight
-                         & col.cast(colType) + (j - kernelDim / 2) >= 0
-                         & col.cast(colType) + (j - kernelDim / 2) < inputWidth);
+                        ((row.cast(rowType) + (i - kernelDim / 2) >= 0)
+                         & (row.cast(rowType) + (i - kernelDim / 2) < inputHeight)
+                         & (col.cast(colType) + (j - kernelDim / 2) >= 0)
+                         & (col.cast(colType) + (j - kernelDim / 2) < inputWidth));
 
                 output[i * kernelDim + j] <==
                         flag ? argKernel.stream.offset(input, offset) : 0.0;
+
+                flag.simWatch(String.format("flag_%d_%d", i, j));
+                argKernel.stream.offset(input, offset).simWatch(String.format("actual_%d_%d", i, j));
+                output[i * kernelDim + j].simWatch(String.format("output_%d_%d", i, j));
             }
         }
     }

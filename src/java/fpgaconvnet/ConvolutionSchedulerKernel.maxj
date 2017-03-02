@@ -71,8 +71,8 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
         col = Utils.chainCounterOrZero(this, masterChain, inputDimension.width());
         iter = Utils.chainCounterOrZero(this, masterChain, getSchedulerIterations());
 
-        DFEVar rowStrideCounter = buildRowStrideCounter(row, col);
-        DFEVar colStrideCounter = buildColStrideCounter(row, col);
+        DFEVar rowStrideCounter = buildRowStrideCounter(row, col, iter);
+        DFEVar colStrideCounter = buildColStrideCounter(row, col, iter);
         DFEVar outputControlFlag =
                 ~isBorder(row, col)
                 & rowStrideCounter.eq(0)
@@ -134,7 +134,7 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
         // }
     }
 
-    private DFEVar buildRowStrideCounter(DFEVar row, DFEVar col) {
+    private DFEVar buildRowStrideCounter(DFEVar row, DFEVar col, DFEVar iter) {
         if (layerParams.getConv().getStride() == 1) {
             return constant.var(dfeBool(), 0);
 
@@ -151,7 +151,7 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
         }
     }
 
-    private DFEVar buildColStrideCounter(DFEVar row, DFEVar col) {
+    private DFEVar buildColStrideCounter(DFEVar row, DFEVar col, DFEVar iter) {
         if (layerParams.getConv().getStride() == 1) {
             return constant.var(dfeBool(), 0);
 
