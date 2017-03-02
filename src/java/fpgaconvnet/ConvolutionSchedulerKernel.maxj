@@ -79,7 +79,10 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
                     & col.eq(inputDimension.width() - 1)
                     & iter.eq(getSchedulerIterations() - 1),
                 ~isBorder(row, col)
-                    & iter.eq(getSchedulerIterations() - 1));
+                    & iter.eq(getSchedulerIterations() - 1),
+                iter.eq(getSchedulerIterations() - 1)
+                    & col.eq(inputDimension.width() - 1)
+                    & row.eq(inputDimension.height() - 1));
         DFEVar outputControlFlag = strideCounter.isOutputReady() & ~isBorder(row, col);
 
         row.simWatch("row");

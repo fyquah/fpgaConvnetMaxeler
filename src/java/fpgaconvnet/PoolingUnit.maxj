@@ -18,12 +18,12 @@ import fpgaconvnet.protos.Parameters.PoolingParameter;
 
 public class PoolingUnit extends KernelLib {
     private final DFEVar output_;
-    private final DFEVar row, col, rowStride, colStride;
     private final DFEVar input;
     private final Kernel kernel;
     private final SlidingWindow slidingWindow;
     private final int inputHeight, inputWidth, kernelDim;
     private final AssociativeOp<DFEVar> op;
+
     private static final AssociativeOp<DFEVar> dfeMaxOp = new AssociativeOp<DFEVar>(){
         @Override
         public DFEVar op(DFEVar a, DFEVar b) { return a > b ? a : b; }
@@ -49,46 +49,19 @@ public class PoolingUnit extends KernelLib {
             inputWidth,
             kernelDim,
             1);
-        CounterChain chain = control.count.makeCounterChain();
-        row = chain.addCounter(inputHeight, 1);
-        col = chain.addCounter(inputWidth, 1);
-
-        Counter colStrideCtr = control.count.makeCounter(
-            control.count.makeParams(Utils.ceilLog2(kernelDim))
-                .withMax(kernelDim)
-                .withInc(1)
-                .withInitValue((kernelDim + 1) / 2)
-                .withWrapMode(Count.WrapMode.COUNT_LT_MAX_THEN_WRAP)
-        );
-        colStride = colStrideCtr.getCount();
-
-        Counter rowStrideCtr = control.count.makeCounter(
-            control.count.makeParams(Utils.ceilLog2(kernelDim))
-                .withMax(kernelDim)
-                .withInc(1)
-                .withInitValue((kernelDim + 1) / 2)
-                .withWrapMode(Count.WrapMode.COUNT_LT_MAX_THEN_WRAP)
-                .withEnable(col.eq(inputWidth - 1))
-        );
-        rowStride = rowStrideCtr.getCount();
 
         if (poolingType.equals(PoolingParameter.PoolingType.Average)) {
             op = dfeSumOp;
             output_ = TreeReduce.reduce(op, slidingWindow.asList()) / (kernelDim * kernelDim);
+
         } else if (poolingType.equals(PoolingParameter.PoolingType.Max)) {
             op = dfeMaxOp;
             output_ = TreeReduce.reduce(op, slidingWindow.asList());
+
         } else {
             throw new RuntimeException("Unknown Pooling type!");
-        }
-    }
 
-    protected void debugDump(List<DFEVar> input, DFEVar output) {
-        debug.simPrintf("[%d] ", isValidStride());
-        for (int i = 0 ; i < input.size() ; i++) {
-            debug.simPrintf("%.5f ", input[i]);
         }
-        debug.simPrintf("-> %.5f\n", output);
     }
 
     public void setInput(DFEVar x) {
@@ -97,40 +70,5 @@ public class PoolingUnit extends KernelLib {
 
     public DFEVar output() {
         return output_;
-    }
-
-    private DFEVar isBorder() {
-        DFEVar flag = constant.var(dfeBool(), 0);
-
-        if (kernelDim % 2 == 1) {
-            for (int i = 0 ; i < (kernelDim - 1) / 2 ; i++) {
-                flag = flag | row.eq(i) | col.eq(i)
-                        | row.eq(inputHeight - 1 - i)
-                        | col.eq(inputWidth - 1 - i);
-            }
-
-            return flag;
-        } else {
-            // handle top and left first
-            for (int i = 0 ; i < kernelDim / 2 ; i++) {
-                flag = flag | row.eq(i) | col.eq(i);
-            }
-
-            // handle bottom and right
-            for (int i = 0 ; i < (kernelDim / 2) - 1 ; i++) {
-                flag = flag | row.eq(inputHeight - 1 - i)
-                        | col.eq(inputWidth - 1 - i);
-            }
-
-            return flag;
-        }
-    }
-
-    private DFEVar isValidStride() {
-        return rowStride.eq(0) & colStride.eq(0);
-    }
-
-    public DFEVar isOutputReady() {
-        return ~isBorder() & isValidStride();
     }
 }

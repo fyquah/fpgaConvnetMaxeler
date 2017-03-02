@@ -16,13 +16,13 @@ public class StrideCounter extends KernelLib {
     DFEVar colTrigger;
 
     public StrideCounter(
-            Kernel kernel, int argStride, DFEVar argRowTrigger, DFEVar argColTrigger) {
+            Kernel kernel, int argStride, DFEVar argRowTrigger, DFEVar argColTrigger, DFEVar argReset) {
         super(kernel);
         stride = argStride;
         rowTrigger = argRowTrigger;
         colTrigger = argColTrigger;
-        rowStrideCtr = makeStrideCtr(rowTrigger);
-        colStrideCtr = makeStrideCtr(colTrigger);
+        rowStrideCtr = makeStrideCtr(rowTrigger, argReset);
+        colStrideCtr = makeStrideCtr(colTrigger, argReset);
     }
 
     public DFEVar isOutputReady() {
@@ -31,8 +31,13 @@ public class StrideCounter extends KernelLib {
          */
         return rowStrideCtr.eq(0) & colStrideCtr.eq(0);
     }
+    
+    public void simWatch() {
+        rowStrideCtr.simWatch("sc_row_stride");
+        colStrideCtr.simWatch("sc_col_stride");
+    }
 
-    private DFEVar makeStrideCtr(DFEVar trigger) {
+    private DFEVar makeStrideCtr(DFEVar trigger, DFEVar reset) {
 
         if (stride == 1) {
             return constant.var(dfeBool(), 0);
@@ -42,7 +47,21 @@ public class StrideCounter extends KernelLib {
                     control.count.makeParams(Utils.ceilLog2(stride))
                     .withMax(stride)
                     .withInc(1)
-                    .withEnable(trigger))
+                    .withReset(reset)
+                    /* reset takes precedence over a trigger - consider a 2 * 2 kernel at the
+                     * last pixel of an image.
+                     *
+                     * At that point, counter will be (0, 0), but after that pixel, the counter
+                     * should stay at 0, 0 when entering the next image, rather that going to
+                     * (1, 1) or (0, 1).
+                     *
+                     * TODO(fyquah): There is a lot of tangling signals here, so it is worth
+                     * cleaning it up.
+                     * 1. Move the row and column counting logic here.
+                     * 2. Make this logic simpler. i.e: We can start counting from a non-zero
+                     *    value to compensate for padding et al.
+                     */
+                    .withEnable(trigger & ~reset))
                         .getCount();
 
         }

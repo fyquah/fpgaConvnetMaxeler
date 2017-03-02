@@ -5,10 +5,12 @@ import java.util.ArrayList;
 
 import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
 import com.maxeler.maxcompiler.v2.kernelcompiler.KernelParameters;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.CounterChain;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVector;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVectorType;
 
+import fpgaconvnet.lib.StrideCounter;
 import fpgaconvnet.protos.Parameters.LayerParameter;
 import fpgaconvnet.protos.Parameters.PoolingParameter;
 
@@ -19,21 +21,28 @@ public class PoolingLayerKernel extends Kernel {
     PoolingParameter.PoolingType poolingType;
     PoolingUnit[] poolingUnits;
     DFEVectorType<DFEVar> outputType, inputType;
+    StrideCounter strideCounter;
+    LayerParameter layerParams;
 
     public int cyclesPerImage() {
         return inputDimension.height() * inputDimension.width();
     }
 
-    public PoolingLayerKernel(KernelParameters kp, LayerParameter layer) {
+    public PoolingLayerKernel(KernelParameters kp, LayerParameter argLayerParams) {
         super(kp);
 
         // Parameters from PoolingParameters
+        layerParams = argLayerParams;
         inputDimension = new Dimension(
-                layer.getInputHeight(), layer.getInputWidth(), layer.getNumInputs());
-        poolingDim = layer.getPool().getDim();
+                layerParams.getInputHeight(),
+                layerParams.getInputWidth(),
+                layerParams.getNumInputs());
+        poolingDim = layerParams.getPool().getDim();
         outputDimension = new Dimension(
-                layer.getOutputHeight(), layer.getOutputWidth(), layer.getNumOutputs());
-        poolingType = layer.getPool().getType();
+                layerParams.getOutputHeight(),
+                layerParams.getOutputWidth(),
+                layerParams.getNumOutputs());
+        poolingType = layerParams.getPool().getType();
         // end of extracted parameters
 
         // derived properties
@@ -41,10 +50,22 @@ public class PoolingLayerKernel extends Kernel {
         outputType = new DFEVectorType<DFEVar>(GlobalConfig.dataType, nChannels);
         inputType = new DFEVectorType<DFEVar>(GlobalConfig.dataType, nChannels);
 
+        poolingUnits = new PoolingUnit[inputDimension.channels()];
+
         DFEVector<DFEVar> input = inputType.newInstance(this);
         DFEVector<DFEVar> output = outputType.newInstance(this);
 
-        poolingUnits = new PoolingUnit[inputDimension.channels()];
+        CounterChain masterChain = control.count.makeCounterChain();
+        DFEVar row = Utils.chainCounterOrZero(this, masterChain, inputDimension.height());
+        DFEVar col = Utils.chainCounterOrZero(this, masterChain, inputDimension.width());
+        strideCounter = new StrideCounter(
+                this,
+                layerParams.getPool().getStride(),
+                col.eq(inputDimension.width() - (poolingDim / 2)) & ~isBorder(row, col),
+                ~isBorder(row, col),
+                row.eq(inputDimension.height() - 1)
+                    & col.eq(inputDimension.width() - 1));
+
         for (int i = 0 ; i < inputDimension.channels() ; i++) {
             poolingUnits[i] = new PoolingUnit(
                 this,
@@ -59,11 +80,10 @@ public class PoolingLayerKernel extends Kernel {
         // end of dervived properties
 
         // set the kernel I/O interface
-        DFEVar outputFlag = poolingUnits[0].isOutputReady();
-        outputFlag.simWatch("outputFlag");
         input <== io.input("x", inputType);
+        DFEVar outputFlag = ~isBorder(row, col) & strideCounter.isOutputReady();
 
-        if (layer.getIsLastLayer()) {
+        if (layerParams.getIsLastLayer()) {
             /* Last layer - cast from fixed point to dfe float. */
             DFEVectorType<DFEVar> rawOutputVectorType = new DFEVectorType<DFEVar>(
                     GlobalConfig.cpuType, outputDimension.channels());
@@ -71,6 +91,11 @@ public class PoolingLayerKernel extends Kernel {
         } else {
             io.output("y", output, outputType, outputFlag);
         }
+
+        row.simWatch("row");
+        col.simWatch("col");
+        outputFlag.simWatch("output_flag");
+        strideCounter.simWatch();
 
         // debugging messages
         // String debug_s = "[";
@@ -85,4 +110,34 @@ public class PoolingLayerKernel extends Kernel {
         //         "PoolingLayerKernel[" + layer.getLayerId() + "] output = " + debug_s + "\n",
         //         debugValues.toArray(new Object[1]));
     }
+
+    private DFEVar isBorder(DFEVar row, DFEVar col) {
+        DFEVar flag = constant.var(dfeBool(), 0);
+        final int kernelDim = layerParams.getPool().getDim();
+
+        if (kernelDim % 2 == 1) {
+            for (int i = 0 ; i < (layerParams.getPool().getDim() - 1) / 2 ; i++) {
+                flag = flag | row.eq(i) | col.eq(i)
+                        | row.eq(inputDimension.height() - 1 - i)
+                        | col.eq(inputDimension.width() - 1 - i);
+            }
+
+            return flag;
+
+        } else {
+            // handle top and left first
+            for (int i = 0 ; i < layerParams.getPool().getDim() / 2 ; i++) {
+                flag = flag | row.eq(i) | col.eq(i);
+            }
+
+            // handle bottom and right
+            for (int i = 0 ; i < (layerParams.getPool().getDim() / 2) - 1 ; i++) {
+                flag = flag | row.eq(inputDimension.height() - 1 - i)
+                        | col.eq(inputDimension.width() - 1 - i);
+            }
+
+            return flag;
+        }
+    }
+
 }
