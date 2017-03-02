@@ -5,6 +5,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
+import com.maxeler.maxcompiler.v2.kernelcompiler.KernelLib;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEType;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVector;
@@ -30,7 +31,7 @@ import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Stream.OffsetExpr;
  *
  */
 
-public class SlidingWindow  {
+public class SlidingWindow extends KernelLib {
     public final DFEVector<DFEVar> output;
     private final DFEVar row;
     private final DFEVar col;
@@ -47,15 +48,16 @@ public class SlidingWindow  {
         int kernelDim,
         int cyclesToHoldWindow
     ) {
+        super(argKernel);
         DFEVectorType<DFEVar> vectorType = new DFEVectorType<DFEVar>(
                 input.getType(),
                 kernelDim * kernelDim);
         output = vectorType.newInstance(argKernel);
 
-        chain = argKernel.control.count.makeCounterChain();
-        row = Utils.chainCounterOrZero(argKernel, chain, inputHeight);
-        col = Utils.chainCounterOrZero(argKernel, chain, inputWidth);
-        cycle = Utils.chainCounterOrZero(argKernel, chain, cyclesToHoldWindow);
+        chain = control.count.makeCounterChain();
+        row = Utils.chainCounterOrZero(this, chain, inputHeight);
+        col = Utils.chainCounterOrZero(this, chain, inputWidth);
+        cycle = Utils.chainCounterOrZero(this, chain, cyclesToHoldWindow);
 
         row.simWatch("row");
         col.simWatch("col");
@@ -75,7 +77,7 @@ public class SlidingWindow  {
                          & (col.cast(colType) + (j - kernelDim / 2) < inputWidth));
 
                 output[i * kernelDim + j] <==
-                        flag ? argKernel.stream.offset(input, offset) : 0.0;
+                        flag ? stream.offset(input, offset) : 0.0;
 
                 flag.simWatch(String.format("flag_%d_%d", i, j));
                 argKernel.stream.offset(input, offset).simWatch(String.format("actual_%d_%d", i, j));

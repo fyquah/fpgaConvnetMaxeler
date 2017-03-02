@@ -350,7 +350,7 @@ public class Utils {
     }
 
     public static DFEVar chainCounterOrZero(
-            Kernel kernel,
+            KernelLib kernel,
             CounterChain chain,
             int total) {
         final int inc = 1;
