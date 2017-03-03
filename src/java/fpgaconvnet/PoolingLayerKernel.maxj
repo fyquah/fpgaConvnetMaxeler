@@ -18,10 +18,10 @@ import fpgaconvnet.protos.Parameters.PoolingParameter;
 public class PoolingLayerKernel extends Kernel {
     Dimension inputDimension, outputDimension;
     int poolingDim;
+    int stride;
     PoolingParameter.PoolingType poolingType;
     PoolingUnit[] poolingUnits;
     DFEVectorType<DFEVar> outputType, inputType;
-    StrideCounter strideCounter;
     LayerParameter layerParams;
 
     public int cyclesPerImage() {
@@ -43,6 +43,7 @@ public class PoolingLayerKernel extends Kernel {
                 layerParams.getOutputWidth(),
                 layerParams.getNumOutputs());
         poolingType = layerParams.getPool().getType();
+        stride = layerParams.getPool().getStride();
         // end of extracted parameters
 
         // derived properties
@@ -55,16 +56,29 @@ public class PoolingLayerKernel extends Kernel {
         DFEVector<DFEVar> input = inputType.newInstance(this);
         DFEVector<DFEVar> output = outputType.newInstance(this);
 
+        // the frame that we want to consider for top left / top right pixels.
         CounterChain masterChain = control.count.makeCounterChain();
-        DFEVar row = Utils.chainCounterOrZero(this, masterChain, inputDimension.height());
-        DFEVar col = Utils.chainCounterOrZero(this, masterChain, inputDimension.width());
-        strideCounter = new StrideCounter(
-                this,
-                layerParams.getPool().getStride(),
-                col.eq(inputDimension.width() - (poolingDim / 2)) & ~isBorder(row, col),
-                ~isBorder(row, col),
-                row.eq(inputDimension.height() - 1)
-                    & col.eq(inputDimension.width() - 1));
+        DFEVar inputRow = Utils.chainCounterOrZero(this, masterChain, inputDimension.height());
+        DFEVar inputCol = Utils.chainCounterOrZero(this, masterChain, inputDimension.width());
+
+        DFEVar colStrideReset = inputCol.eq(inputDimension.width() - 1);
+        DFEVar colStride = control.count.makeCounter(
+                control.count.makeParams(Utils.ceilLog2(stride))
+                .withMax(stride)
+                .withReset(colStrideReset)
+                .withEnable(~colStrideReset))
+                    .getCount();
+        DFEVar rowStrideReset = inputRow.eq(inputDimension.height() - 1);
+        DFEVar rowStride = control.count.makeCounter(
+                control.count.makeParams(Utils.ceilLog2(stride))
+                .withMax(stride)
+                .withInc(1)
+                .withReset(rowStrideReset)
+                .withEnable(inputCol.eq(inputDimension.width() - 1) & ~rowStrideReset))
+                    .getCount();
+
+        rowStride.simWatch("row_stride");
+        colStride.simWatch("col_stride");
 
         for (int i = 0 ; i < inputDimension.channels() ; i++) {
             poolingUnits[i] = new PoolingUnit(
@@ -81,7 +95,7 @@ public class PoolingLayerKernel extends Kernel {
 
         // set the kernel I/O interface
         input <== io.input("x", inputType);
-        DFEVar outputFlag = ~isBorder(row, col) & strideCounter.isOutputReady();
+        DFEVar outputFlag = rowStride.eq(0) & colStride.eq(0);
 
         if (layerParams.getIsLastLayer()) {
             /* Last layer - cast from fixed point to dfe float. */
@@ -91,11 +105,6 @@ public class PoolingLayerKernel extends Kernel {
         } else {
             io.output("y", output, outputType, outputFlag);
         }
-
-        row.simWatch("row");
-        col.simWatch("col");
-        outputFlag.simWatch("output_flag");
-        strideCounter.simWatch();
 
         // debugging messages
         // String debug_s = "[";

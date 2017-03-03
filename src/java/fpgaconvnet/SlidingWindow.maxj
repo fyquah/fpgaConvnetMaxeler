@@ -14,7 +14,11 @@ import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Count.Counter;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.CounterChain;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Stream.OffsetExpr;
 
-/* For odd-number sliding windows, the windows are centered around the center pixel:
+/* When the offset is defined as 0, the sliding window is identified by the top left corner of
+ * the window. This is useful for cases like pooling where there is definitely no pooling layers.
+ *
+ * When offset is defined as kernelDim / 2, the sliding window is centered around the pixel.
+ * For odd-number sliding windows, the windows are centered around the center pixel:
  * 
  * [ (-2, -2), (-1, -2), (0, -2), (1, -2), (2, -2),
  *   (-2, -1), (-1, -1), (0, -1), (1, -1), (2, -1),
@@ -47,7 +51,8 @@ public class SlidingWindow extends KernelLib {
         int inputWidth,
         int kernelDim,
         int cyclesToHoldWindow,
-        DFEVar paddedPixels
+        DFEVar paddedPixels,
+        int offset
     ) {
         super(argKernel);
         DFEVectorType<DFEVar> vectorType = new DFEVectorType<DFEVar>(
@@ -60,22 +65,24 @@ public class SlidingWindow extends KernelLib {
         col = Utils.chainCounterOrZero(this, chain, inputWidth);
         cycle = Utils.chainCounterOrZero(this, chain, cyclesToHoldWindow);
 
+        final DFEType rowType = dfeInt(
+                Utils.ceilLog2(inputHeight + kernelDim - 1 + offset) + 1);
+        final DFEType colType = dfeInt(
+                Utils.ceilLog2(inputWidth + kernelDim - 1 + offset) + 1);
+
+
         for (int i = 0 ; i < kernelDim ; i++) {
             for (int j = 0 ; j < kernelDim ; j++) {
-                final int idx = ((i - kernelDim / 2) * inputWidth + (j - kernelDim / 2));
-                final int offset = cyclesToHoldWindow * idx;
-                final DFEType rowType = dfeInt(
-                        Utils.ceilLog2(inputHeight + kernelDim / 2) + 1);
-                final DFEType colType = dfeInt(
-                        Utils.ceilLog2(inputWidth + kernelDim / 2) + 1);
+                final int idx = ((i + offset) * inputWidth) + (j + offset);
+                final int streamOffset = cyclesToHoldWindow * idx;
                 final DFEVar flag =
-                        ((row.cast(rowType) + (i - kernelDim / 2) >= 0)
-                         & (row.cast(rowType) + (i - kernelDim / 2) < inputHeight)
-                         & (col.cast(colType) + (j - kernelDim / 2) >= 0)
-                         & (col.cast(colType) + (j - kernelDim / 2) < inputWidth));
+                        ((row.cast(rowType) + (i + offset) >= 0)
+                         & (row.cast(rowType) + (i + offset) < inputHeight)
+                         & (col.cast(colType) + (j + offset) >= 0)
+                         & (col.cast(colType) + (j + offset) < inputWidth));
 
                 output[i * kernelDim + j] <==
-                        flag ? stream.offset(input, offset) : paddedPixels;
+                        flag ? stream.offset(input, streamOffset) : paddedPixels;
             }
         }
     }

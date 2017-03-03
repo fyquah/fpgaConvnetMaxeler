@@ -28,6 +28,7 @@ public class PoolingUnit extends KernelLib {
         @Override
         public DFEVar op(DFEVar a, DFEVar b) { return a > b ? a : b; }
     };
+
     private static final AssociativeOp<DFEVar> dfeSumOp = new AssociativeOp<DFEVar>() {
         @Override
         public DFEVar op(DFEVar a, DFEVar b) { return a + b; }
@@ -55,7 +56,8 @@ public class PoolingUnit extends KernelLib {
             inputWidth,
             kernelDim,
             1,
-            constant.var(GlobalConfig.dataType, (double) paddedPixel));
+            constant.var(GlobalConfig.dataType, (double) paddedPixel),
+            0);
 
         if (poolingType.equals(PoolingParameter.PoolingType.Average)) {
             op = dfeSumOp;
