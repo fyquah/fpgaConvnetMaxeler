@@ -42,13 +42,20 @@ public class PoolingUnit extends KernelLib {
         inputWidth = argInputWidth;
         kernelDim = argKernelDim;
         input = GlobalConfig.dataType.newInstance(this);
+        float paddedPixel = 0.0f;
+
+        if (poolingType.equals(PoolingParameter.PoolingType.Max)) {
+            paddedPixel = (float) -(1 << (GlobalConfig.intBits - 1));
+        }
+
         slidingWindow = new SlidingWindow(
             kernel,
             input,
             inputHeight,
             inputWidth,
             kernelDim,
-            1);
+            1,
+            constant.var(GlobalConfig.dataType, (double) paddedPixel));
 
         if (poolingType.equals(PoolingParameter.PoolingType.Average)) {
             op = dfeSumOp;

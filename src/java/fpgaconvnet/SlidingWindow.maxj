@@ -46,7 +46,8 @@ public class SlidingWindow extends KernelLib {
         int inputHeight,
         int inputWidth,
         int kernelDim,
-        int cyclesToHoldWindow
+        int cyclesToHoldWindow,
+        DFEVar paddedPixels
     ) {
         super(argKernel);
         DFEVectorType<DFEVar> vectorType = new DFEVectorType<DFEVar>(
@@ -74,7 +75,7 @@ public class SlidingWindow extends KernelLib {
                          & (col.cast(colType) + (j - kernelDim / 2) < inputWidth));
 
                 output[i * kernelDim + j] <==
-                        flag ? stream.offset(input, offset) : 0.0;
+                        flag ? stream.offset(input, offset) : paddedPixels;
             }
         }
     }

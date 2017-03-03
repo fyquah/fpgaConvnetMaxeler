@@ -66,7 +66,8 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
                 inputDimension.height(),
                 inputDimension.width(),
                 kernelDim,
-                getSchedulerIterations());
+                getSchedulerIterations(),
+                constant.var(GlobalConfig.dataType, 0.0));
         }
         row = Utils.chainCounterOrZero(this, masterChain, inputDimension.height());
         col = Utils.chainCounterOrZero(this, masterChain, inputDimension.width());

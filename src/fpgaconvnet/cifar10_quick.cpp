@@ -17,7 +17,7 @@
     static const uint64_t N = 10000;
 #endif
 static const uint64_t CONV_IN_SIZE = 32 * 32 * 3;
-static const uint64_t CONV_OUT_SIZE = 800;
+static const uint64_t CONV_OUT_SIZE = 4 * 4 * 64;
 
 
 template<typename T>

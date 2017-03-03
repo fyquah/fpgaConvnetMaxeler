@@ -22,6 +22,10 @@ public class ParametersTransformer {
                                          layer_id, message));
     }
 
+    private void raiseWarning(int layer_id, String message) {
+        System.out.println(String.format("[WARNING layer %d] => %s", layer_id, message));
+    }
+
     private void checkLayerDims() {
 
     }
@@ -142,19 +146,38 @@ public class ParametersTransformer {
 
         final int unstridedHeight = inputHeight - kernelSize + 2 * pad;
         final int unstridedWidth = inputWidth - kernelSize + 2 * pad;
-        final int expectedHeight = unstridedHeight / stride + 1;
-        final int expectedWidth = unstridedWidth / stride + 1;
+        final int expectedHeight = Utils.divCeil(unstridedHeight, stride) + 1;
+        final int expectedWidth = Utils.divCeil(unstridedWidth, stride) + 1;
 
-        if (unstridedHeight % stride != 0) {
-            raiseError(layer_id,
-                       ("`stride` doesn't divide "
-                        + "`input_height - kernel_size + 2 * pad`!"));
+
+        if (paramsCase.equals(LayerParameter.ParamsCase.CONV)) {
+            if (unstridedHeight % stride != 0) {
+                raiseError(layer_id,
+                           ("conv layer `stride` must divide "
+                            + "`input_height - kernel_size + 2 * pad`!"));
+            }
+            if (unstridedWidth % stride != 0) {
+                raiseError(layer_id,
+                           ("conv layer `stride` must divide "
+                            + "`input_width - kernel_size + 2 * pad`!"));
+            }
+
+        } else {
+            if (unstridedHeight % stride != 0) {
+                raiseWarning(layer_id,
+                             ("pool layer `stride` doesn't divide "
+                              + "`input_height - kernel_size + 2 * pad`!"
+                              + ". Border cases may be approximated"));
+            }
+            if (unstridedWidth % stride != 0) {
+                raiseWarning(layer_id,
+                             ("pool layer `stride` doesn't divide "
+                              + "`input_width - kernel_size + 2 * pad`!"
+                              + ". Border cases may be approximated!"));
+            }
+
         }
-        if (unstridedWidth % stride != 0) {
-            raiseError(layer_id,
-                       ("`stride` doesn't divide "
-                        + "`input_width - kernel_size + 2 * pad`!"));
-        }
+
 
         builder.setInputHeight(inputHeight);
         builder.setInputWidth(inputWidth);
