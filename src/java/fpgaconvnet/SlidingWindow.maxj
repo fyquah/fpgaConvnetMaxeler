@@ -81,6 +81,8 @@ public class SlidingWindow extends KernelLib {
                          & (col.cast(colType) + (j + offset) >= 0)
                          & (col.cast(colType) + (j + offset) < inputWidth));
 
+                flag.simWatch(String.format("flag_%d_%d", i, j));
+
                 output[i * kernelDim + j] <==
                         flag ? stream.offset(input, streamOffset) : paddedPixels;
             }

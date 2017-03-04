@@ -61,22 +61,24 @@ public class PoolingLayerKernel extends Kernel {
         DFEVar inputRow = Utils.chainCounterOrZero(this, masterChain, inputDimension.height());
         DFEVar inputCol = Utils.chainCounterOrZero(this, masterChain, inputDimension.width());
 
-        DFEVar colStrideReset = inputCol.eq(inputDimension.width() - 1);
+        DFEVar colStrideReset = inputCol.eq(0);
         DFEVar colStride = control.count.makeCounter(
                 control.count.makeParams(Utils.ceilLog2(stride))
                 .withMax(stride)
-                .withReset(colStrideReset)
-                .withEnable(~colStrideReset))
+                .withReset(inputCol.eq(0)))
+                // .withEnable(~colStrideReset))
                     .getCount();
-        DFEVar rowStrideReset = inputRow.eq(inputDimension.height() - 1);
+        DFEVar rowStrideReset = inputRow.eq(0) & inputCol.eq(0);
         DFEVar rowStride = control.count.makeCounter(
                 control.count.makeParams(Utils.ceilLog2(stride))
                 .withMax(stride)
                 .withInc(1)
-                .withReset(rowStrideReset)
-                .withEnable(inputCol.eq(inputDimension.width() - 1) & ~rowStrideReset))
+                .withReset(inputCol.eq(0) & inputRow.eq(0))
+                .withEnable(inputCol.eq(inputDimension.width() - 1)))
                     .getCount();
 
+        inputRow.simWatch("input_row");
+        inputCol.simWatch("input_col");
         rowStride.simWatch("row_stride");
         colStride.simWatch("col_stride");
 
