@@ -79,7 +79,7 @@ public class NetworkManager extends CustomManager {
 
                 ei.setScalar(convUnitKernelName, "init", init);
                 ei.setScalar(accKernelName, "init", init);
-                initConvLayer(ei, layerParams, convolutionLayers[convLayerIndex]);
+                initConvLayer(ei, layerParams, convolutionLayers[convLayerIndex], init);
 
                 convLayerIndex++;
             }
@@ -92,19 +92,24 @@ public class NetworkManager extends CustomManager {
     private void initConvLayer(
             EngineInterface ei,
             Parameters.LayerParameter layerParams,
-            ConvolutionLayer layer) {
+            ConvolutionLayer layer,
+            InterfaceParam init) {
 
         for (int worker = 0 ; worker < layerParams.getConv().getWorkerFactor(); worker++) {
             final int streamSize = layer.getConvolutionUnit().getKernel().initStreamSize();
 
             ei.setStream(String.format("kernel_%d_%d", layerParams.getLayerId(), worker),
                          CPUTypes.FLOAT,
-                         streamSize * CPUTypes.FLOAT.sizeInBytes());
+                         init ?
+                         (streamSize * CPUTypes.FLOAT.sizeInBytes()) : 0);
         }
+
+        int biasStreamSize =
+                layer.getAccumulator().getKernel().initCycles() * CPUTypes.FLOAT.sizeInBytes();
 
         ei.setStream(String.format("bias_%d", layerParams.getLayerId()),
                      CPUTypes.FLOAT,
-                     layer.getAccumulator().getKernel().initCycles() * CPUTypes.FLOAT.sizeInBytes());
+                     init ? biasStreamSize : 0);
     }
 
     private void setupKernels() {
