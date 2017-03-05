@@ -172,9 +172,19 @@ protos::Network load_network_proto(const std::string & filename)
                     (it->input_width() - it->conv().kernel_size() + 2 * it->conv().pad())
                     / it->conv().stride() + 1);
         } else {
+            uint32_t stride;
+
+            if (it->pool().has_stride()) {
+                stride = it->pool().stride();
+
+            } else {
+                stride = it->pool().dim();
+
+            }
+
             it->set_num_outputs(it->num_inputs());
-            it->set_output_height(div_ceil(it->input_height(), it->pool().stride()));
-            it->set_output_width(div_ceil(it->input_width(), it->pool().stride()));
+            it->set_output_height(div_ceil(it->input_height(), stride));
+            it->set_output_width(div_ceil(it->input_width(), stride));
         }
     }
     log_stdout() << network.DebugString() << std::endl;
@@ -400,6 +410,7 @@ void Convnet::set_layer_weights(
                     buffer,
                     values,
                     sizeof(float) * padded_worker_rom_size);
+            std::cout << "Stream size = " << sizeof(float) * padded_worker_rom_size << std::endl;
 
         }
     }
@@ -510,13 +521,6 @@ std::vector<float> Convnet::max_run_inference(
     log_stdout(INFO) << "Running Feature Extraction ... " << std::endl;
     max_set_param_uint64t(run_action, "N", N);
 
-    if (initialized_weights) {
-        max_set_param_uint64t(run_action, "init", 0);
-    } else {
-        max_set_param_uint64t(run_action, "init", 1);
-        initialized_weights = 1;
-    }
-
     int i = 0;
     for (auto it = network_params.layer().begin();
             it != network_params.layer().end();
@@ -527,6 +531,14 @@ std::vector<float> Convnet::max_run_inference(
             i++;
         }
     }
+
+    if (initialized_weights) {
+        max_set_param_uint64t(run_action, "init", 0);
+    } else {
+        max_set_param_uint64t(run_action, "init", 1);
+    }
+    initialized_weights = 1;
+
 
     max_queue_input(run_action,
                     "fromcpu",
