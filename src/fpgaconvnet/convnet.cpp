@@ -380,16 +380,28 @@ void Convnet::set_layer_weights(
     for (int worker = 0 ; worker < layer.conv().worker_factor() ; worker++) {
         float *values = new float[padded_worker_rom_size];
 
-        queue_weights.push_back(values);
-        std::memcpy(values, 
-                worker_kernels + (worker * worker_rom_size),
-                sizeof(float) * worker_rom_size);
         sprintf(buffer, "kernel_%d_%d", layer.layer_id(), worker);
-        max_queue_input(
-                action,
-                buffer,
-                values,
-                sizeof(float) * padded_worker_rom_size);
+
+        if (initialized_weights) {
+            /* TODO(fyq14): Fix third argument
+             * Third argument here doens't really matter what we pass in, as the stream size is
+             * 0, but for defensive purposes, it still makes more sense to pass in the actual
+             * pointer to the queue weights.
+             */
+            max_queue_input(action, buffer, NULL, 0);
+
+        } else {
+            queue_weights.push_back(values);
+            std::memcpy(values, 
+                    worker_kernels + (worker * worker_rom_size),
+                    sizeof(float) * worker_rom_size);
+            max_queue_input(
+                    action,
+                    buffer,
+                    values,
+                    sizeof(float) * padded_worker_rom_size);
+
+        }
     }
 
     sprintf(buffer, "bias_%d", layer.layer_id());
