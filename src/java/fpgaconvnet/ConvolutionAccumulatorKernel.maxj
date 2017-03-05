@@ -1,5 +1,7 @@
 package fpgaconvnet;
 
+import java.lang.RuntimeException;
+
 import java.util.List;
 import java.util.ArrayList;
 
@@ -144,7 +146,16 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
             optimization.popPipeliningFactor();
 
             acc <== muxedSumVars + prevAcc;
-            output[channel] <== relu(acc);
+
+            if (layerParams.getActivation() == LayerParameter.Activation.None) {
+                output[channel] <== acc;
+
+            } else if (layerParams.getActivation() == LayerParameter.Activation.Relu) {
+                output[channel] <== relu(acc);
+
+            } else {
+                throw new RuntimeException("Unsupported activation type");
+            }
         }
 
         // debugging output

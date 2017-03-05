@@ -14,6 +14,10 @@
 
 namespace fpgaconvnet {
 
+enum file_format_t {
+    FORMAT_TXT,
+    FORMAT_BINARY
+};
 
 protos::Network load_network_proto(const std::string & filename);
 
@@ -40,7 +44,8 @@ void verify_conv_output(
         const protos::Network & network,
         uint64_t N,
         float *conv_out,
-        std::string filename
+        std::string filename,
+        file_format_t file_format = FORMAT_TXT
 );
 
 
@@ -60,6 +65,16 @@ void allign_and_place_kernel_weights(
 void set_log_prefix(const std::string & prefix);
 
 uint64_t calc_total_kernel_weights(const protos::LayerParameter & layer);
+
+
+class Exception : public std::exception {
+private:
+    std::string message;
+public:
+    Exception(const std::string & message);
+    virtual ~Exception() throw();
+    virtual const char* what() const throw();
+};
 
 
 /* On most cases, this is the class abstracts most of the crazy reallignment
@@ -95,7 +110,8 @@ public:
             const char* load_spec = "*");
     ~Convnet ();
 
-    void load_weights_from_files(std::vector<std::string> filenames);
+    void load_weights_from_files(
+            std::vector<std::string> filenames, file_format_t file_type);
 
     void max_init_weights();
     void max_load_input_data(const std::vector<float> & images, uint64_t N);

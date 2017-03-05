@@ -10,7 +10,7 @@ CIFAR10_QUICK_OPTIMIZED_DESCRIPTOR=cifar10_quick.optimized.prototxt
 
 $(CIFAR10_DATA):
 	curl "https://www.cs.toronto.edu/~kriz/cifar-10-binary.tar.gz" >cifar10-binary.tar.gz
-	gzip -d cifar10-binary.tar.gz
+	tar xzvf cifar10-binary.tar.gz
 
 
 $(CIFAR10_QUICK_OPTIMIZED_DESCRIPTOR): fpgaconvnet/optimizer.py $(CIFAR10_QUICK_DESCRIPTOR) $(PYTHON_PROTOS)

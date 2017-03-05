@@ -64,6 +64,46 @@ unsigned ceil_div(unsigned a, unsigned b)
     }
 }
 
+void load_cifar10(const char *filename, std::vector<float> &images, std::vector<int> &labels)
+{
+    labels = std::vector<int>(10000);
+    images = std::vector<float>(10000 * 1024 * 3);
+    std::ifstream fin(filename);
+
+    for (unsigned iter = 0 ; iter < N ; iter++) {
+        char byte;
+        std::vector<float> red(1024);
+        std::vector<float> blue(1024);
+        std::vector<float> green(1024);
+
+        fin.read(&byte, 1);
+        labels.push_back(int(byte));
+
+        for (int i = 0 ; i< 1024 ; i++) {
+            fin.read(&byte, 1);
+            red[i] = float(byte) / 255.0;
+        }
+
+        for (int i = 0 ; i< 1024 ; i++) {
+            fin.read(&byte, 1);
+            green[i] = float(byte) / 255.0;
+        }
+
+        for (int i = 0 ; i< 1024 ; i++) {
+            fin.read(&byte, 1);
+            blue[i] = float(byte) / 255.0;
+        }
+
+        for (int i = 0 ; i < 1024 ; i++) {
+            images[(iter * 3 * 1024) + 3 * i] = red[i];
+            images[(iter * 3 * 1024) + 3 * i + 1] = green[i];
+            images[(iter * 3 * 1024) + 3 * i + 2] = blue[i];
+        }
+    }
+
+    fin.close();
+}
+
 
 std::vector<float> run_feature_extraction(
         const fpgaconvnet::protos::Network & network_parameters,
@@ -71,17 +111,21 @@ std::vector<float> run_feature_extraction(
 )
 {
     std::vector<std::string> filenames = {
-            "../test_data/lenet/weights/conv0_kernels.txt",
-            "../test_data/lenet/weights/conv0_bias.txt",
-            "../test_data/lenet/weights/conv2_kernels.txt",
-            "../test_data/lenet/weights/conv2_bias.txt"};
-    max_file_t *max_file = lenet_init();
+            "../test_data/cifar10_quick/weights/conv0_weights.txt",
+            "../test_data/cifar10_quick/weights/conv0_bias.txt",
+            "../test_data/cifar10_quick/weights/conv2_weights.txt",
+            "../test_data/cifar10_quick/weights/conv2_bias.txt",
+            "../test_data/cifar10_quick/weights/conv4_weights.txt",
+            "../test_data/cifar10_quick/weights/conv4_bias.txt" };
+    max_file_t *max_file = cifar10_quick_init();
     std::vector<float> extracted_features;
     fpgaconvnet::Convnet convnet(network_parameters, max_file, "");
 
-    convnet.load_weights_from_files(filenames);
+    std::cout << "Loading weights from file." << std::endl;
+    convnet.load_weights_from_files(filenames, fpgaconvnet::FORMAT_BINARY);
 
     // warm up the DFE with the weights.
+    std::cout << "Runnin inference" << std::endl;
     extracted_features = convnet.max_run_inference(N, images, false);
     extracted_features = convnet.max_run_inference(N, images, false);
     fpgaconvnet::verify_conv_output(
@@ -96,7 +140,7 @@ std::vector<float> run_feature_extraction(
 
 int main(int argc, char **argv)
 {
-    std::vector<std::vector<double> > images;
+    std::vector<float> images;
     std::vector<int> labels;
     std::vector<float> pixel_stream;
     layer_t layers[N_LAYERS];
@@ -112,11 +156,11 @@ int main(int argc, char **argv)
                 fpgaconvnet::load_network_proto(argv[1]);
 
         std::cout << "Reading images ..." << std::endl;
-        read_mnist_images(images, "mnist/t10k-images-idx3-ubyte");
-        read_mnist_labels(labels, "mnist/t10k-labels-idx1-ubyte");
+        load_cifar10("cifar-10-batches-bin/data_batch_1.bin", images, labels);
+
         for (unsigned i = 0 ; i < N ; i++) {
             for (unsigned j = 0 ; j < CONV_IN_SIZE ; j++) {
-                pixel_stream.push_back(images[i][j]);
+                pixel_stream.push_back(images[i * CONV_IN_SIZE + j]);
             }
         } 
 

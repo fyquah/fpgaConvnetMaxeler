@@ -91,7 +91,19 @@ public class PoolingLayerKernel extends Kernel {
                 poolingDim
             );
             poolingUnits[i].setInput(input[i]);
-            output[i] <== poolingUnits[i].output();
+
+
+
+            if (layerParams.getActivation() == LayerParameter.Activation.None) {
+                output[i] <== poolingUnits[i].output();
+
+            } else if (layerParams.getActivation() == LayerParameter.Activation.Relu) {
+                DFEVar x = poolingUnits[i].output();
+                output[i] <== x > 0 ? x : 0;
+
+            } else {
+                throw new RuntimeException("Unsupported activation type");
+            }
         }
         // end of dervived properties
 

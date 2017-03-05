@@ -1,5 +1,6 @@
 #include <cmath>
 #include <cstring>
+#include <exception>
 
 #include <algorithm>
 #include <fstream>
@@ -34,8 +35,24 @@ static uint64_t lcm(uint64_t a, uint64_t b)
 static void generic_load(std::string filename, int count, float *output)
 {
     std::ifstream fin(filename.c_str());
+
+    if (!fin.is_open()) {
+        throw fpgaconvnet::Exception("Cannot open " + filename);
+    }
+
     for (int i = 0 ; i < count ; i++) {
         fin >> output[i];
+    }
+    fin.close();
+}
+
+
+static void generic_load_binary(std::string filename, int count, float *output)
+{
+    std::ifstream fin(filename.c_str());
+    for (int i = 0 ; i < count ; i++) {
+        // note, works only on little endian machines.
+        fin.read((char*) &output[i], 4);
     }
     fin.close();
 }
@@ -148,12 +165,16 @@ protos::Network load_network_proto(const std::string & filename)
 
         it->set_layer_id(i);
         if (it->has_conv()) {
-            it->set_output_height(it->input_height() - it->conv().kernel_size() + 1);
-            it->set_output_width(it->input_width() - it->conv().kernel_size() + 1);
+            it->set_output_height(
+                    (it->input_height() - it->conv().kernel_size() + 2 * it->conv().pad())
+                    / it->conv().stride() + 1);
+            it->set_output_width(
+                    (it->input_width() - it->conv().kernel_size() + 2 * it->conv().pad())
+                    / it->conv().stride() + 1);
         } else {
             it->set_num_outputs(it->num_inputs());
-            it->set_output_height(it->input_height() / it->pool().dim());
-            it->set_output_width(it->input_width() / it->pool().dim());
+            it->set_output_height(div_ceil(it->input_height(), it->pool().stride()));
+            it->set_output_width(div_ceil(it->input_width(), it->pool().stride()));
         }
     }
     log_stdout() << network.DebugString() << std::endl;
@@ -178,6 +199,26 @@ void load_bias_from_file(
 )
 {
     generic_load(filename, layer.num_outputs(), output);
+}
+
+
+void load_kernels_from_binary_file(
+    std::string filename,
+    const protos::LayerParameter & layer,
+    float *output
+)
+{
+    generic_load_binary(filename, layer.num_outputs(), output);
+}
+
+
+void load_bias_from_binary_file(
+    std::string filename,
+    const protos::LayerParameter & layer,
+    float *output
+)
+{
+    generic_load_binary(filename, layer.num_outputs(), output);
 }
 
 
@@ -215,7 +256,8 @@ void verify_conv_output(
         const protos::Network & network,
         uint64_t N,
         float *conv_out,
-        std::string filename)
+        std::string filename,
+        file_format_t format)
 {
     std::ifstream fin(filename.c_str());
     uint32_t total_pixels = 0;
@@ -230,7 +272,12 @@ void verify_conv_output(
         for (uint32_t j = 0 ; j < conv_out_size; j++) {
             float expected;
             float obtained = conv_out[conv_out_size * i + j];
-            fin >> expected;
+
+            if (format == FORMAT_TXT) {
+                fin >> expected;
+            } else {
+                fin.read((char*) &expected, 4);
+            }
 
             if (fin.eof()) {
                 fin.clear();
@@ -379,6 +426,7 @@ Convnet::Convnet(
     input_size =
             first_layer.input_height() * first_layer.input_width()
             * first_layer.num_inputs();
+
     output_size =
             final_layer.output_height() * final_layer.output_width()
             * final_layer.num_outputs();
@@ -399,11 +447,16 @@ Convnet::~Convnet ()
     }
 }
 
-void Convnet::load_weights_from_files(std::vector<std::string> filenames)
+void Convnet::load_weights_from_files(std::vector<std::string> filenames, file_format_t file_type)
 {
     for (int i = 0 ; i < conv_layer_params.size(); i++) {
-        load_kernels_from_file(filenames[2 * i], conv_layer_params[i], kernels[i]);
-        load_bias_from_file(filenames[2 * i + 1], conv_layer_params[i], bias[i]);
+        if (file_type == FORMAT_TXT) {
+            load_kernels_from_file(filenames[2 * i], conv_layer_params[i], kernels[i]);
+            load_bias_from_file(filenames[2 * i + 1], conv_layer_params[i], bias[i]);
+        } else {
+            load_kernels_from_binary_file(filenames[2 * i], conv_layer_params[i], kernels[i]);
+            load_bias_from_binary_file(filenames[2 * i + 1], conv_layer_params[i], bias[i]);
+        }
     }
     for (int i = 0; i < conv_layer_params.size() ; i++) {
         allign_and_place_kernel_weights(
@@ -502,6 +555,23 @@ std::vector<float> Convnet::max_retrieve_features(uint64_t N) {
     max_run(dfe, read_action);
 
     return features;
+}
+
+
+Exception::Exception(const std::string & message)
+    : message(message)
+{
+}
+
+
+Exception::~Exception() throw()
+{
+}
+
+
+const char* Exception::what() const throw()
+{
+    return message.c_str();
 }
 
 } // fpgaconvnet
