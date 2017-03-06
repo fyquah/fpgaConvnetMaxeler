@@ -402,37 +402,33 @@ void Convnet::set_layer_weights(
     char buffer[30];
     uint64_t multiple_base = lcm(4, layer.conv().kernel_folding_factor())
             / layer.conv().kernel_folding_factor();
-    uint64_t worker_rom_size = calc_total_rom_size(layer) / layer.conv().worker_factor();
-    uint64_t num_iters = worker_rom_size / layer.conv().kernel_folding_factor();
+    uint64_t total_rom_size = calc_total_rom_size(layer);
+    uint64_t num_iters = total_rom_size / layer.conv().kernel_folding_factor();
     uint64_t padded_num_iters = div_ceil(num_iters, multiple_base) * multiple_base;
-    uint64_t padded_worker_rom_size =
+    uint64_t padded_rom_size =
             padded_num_iters * layer.conv().kernel_folding_factor();
 
-    for (int worker = 0 ; worker < layer.conv().worker_factor() ; worker++) {
-        float *values = new float[padded_worker_rom_size];
+    sprintf(buffer, "kernel_%d", layer.layer_id());
 
-        sprintf(buffer, "kernel_%d_%d", layer.layer_id(), worker);
+    if (initialized_weights) {
+        /* TODO(fyq14): Fix third argument
+         * Third argument here doens't really matter what we pass in, as the stream size is
+         * 0, but for defensive purposes, it still makes more sense to pass in the actual
+         * pointer to the queue weights.
+         */
+        max_queue_input(action, buffer, NULL, 0);
 
-        if (initialized_weights) {
-            /* TODO(fyq14): Fix third argument
-             * Third argument here doens't really matter what we pass in, as the stream size is
-             * 0, but for defensive purposes, it still makes more sense to pass in the actual
-             * pointer to the queue weights.
-             */
-            max_queue_input(action, buffer, NULL, 0);
+    } else {
+        float *values = new float[padded_rom_size];
 
-        } else {
-            queue_weights.push_back(values);
-            std::memcpy(values, 
-                    worker_kernels + (worker * worker_rom_size),
-                    sizeof(float) * worker_rom_size);
-            max_queue_input(
-                    action,
-                    buffer,
-                    values,
-                    sizeof(float) * padded_worker_rom_size);
+        queue_weights.push_back(values);
+        std::memcpy(values, worker_kernels, sizeof(float) * total_rom_size);
+        max_queue_input(
+                action,
+                buffer,
+                values,
+                sizeof(float) * padded_rom_size);
 
-        }
     }
 
     sprintf(buffer, "bias_%d", layer.layer_id());

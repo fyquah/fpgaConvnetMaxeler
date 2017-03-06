@@ -90,7 +90,7 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
         initConvIter.simWatch("initConvIter");
         initAddress.simWatch("initAddress");
 
-        DFEVector<DFEVar> rawWeightsInputs = io.input(getWeightsInputName(workerId),
+        DFEVector<DFEVar> rawWeightsInputs = io.input(getWeightsInputName(),
                                                       rawWeightInputVectorType,
                                                       isInitializingWeights);
 
@@ -176,8 +176,8 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
         return "input_" + workerId;
     }
 
-    public String getWeightsInputName(int workerId) {
-        return "weights_input_" + workerId;
+    public String getWeightsInputName() {
+        return "weights_input";
     }
 
     public String getOutputName(int workerId) {
