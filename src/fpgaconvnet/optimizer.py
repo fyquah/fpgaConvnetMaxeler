@@ -3,6 +3,7 @@ from __future__ import absolute_import
 import argparse
 import bisect
 import sys
+import random
 
 # import GPy
 # from mpl_toolkits import mplot3d
@@ -11,6 +12,7 @@ import numpy as np
 from scipy import optimize
 from sklearn import linear_model
 import yaml
+import simanneal
 
 from google.protobuf import text_format
 from fpgaconvnet.protos import parameters_pb2
@@ -63,22 +65,59 @@ def random_displacement(x, stepsize, values):
     return values[new_pos]
 
 
-class TakeStep(object):
+def scale_x(x_new):
+    return [(x_new[i], x_new[i+1], x_new[i+2])
+            for i in range(0, len(x_new), 3)]
 
-    def __init__(self, conv_layers):
-        self._conv_layers = tuple(conv_layers)
-        self.stepsize = 1
-        self._valid_values = []
 
-        for layer in self._conv_layers:
-            self._valid_values.append(compute_valid_values(layer.num_inputs))
-            self._valid_values.append(compute_valid_values(layer.num_outputs))
-            self._valid_values.append(compute_valid_values(
-                layer.conv.kernel_size * layer.conv.kernel_size))
+class OptimizationProblem(simanneal.Annealer):
 
-    def __call__(self, xs):
-        return [random_displacement(x, self.stepsize, values)
-                for x, values in zip(xs, self._valid_values)]
+    def __init__(self, network, models, constraints, x0):
+        super(OptimizationProblem, self).__init__(x0)
+        self.gops_fn = make_gops_fn(network)
+        self.valid_values = []
+        self.constraints = constraints
+        self.models = models
+
+        for layer in network.layer:
+            if layer.HasField("conv"):
+                self.valid_values.append(compute_valid_values(layer.num_inputs))
+                self.valid_values.append(compute_valid_values(layer.num_outputs))
+                self.valid_values.append(compute_valid_values(
+                    layer.conv.kernel_size * layer.conv.kernel_size))
+
+    def logic_utilization_constraint(self, x_new):
+        logic_utilization = sum(
+                self.models["conv"]["residual_logic"](x) for x in scale_x(x_new)) \
+                + self.models["conv"]["base_logic"](x_new)
+        return self.constraints["logic_utilization"] - logic_utilization
+
+    def multiplier_constraint(self, x_new):
+        multiplier = sum(
+            self.models["conv"]["multiplier"](x) for x in scale_x(x_new))
+        return self.constraints["multiplier"] - multiplier
+
+    def bram_constraint(self, x_new):
+        block_memory = sum(self.models["conv"]["residual_block_memory"](x)
+                           for x in scale_x(x_new)) \
+                       + self.base_bram_usage
+        return constraints["block_memory"] - block_memory
+
+    def move(self):
+        while True:
+            a = random.randint(0, len(self.state) - 1)
+            value_index = random.randint(0, len(self.valid_values[a]) - 1)
+            original = self.state[a]
+            self.state[a] = self.valid_values[a][value_index]
+
+            if (self.multiplier_constraint(self.state) >= 0
+                    and self.logic_utilization_constraint(self.state) >= 0):
+                break
+            else:
+                self.state[a] = original
+
+    def energy(self):
+        return -self.gops_fn(self.state)
 
 
 def curry(func, *args):
@@ -94,117 +133,45 @@ def nearest_value(x, vs):
 
 def make_presence_constraint(idx, values):
     def fn(x):
-        return max(1 - np.log(2 + abs(x[idx] - v))
-                   for v in values)
+        return max(0 if abs(x[idx] - v) < 0.01 else -1 for v in values)
 
-    return {"type": "ineq", "fun": fn}
-
-
-def run_optimizer(network, models, constraints, iter):
-
-    def scale_x(x_new):
-        return [(x_new[i], x_new[i+1], x_new[i+2])
-                for i in range(0, len(x_new), 3)]
-
-    def logic_utilization_constraint(x_new):
-        logic_utilization = sum(
-                models["conv"]["residual_logic"](x) for x in scale_x(x_new)) \
-                + models["conv"]["base_logic"](x_new)
-        return constraints["logic_utilization"] - logic_utilization
-
-    def multiplier_constraint(x_new):
-        multiplier = sum(
-            models["conv"]["multiplier"](x) for x in scale_x(x_new))
-        return constraints["multiplier"] - multiplier
-
-    def bram_constraint(x_new):
-        block_memory = sum(models["conv"]["residual_block_memory"](x)
-                           for x in scale_x(x_new)) \
-                       + base_bram_usage
-        return constraints["block_memory"] - block_memory
+    return {"type": "eq", "fun": fn}
 
 
-    base_bram_usage = 0
-    conv_layers = []
-    x0 = []
-    cobyla_constraints = []
-    valid_values = []
-    i = 0
-    for layer in network.layer:
-        if layer.HasField("conv"):
-            conv_layers.append(layer)
-            valid_values.append(compute_valid_values(layer.num_inputs))
-            valid_values.append(compute_valid_values(layer.num_outputs))
-            valid_values.append(compute_valid_values(
-                layer.conv.kernel_size * layer.conv.kernel_size))
+def run_optimizer(network, models, constraints):
+    for i in range(10):
+        problem = OptimizationProblem(network, models, constraints,
+                                      9 * [1])
+        problem.copy_strategy = "slice"  
+        state, e = problem.anneal()
+        total_logic_used = constraints["logic_utilization"] \
+                           - problem.logic_utilization_constraint(state)
+        total_multipliers = constraints["multiplier"] \
+                            - problem.multiplier_constraint(state)
 
-            base_bram_usage += float(
-                layer.num_inputs * layer.num_outputs
-                * layer.conv.kernel_size * layer.conv.kernel_size)
-            total_kernel_size = (layer.conv.kernel_size
-                                 * layer.conv.kernel_size)
-            cobyla_constraints.extend([
-                {"type": "ineq",                        # wf >= 1
-                 "fun": curry(lambda j, x: x[j] - 1,
-                              i)},
-                {"type": "ineq",                        # wf <= num_inputs
-                 "fun": curry(lambda j, layer, x: layer.num_inputs - x[j],
-                              i, layer)},
-                make_presence_constraint(i,
-                                         compute_valid_values(layer.num_inputs)),
-                {"type": "ineq",                        # cff >= 1
-                 "fun": curry(lambda j, x: x[j] - 1,
-                              i + 1)},
-                {"type": "ineq",                        # cff <= num_outputs
-                 "fun": curry(lambda j, layer, x: layer.num_outputs - x[j],
-                              i + 1, layer)},
-                make_presence_constraint(i + 1,
-                                         compute_valid_values(layer.num_outputs)),
-                {"type": "ineq",                        # kf >= 1
-                 "fun": curry(lambda j, x: x[j] - 1,
-                              i + 2)},
-                {"type": "ineq",                        # kf <= kernel_size^2
-                 "fun": curry(lambda j, total_kernel_size, x: total_kernel_size - x[j],
-                              i + 2, total_kernel_size)},
-                make_presence_constraint(i + 2,
-                                         compute_valid_values(total_kernel_size)),
-            ])
-            x0.extend([div_ceil(layer.num_inputs, 2),
-                       div_ceil(layer.num_outputs, 2),
-                       div_ceil(layer.conv.kernel_size * layer.conv.kernel_size,
-                                2)])
-            i += 3
-    base_bram_usage = base_bram_usage * BASE_M20K_FACTOR
+        print "Attempt", i
+        print "Estimated total logic utilization: %d (%.3f)" % \
+                (total_logic_used,
+                 float(total_logic_used) / constraints["logic_utilization"])
+        print "Estimated total multipliers: %d (%.3f)" % \
+                (total_multipliers,
+                 float(total_multipliers) / constraints["multiplier"])
+        print "Optimal params:", scale_x(state)
+        print "Estimated GOps:", problem.gops_fn(state), "\n"
 
-    cobyla_constraints.extend([
-        # {"type": "ineq", "fun": bram_constraint},
-        {"type": "ineq", "fun": logic_utilization_constraint},
-        {"type": "ineq", "fun": multiplier_constraint}])
-    gops_fn = make_gops_fn(network)
-    results = optimize.basinhopping(
-            make_negate_fn(gops_fn),
-            minimizer_kwargs={
-                    "method": "cobyla", "constraints": cobyla_constraints},
-            x0=np.array(x0),
-            niter=1000)
-    rounded_xs = [nearest_value(x, vs) for x, vs in zip(results.x, valid_values)]
+    return scale_x(state)
 
-    total_logic_used = constraints["logic_utilization"] \
-            - logic_utilization_constraint(rounded_xs)
-    total_multipliers = constraints["multiplier"] \
-            - multiplier_constraint(rounded_xs)
 
-    parameters = [
-        tuple(rounded_xs[i:i+3]) for i in range(0, len(rounded_xs), 3)]
-    print "Iter", iter
-    print "Estimated total logic utilization: %d (%.3f)" % \
-            (total_logic_used,
-             float(total_logic_used) / constraints["logic_utilization"])
-    print "Estimated total multipliers: %d (%.3f)" % \
-            (total_multipliers,
-             float(total_multipliers) / constraints["multiplier"])
-    print "Optimal params:", parameters
-    print "Estimated GOps:", gops_fn(rounded_xs), "\n"
+    # print "Iter", iter
+    # print "Estimated total logic utilization: %d (%.3f)" % \
+    #         (total_logic_used,
+    #          float(total_logic_used) / constraints["logic_utilization"])
+    # print "Estimated total multipliers: %d (%.3f)" % \
+    #         (total_multipliers,
+    #          float(total_multipliers) / constraints["multiplier"])
+    # print "Violation:", multiplier_constraint(results.x)
+    # print "Optimal params:", parameters
+    # print "Estimated GOps:", gops_fn(rounded_xs), "\n"
 
     return parameters
 
@@ -310,7 +277,8 @@ def make_gops_fn(network):
             if layer.HasField("conv"):
                 (wf, cff, kff) = factors[factors_ptr:factors_ptr+3]
                 if any(x <= 0 for x in (wf, cff, kff)):
-                    break
+                    return 0
+
                 wf = nearest_value(wf, valid_values[factors_ptr])
                 cff = nearest_value(cff, valid_values[factors_ptr + 1])
                 kff = nearest_value(kff, valid_values[factors_ptr + 2])
@@ -318,10 +286,15 @@ def make_gops_fn(network):
 
                 # ConvolutionScheduler produces a set of new output at
                 # every non-border cycles.
+                output_height = (
+                        (layer.input_height + 2 * layer.conv.pad - layer.conv.kernel_size) / layer.conv.stride + 1)
+                output_width = (
+                        (layer.input_width + 2 * layer.conv.pad - layer.conv.kernel_size) / layer.conv.stride + 1)
+
                 scheduler_cycles = (float(prev_cycles)
                         * (layer.input_height * layer.input_width)
-                        / (layer.input_height - layer.conv.kernel_size + 1)
-                        / (layer.input_width - layer.conv.kernel_size + 1)
+                        / output_height
+                        / output_width
                         / div_ceil(layer.num_inputs, wf))
 
                 # ConvolutionUnit produces a new output as fast as it receives
@@ -421,25 +394,47 @@ def main():
 
     logic_utilization_model = make_model_from_lm(logic_utilization_model)
     base_logic_model = lambda x: base_logic
-    residual_logic_model = lambda x: logic_utilization_model(x) - base_logic
+    residual_logic_model = lambda x: logic_utilization_model(x) - base_logic[0]
     residual_block_memory_model = make_model_from_lm(residual_block_memory_model)
 
     with open(FLAGS.design, "r") as f:
         network = text_format.Parse(f.read(), parameters_pb2.Network())
 
-    for i in range(10):
-        optimized_params = run_optimizer(
-                network=network,
-                models={
-                    "conv": {
-                        "base_logic": base_logic_model,
-                        "residual_logic": residual_logic_model,
-                        "residual_block_memory": residual_block_memory_model,
-                        "multiplier": lambda a: a[0] * a[1] * a[2] * 2
-                    }
-                },
-                constraints=resource_bench["resources"],
-                iter=i)
+    for i, layer in enumerate(network.layer):
+        if i != 0:
+            layer.input_height = network.layer[i - 1].output_height
+            layer.input_width = network.layer[i - 1].output_width
+            layer.num_inputs = network.layer[i - 1].num_outputs
+
+        if layer.HasField("conv"):
+            layer.output_height = (
+                    (layer.input_height + 2 * layer.conv.pad - layer.conv.kernel_size)
+                     / layer.conv.stride + 1)
+            layer.output_width = (
+                    (layer.input_width + 2 * layer.conv.pad - layer.conv.kernel_size)
+                     / layer.conv.stride + 1)
+
+        elif layer.HasField("pool"):
+            layer.num_outputs = layer.num_inputs
+            layer.output_height = layer.input_height / layer.pool.dim
+            layer.output_width =  layer.input_width / layer.pool.dim
+
+        else:
+            raise RuntimeError("Unknown layer!")
+
+    print network
+
+    optimized_params = run_optimizer(
+            network=network,
+            models={
+                "conv": {
+                    "base_logic": base_logic_model,
+                    "residual_logic": residual_logic_model,
+                    "residual_block_memory": residual_block_memory_model,
+                    "multiplier": lambda a: a[0] * a[1] * a[2] * 2
+                }
+            },
+            constraints=resource_bench["resources"])
 
     # Write the results to a new protobuf and flush it to FLAGS.output
     optimized_network = parameters_pb2.Network()
