@@ -46,7 +46,7 @@ public class PoolingUnit extends KernelLib {
         float paddedPixel = 0.0f;
 
         if (poolingType.equals(PoolingParameter.PoolingType.Max)) {
-            paddedPixel = (float) -(1 << (GlobalConfig.intBits - 1));
+            paddedPixel = (float) -7;
         }
 
         slidingWindow = new SlidingWindow(
@@ -71,6 +71,15 @@ public class PoolingUnit extends KernelLib {
             throw new RuntimeException("Unknown Pooling type!");
 
         }
+    }
+
+    public void simWatch() {
+        for (int i = 0 ; i < kernelDim ; i++) {
+            for (int j = 0 ; j < kernelDim ; j++) {
+                slidingWindow.asList()[i * kernelDim + j].simWatch(String.format("window_%d_%d", i, j));
+            }
+        }
+        output_.simWatch("output");
     }
 
     public void setInput(DFEVar x) {

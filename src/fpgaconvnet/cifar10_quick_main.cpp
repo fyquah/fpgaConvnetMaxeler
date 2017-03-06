@@ -16,8 +16,6 @@
 #else
     static const uint64_t N = 10000;
 #endif
-static const uint64_t CONV_IN_SIZE = 32 * 32 * 3;
-static const uint64_t CONV_OUT_SIZE = 4 * 4 * 64;
 
 
 template<typename T>
@@ -69,6 +67,10 @@ void load_cifar10(const char *filename, std::vector<float> &images, std::vector<
     labels = std::vector<int>(10000);
     images = std::vector<float>(10000 * 1024 * 3);
     std::ifstream fin(filename);
+
+    if (!fin.is_open()) {
+        throw fpgaconvnet::Exception("File not found");
+    }
 
     for (unsigned iter = 0 ; iter < N ; iter++) {
         char byte;
@@ -132,7 +134,7 @@ std::vector<float> run_feature_extraction(
             network_parameters,
             N,
             &extracted_features[0],
-            "../test_data/cifar10_quick/conv1.bin",
+            "../test_data/cifar10_quick/pool3.bin",
             fpgaconvnet::FORMAT_BINARY);
 
     return extracted_features;
@@ -155,13 +157,17 @@ int main(int argc, char **argv)
         std::cout << "Loading netowork parameters from " << argv[1] << std::endl;
         fpgaconvnet::protos::Network network_parameters =
                 fpgaconvnet::load_network_proto(argv[1]);
+        fpgaconvnet::protos::LayerParameter first_layer = network_parameters.layer(0);
+        const uint32_t conv_in_size = 
+            first_layer.input_height() * first_layer.input_width()
+            * first_layer.num_inputs();
 
         std::cout << "Reading images ..." << std::endl;
         load_cifar10("cifar-10-batches-bin/data_batch_1.bin", images, labels);
 
         for (unsigned i = 0 ; i < N ; i++) {
-            for (unsigned j = 0 ; j < CONV_IN_SIZE ; j++) {
-                pixel_stream.push_back(images[i * CONV_IN_SIZE + j]);
+            for (unsigned j = 0 ; j < conv_in_size ; j++) {
+                pixel_stream.push_back(images[i * conv_in_size + j]);
             }
         } 
 
