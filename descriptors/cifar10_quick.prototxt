@@ -10,7 +10,7 @@ layer {
         kernel_size: 5
 
         worker_factor: 3
-        conv_folding_factor: 8
+        conv_folding_factor: 32
         kernel_folding_factor: 5
     }
 }
@@ -18,7 +18,7 @@ layer {
 layer {
     pool: {
         type: Max
-        dim: 3
+        dim: 2
         stride: 2
     }
     activation: Relu
@@ -44,7 +44,7 @@ layer {
 layer {
     pool: {
         type: Average
-        dim: 3
+        dim: 2
         stride: 2
     }
 }
@@ -68,7 +68,7 @@ layer {
 layer {
     pool: {
         type: Average
-        dim: 3
+        dim: 2
         stride: 2
     }
 }
