@@ -78,6 +78,7 @@ class OptimizationProblem(simanneal.Annealer):
         self.valid_values = []
         self.constraints = constraints
         self.models = models
+        self.base_bram_usage = 0.0
 
         for layer in network.layer:
             if layer.HasField("conv"):
@@ -85,6 +86,15 @@ class OptimizationProblem(simanneal.Annealer):
                 self.valid_values.append(compute_valid_values(layer.num_outputs))
                 self.valid_values.append(compute_valid_values(
                     layer.conv.kernel_size * layer.conv.kernel_size))
+                total_weights = (layer.num_inputs * layer.num_outputs
+                                 * layer.conv.kernel_size * layer.conv.kernel_size
+                                 + layer.num_outputs)
+                total_fifo = layer.conv.kernel_size * layer.input_width * layer.num_inputs
+                self.base_bram_usage += (total_weights + total_fifo) * BASE_M20K_FACTOR
+
+            elif layer.HasField("pool"):
+                total_fifo = layer.pool.dim * layer.input_width * layer.num_inputs
+                self.base_bram_usage += total_fifo * BASE_M20K_FACTOR
 
     def logic_utilization_constraint(self, x_new):
         logic_utilization = sum(
@@ -101,7 +111,7 @@ class OptimizationProblem(simanneal.Annealer):
         block_memory = sum(self.models["conv"]["residual_block_memory"](x)
                            for x in scale_x(x_new)) \
                        + self.base_bram_usage
-        return constraints["block_memory"] - block_memory
+        return self.constraints["block_memory"] - block_memory
 
     def move(self):
         while True:
@@ -111,7 +121,8 @@ class OptimizationProblem(simanneal.Annealer):
             self.state[a] = self.valid_values[a][value_index]
 
             if (self.multiplier_constraint(self.state) >= 0
-                    and self.logic_utilization_constraint(self.state) >= 0):
+                    and self.logic_utilization_constraint(self.state) >= 0
+                    and self.bram_constraint(self.state) >= 0):
                 break
             else:
                 self.state[a] = original
@@ -139,15 +150,22 @@ def make_presence_constraint(idx, values):
 
 
 def run_optimizer(network, models, constraints):
-    for i in range(10):
+    num_conv_layers = 0
+    for layer in network.layer:
+        if layer.HasField("conv"):
+            num_conv_layers += 1
+
+    for i in range(5):
         problem = OptimizationProblem(network, models, constraints,
-                                      9 * [1])
+                                      num_conv_layers * 3 * [1])
         problem.copy_strategy = "slice"  
         state, e = problem.anneal()
         total_logic_used = constraints["logic_utilization"] \
                            - problem.logic_utilization_constraint(state)
         total_multipliers = constraints["multiplier"] \
                             - problem.multiplier_constraint(state)
+        total_m20k = constraints["block_memory"] \
+                            - problem.bram_constraint(state)
 
         print "Attempt", i
         print "Estimated total logic utilization: %d (%.3f)" % \
@@ -157,6 +175,9 @@ def run_optimizer(network, models, constraints):
                 (total_multipliers,
                  float(total_multipliers) / constraints["multiplier"])
         print "Optimal params:", scale_x(state)
+        print "Estimaed M20k used: %d (%.3f)" % \
+                (total_m20k,
+                 float(total_m20k) / constraints["block_memory"])
         print "Estimated GOps:", problem.gops_fn(state), "\n"
 
     return scale_x(state)
