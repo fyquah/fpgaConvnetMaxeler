@@ -105,7 +105,7 @@ class OptimizationProblem(simanneal.Annealer):
     def multiplier_constraint(self, x_new):
         multiplier = sum(
             self.models["conv"]["multiplier"](x) for x in scale_x(x_new))
-        return self.constraints["multiplier"] - multiplier
+        return 0.7 * self.constraints["multiplier"] - multiplier
 
     def bram_constraint(self, x_new):
         block_memory = sum(self.models["conv"]["residual_block_memory"](x)
@@ -121,8 +121,7 @@ class OptimizationProblem(simanneal.Annealer):
             self.state[a] = self.valid_values[a][value_index]
 
             if (self.multiplier_constraint(self.state) >= 0
-                    and self.logic_utilization_constraint(self.state) >= 0
-                    and self.bram_constraint(self.state) >= 0):
+                    and self.logic_utilization_constraint(self.state) >= 0):
                 break
             else:
                 self.state[a] = original
@@ -162,7 +161,7 @@ def run_optimizer(network, models, constraints):
         state, e = problem.anneal()
         total_logic_used = constraints["logic_utilization"] \
                            - problem.logic_utilization_constraint(state)
-        total_multipliers = constraints["multiplier"] \
+        total_multipliers = 0.7 * constraints["multiplier"] \
                             - problem.multiplier_constraint(state)
         total_m20k = constraints["block_memory"] \
                             - problem.bram_constraint(state)
