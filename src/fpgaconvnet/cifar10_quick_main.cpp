@@ -76,22 +76,22 @@ void load_cifar10(const char *filename, std::vector<float> &images, std::vector<
         std::vector<float> blue(1024);
         std::vector<float> green(1024);
 
-        fin.read(&byte, 1);
+        fin.read(static_cast<char*>(&byte), 1);
         labels.push_back(int(byte));
 
         for (int i = 0 ; i< 1024 ; i++) {
-            fin.read(&byte, 1);
-            red[i] = float(byte) / 255.0;
+            fin.read(static_cast<char*>(&byte), 1);
+            red[i] = float((unsigned char) byte) / 255.0;
         }
 
         for (int i = 0 ; i< 1024 ; i++) {
             fin.read(&byte, 1);
-            green[i] = float(byte) / 255.0;
+            green[i] = float((unsigned char) byte) / 255.0;
         }
 
         for (int i = 0 ; i< 1024 ; i++) {
             fin.read(&byte, 1);
-            blue[i] = float(byte) / 255.0;
+            blue[i] = float((unsigned char) byte) / 255.0;
         }
 
         for (int i = 0 ; i < 1024 ; i++) {
@@ -111,12 +111,12 @@ std::vector<float> run_feature_extraction(
 )
 {
     std::vector<std::string> filenames = {
-            "../test_data/cifar10_quick/weights/conv0_weights.txt",
-            "../test_data/cifar10_quick/weights/conv0_bias.txt",
-            "../test_data/cifar10_quick/weights/conv2_weights.txt",
-            "../test_data/cifar10_quick/weights/conv2_bias.txt",
-            "../test_data/cifar10_quick/weights/conv4_weights.txt",
-            "../test_data/cifar10_quick/weights/conv4_bias.txt" };
+            "../test_data/cifar10_quick/weights/conv0_weights",
+            "../test_data/cifar10_quick/weights/conv0_bias",
+            "../test_data/cifar10_quick/weights/conv2_weights",
+            "../test_data/cifar10_quick/weights/conv2_bias",
+            "../test_data/cifar10_quick/weights/conv4_weights",
+            "../test_data/cifar10_quick/weights/conv4_bias" };
     max_file_t *max_file = cifar10_quick_init();
     std::vector<float> extracted_features;
     fpgaconvnet::Convnet convnet(network_parameters, max_file, "");
@@ -132,7 +132,8 @@ std::vector<float> run_feature_extraction(
             network_parameters,
             N,
             &extracted_features[0],
-            "../test_data/lenet/output.txt");
+            "../test_data/cifar10_quick/conv1.bin",
+            fpgaconvnet::FORMAT_BINARY);
 
     return extracted_features;
 }

@@ -50,6 +50,7 @@ static void generic_load(std::string filename, int count, float *output)
 static void generic_load_binary(std::string filename, int count, float *output)
 {
     std::ifstream fin(filename.c_str());
+
     for (int i = 0 ; i < count ; i++) {
         // note, works only on little endian machines.
         fin.read((char*) &output[i], 4);
@@ -218,7 +219,20 @@ void load_kernels_from_binary_file(
     float *output
 )
 {
-    generic_load_binary(filename, layer.num_outputs(), output);
+    std::ifstream fin(filename.c_str());
+    int total_kernel_size = layer.conv().kernel_size() * layer.conv().kernel_size();
+    int total_kernels = layer.num_outputs() * layer.num_inputs();
+    float *buffer = new float[total_kernel_size];
+
+    if (!fin.is_open()) {
+        throw fpgaconvnet::Exception("Cannot open " + filename);
+    }
+
+    for (int i = 0 ; i < total_kernels ; i++) {
+        // note, works only on little endian machines.
+        fin.read((char*) &output[i * total_kernel_size], total_kernel_size * sizeof(float));
+    }
+    fin.close();
 }
 
 
@@ -294,16 +308,23 @@ void verify_conv_output(
                 fin.seekg(0, std::ios::beg);
                 log_stdout(INFO) << "Verifier moving to the beginning of file!"
                         << std::endl;
-                fin >> expected;
+
+                if (format == FORMAT_TXT) {
+                    fin >> expected;
+                } else {
+                    fin.read((char*) &expected, 4);
+                }
             }
 
             total_error += std::abs(obtained  - expected);
             total_pixels += 1;
 
-            if (std::abs(obtained - expected) > 0.01) {
-                log_stdout(INFO) << "Obtained " << obtained << ", expected " << expected << std::endl;
-                log_stdout(WARNING) << "Error > 0.01 while verifying output!" << std::endl;
+            if (std::abs(obtained - expected) > 0.001) {
+                log_stdout(WARNING) << j << "\t| ERROR: Obtained " << obtained << ", expected " << expected << std::endl;
             }
+            // else {
+            //     log_stdout(WARNING) << j << "\t| OKAY: Obtained " << obtained << ", expected " << expected << std::endl;
+            // }
         }
     }
     log_stdout(INFO) << "pixel_error = " << float(total_error) / float(total_pixels) << std::endl;
@@ -410,7 +431,6 @@ void Convnet::set_layer_weights(
                     buffer,
                     values,
                     sizeof(float) * padded_worker_rom_size);
-            std::cout << "Stream size = " << sizeof(float) * padded_worker_rom_size << std::endl;
 
         }
     }
