@@ -75,6 +75,8 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
         CounterChain chain = control.count.makeCounterChain(~isInitializingWeights);
         DFEVar iter = Utils.chainCounterOrZero(this, chain, getConvolutionIterations());
         DFEVar kernelIter = Utils.chainCounterOrZero(this, chain, getKernelIterations());
+
+        // TODO(fyq14):  Handle fully unrolled case.
         DFEVar address = control.count.simpleCounter(
                 Utils.ceilLog2(totalAddressCount), totalAddressCount);
 
