@@ -8,6 +8,10 @@ import com.maxeler.maxcompiler.v2.managers.engine_interfaces.EngineInterface;
 import com.maxeler.maxcompiler.v2.managers.engine_interfaces.InterfaceParam;
 
 import fpgaconvnet.protos.Parameters.LayerParameter;
+import fpgaconvnet.kernels.ConvolutionSchedulerKernel;
+import fpgaconvnet.kernels.ConvolutionAccumulatorKernel;
+import fpgaconvnet.kernels.ConvolutionUnitKernel;
+import fpgaconvnet.kernels.PoolingLayerKernel;
 
 
 public class ConvolutionLayer {

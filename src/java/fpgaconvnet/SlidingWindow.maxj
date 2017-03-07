@@ -44,7 +44,7 @@ public class SlidingWindow extends KernelLib {
 
     // slides a 2d convolution window
     // around a input stream
-    SlidingWindow(
+    public SlidingWindow(
         Kernel argKernel,
         DFEVar input,
         int inputHeight,

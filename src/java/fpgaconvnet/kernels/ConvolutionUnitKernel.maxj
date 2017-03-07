@@ -1,4 +1,5 @@
-package fpgaconvnet;
+package fpgaconvnet.kernels;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -11,6 +12,10 @@ import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Count.Counter;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.CounterChain;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.memory.Memory;
 
+import fpgaconvnet.Dimension;
+import fpgaconvnet.GlobalConfig;
+import fpgaconvnet.Utils;
+import fpgaconvnet.SlidingWindow;
 import fpgaconvnet.protos.Parameters.LayerParameter;
 
 

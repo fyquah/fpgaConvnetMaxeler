@@ -19,6 +19,7 @@ import com.maxeler.maxcompiler.v2.managers.engine_interfaces.InterfaceParam;
 import com.maxeler.maxcompiler.v2.managers.engine_interfaces.InterfaceParamArray;
 
 import fpgaconvnet.protos.Parameters;
+import fpgaconvnet.kernels.*;
 
 
 public class NetworkManager extends CustomManager {
