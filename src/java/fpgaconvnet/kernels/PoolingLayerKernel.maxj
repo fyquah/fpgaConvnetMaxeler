@@ -1,8 +1,5 @@
 package fpgaconvnet.kernels;
 
-import java.util.List;
-import java.util.ArrayList;
-
 import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
 import com.maxeler.maxcompiler.v2.kernelcompiler.KernelParameters;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.CounterChain;
@@ -16,7 +13,6 @@ import fpgaconvnet.Dimension;
 import fpgaconvnet.GlobalConfig;
 import fpgaconvnet.SlidingWindow;
 import fpgaconvnet.Utils;
-import fpgaconvnet.lib.StrideCounter;
 import fpgaconvnet.protos.Parameters.LayerParameter;
 import fpgaconvnet.protos.Parameters.PoolingParameter;
 
@@ -75,14 +71,11 @@ public class PoolingLayerKernel extends Kernel {
         DFEVar inputRow = Utils.chainCounterOrZero(this, masterChain, inputDimension.height());
         DFEVar inputCol = Utils.chainCounterOrZero(this, masterChain, inputDimension.width());
 
-        DFEVar colStrideReset = inputCol.eq(0);
         DFEVar colStride = control.count.makeCounter(
                 control.count.makeParams(Utils.ceilLog2(stride))
                 .withMax(stride)
                 .withReset(inputCol.eq(0)))
-                // .withEnable(~colStrideReset))
                     .getCount();
-        DFEVar rowStrideReset = inputRow.eq(0) & inputCol.eq(0);
         DFEVar rowStride = control.count.makeCounter(
                 control.count.makeParams(Utils.ceilLog2(stride))
                 .withMax(stride)
@@ -214,34 +207,4 @@ public class PoolingLayerKernel extends Kernel {
             return fullDim;
         }
     }
-
-    private DFEVar isBorder(DFEVar row, DFEVar col) {
-        DFEVar flag = constant.var(dfeBool(), 0);
-        final int kernelDim = layerParams.getPool().getDim();
-
-        if (kernelDim % 2 == 1) {
-            for (int i = 0 ; i < (layerParams.getPool().getDim() - 1) / 2 ; i++) {
-                flag = flag | row.eq(i) | col.eq(i)
-                        | row.eq(inputDimension.height() - 1 - i)
-                        | col.eq(inputDimension.width() - 1 - i);
-            }
-
-            return flag;
-
-        } else {
-            // handle top and left first
-            for (int i = 0 ; i < layerParams.getPool().getDim() / 2 ; i++) {
-                flag = flag | row.eq(i) | col.eq(i);
-            }
-
-            // handle bottom and right
-            for (int i = 0 ; i < (layerParams.getPool().getDim() / 2) - 1 ; i++) {
-                flag = flag | row.eq(inputDimension.height() - 1 - i)
-                        | col.eq(inputDimension.width() - 1 - i);
-            }
-
-            return flag;
-        }
-    }
-
 }

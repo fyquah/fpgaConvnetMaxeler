@@ -9,14 +9,10 @@ import com.maxeler.maxcompiler.v2.managers.custom.CustomManager;
 import com.maxeler.maxcompiler.v2.managers.custom.DFELink;
 import com.maxeler.maxcompiler.v2.managers.custom.blocks.KernelBlock;
 import com.maxeler.maxcompiler.v2.managers.custom.stdlib.DebugLevel;
-import com.maxeler.maxcompiler.v2.managers.custom.stdlib.MemoryControlGroup;
-import com.maxeler.maxcompiler.v2.managers.custom.stdlib.LMemCommandGroup;
-import com.maxeler.maxcompiler.v2.managers.custom.stdlib.LMemInterface;
 import com.maxeler.maxcompiler.v2.managers.engine_interfaces.CPUTypes;
 import com.maxeler.maxcompiler.v2.managers.engine_interfaces.EngineInterface;
 import com.maxeler.maxcompiler.v2.managers.engine_interfaces.EngineInterface.Direction;
 import com.maxeler.maxcompiler.v2.managers.engine_interfaces.InterfaceParam;
-import com.maxeler.maxcompiler.v2.managers.engine_interfaces.InterfaceParamArray;
 
 import fpgaconvnet.protos.Parameters;
 import fpgaconvnet.kernels.*;

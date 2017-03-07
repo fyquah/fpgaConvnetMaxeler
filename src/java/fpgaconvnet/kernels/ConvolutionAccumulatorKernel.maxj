@@ -10,7 +10,6 @@ import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Count.Counter;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.CounterChain;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Stream.OffsetExpr;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.memory.Memory;
-import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEType;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVector;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVectorType;
@@ -74,12 +73,10 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
 
         // Runtime Counters and loop variables
         OffsetExpr loopOffsetExpr = stream.makeOffsetAutoLoop(getOffsetExprName());
-        DFEVar pipelineLengthVar = loopOffsetExpr.getDFEVar(this,dfeUInt(32));
         CounterChain chain = control.count.makeCounterChain(~isInitializingWeights);
         DFEVar schedulerIter = Utils.chainCounterOrZero(this, chain, getSchedulerIterations());
         DFEVar convIter = Utils.chainCounterOrZero(this, chain, getConvolutionIterations());
         DFEVar kernelIter = Utils.chainCounterOrZero(this, chain, getKernelIterations());
-        DFEVar pipelineStage = chain.addCounter(pipelineLengthVar, 1);
         DFEVar streamCounter = control.count.simpleCounter(
                 32,
                 getKernelIterations() * getConvolutionIterations() * getSchedulerIterations());
