@@ -14,14 +14,14 @@ import com.maxeler.maxcompiler.v2.managers.engine_interfaces.EngineInterface;
 import com.maxeler.maxcompiler.v2.managers.engine_interfaces.EngineInterface.Direction;
 import com.maxeler.maxcompiler.v2.managers.engine_interfaces.InterfaceParam;
 
-import fpgaconvnet.Utils.Pair;
+import fpgaconvnet.Utils.Tuple3;
 import fpgaconvnet.protos.Parameters;
 import fpgaconvnet.kernels.*;
 
 
 public class NetworkManager extends CustomManager {
 
-    private List<ConvolutionLayer> convolutionLayers;
+    private List<ComputationChain> convolutionLayers;
     private List<PoolingLayerKernel> poolingKernels;
     private List<KernelBlock> poolingKernelBlocks;
     /* NetworkParameters here are completely filled, (ie: earlier stages of the compilation process
@@ -66,46 +66,19 @@ public class NetworkManager extends CustomManager {
             Parameters.LayerParameter layerParams = networkParameters.getLayer(i);
 
             if (isConvLayer(layerParams)) {
-                String convUnitKernelName = convolutionLayers[convLayerIndex]
-                        .getConvolutionUnit()
-                        .getKernel()
-                        .getName();
-                String accKernelName = convolutionLayers[convLayerIndex]
-                        .getAccumulator()
-                        .getKernel()
-                        .getName();
-
-                ei.setScalar(convUnitKernelName, "init", init);
-                ei.setScalar(accKernelName, "init", init);
-                initConvLayer(ei, layerParams, convolutionLayers[convLayerIndex], init);
-
+                convolutionLayers[convLayerIndex].setScalar(ei, "init", init);
+                for (Tuple3<String, DFELink, Integer> link : convolutionLayers[convLayerIndex].getInitializerInputs()) {
+                    ei.setStream(
+                            link.getFirst(),
+                            CPUTypes.FLOAT,
+                            init ? link.getThird() * CPUTypes.FLOAT.sizeInBytes() : 0);
+                }
                 convLayerIndex++;
             }
         }
 
         ei.ignoreAll(Direction.IN_OUT);
         return ei;
-    }
-
-    private void initConvLayer(
-            EngineInterface ei,
-            Parameters.LayerParameter layerParams,
-            ConvolutionLayer layer,
-            InterfaceParam init) {
-
-        final int streamSize = layer.getConvolutionUnit().getKernel().initStreamSize();
-
-        ei.setStream(String.format("kernel_%d", layerParams.getLayerId()),
-                     CPUTypes.FLOAT,
-                     init ?
-                     (streamSize * CPUTypes.FLOAT.sizeInBytes()) : 0);
-
-        int biasStreamSize =
-                layer.getAccumulator().getKernel().initCycles() * CPUTypes.FLOAT.sizeInBytes();
-
-        ei.setStream(String.format("bias_%d", layerParams.getLayerId()),
-                     CPUTypes.FLOAT,
-                     init ? biasStreamSize : 0);
     }
 
     private void setupKernels() {
@@ -155,7 +128,7 @@ public class NetworkManager extends CustomManager {
             Parameters.LayerParameter layer = networkParameters.getLayer(i);
 
             if (isConvLayer(layer)) {
-                for (Pair<String, DFELink> link : convolutionLayers[convLayerId].getInitializerInputs()) {
+                for (Tuple3<String, DFELink, Integer> link : convolutionLayers[convLayerId].getInitializerInputs()) {
                     DFELink dataStream = addStreamFromCPU(link.getFirst());
                     link.getSecond() <== dataStream;
                 }
@@ -167,7 +140,7 @@ public class NetworkManager extends CustomManager {
     public NetworkManager(EngineParameters engineParameters, Parameters.Network networkParametersIn) {
         super(engineParameters);
         networkParameters = networkParametersIn;
-        convolutionLayers = new ArrayList<ConvolutionLayer>();
+        convolutionLayers = new ArrayList<ComputationChain>();
         poolingKernels = new ArrayList<PoolingLayerKernel>();
         poolingKernelBlocks = new ArrayList<KernelBlock>();
 

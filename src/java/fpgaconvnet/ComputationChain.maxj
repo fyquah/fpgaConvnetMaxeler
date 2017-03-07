@@ -6,7 +6,7 @@ import com.maxeler.maxcompiler.v2.managers.custom.DFELink;
 import com.maxeler.maxcompiler.v2.managers.engine_interfaces.EngineInterface;
 import com.maxeler.maxcompiler.v2.managers.engine_interfaces.InterfaceParam;
 
-import fpgaconvnet.Utils.Pair;
+import fpgaconvnet.Utils.Tuple3;
 
 
 /* @brief Abstracts a chain of kernels representing a chain of kernels.
@@ -27,6 +27,9 @@ interface ComputationChain {
     /* Set the number of ticks to the internal kernels. */
     void setKernelTimings(EngineInterface ei, InterfaceParam numberOfImages, InterfaceParam init);
 
+    /* Set a run-time scalar. This is most useful for setting an initialization flag. */
+    void setScalar(EngineInterface ei, String name, InterfaceParam param);
+
     /* List of name of output and input link */
-    List<Pair<String, DFELink>> getInitializerInputs();
+    List<Tuple3<String, DFELink, Integer>> getInitializerInputs();
 }

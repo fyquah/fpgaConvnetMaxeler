@@ -402,21 +402,27 @@ public class Utils {
         return new Dimension(layer.getInputHeight(), layer.getInputWidth(), layer.getNumInputs());
     }
 
-    public static class Pair<L, R> {
-        final private L first;
-        final private R second;
+    public static class Tuple3<P, Q, R> {
+        final private P first;
+        final private Q second;
+        final private R third;
 
-        public Pair(L left, R right) {
-            first = left;
-            second = right;
+        public Tuple3(P argFirst, Q argSecond, R argThird) {
+            first = argFirst;
+            second = argSecond;
+            third = argThird;
         }
 
-        public L getFirst() {
+        public P getFirst() {
             return first;
         }
 
-        public R getSecond() {
+        public Q getSecond() {
             return second;
+        }
+
+        public R getThird() {
+            return third;
         }
     }
 }

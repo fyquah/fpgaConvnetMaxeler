@@ -12,7 +12,7 @@ import fpgaconvnet.protos.Parameters.LayerParameter;
 import fpgaconvnet.kernels.ConvolutionSchedulerKernel;
 import fpgaconvnet.kernels.ConvolutionAccumulatorKernel;
 import fpgaconvnet.kernels.ConvolutionUnitKernel;
-import fpgaconvnet.Utils.Pair;
+import fpgaconvnet.Utils.Tuple3;
 
 
 public class ConvolutionLayer implements ComputationChain {
@@ -106,16 +106,23 @@ public class ConvolutionLayer implements ComputationChain {
         }
     }
 
-    public List<Pair<String, DFELink>> getInitializerInputs() {
-        ArrayList<Pair<String, DFELink>> ret = new ArrayList<Pair<String, DFELink>>();
-        ret.add(new Pair<String, DFELink>(
+    public void setScalar(EngineInterface ei, String name, InterfaceParam param) {
+        ei.setScalar(convolutionUnit.getKernel().getName(), name, param);
+        ei.setScalar(accumulator.getKernel().getName(), name, param);
+    }
+
+    public List<Tuple3<String, DFELink, Integer>> getInitializerInputs() {
+        ArrayList<Tuple3<String, DFELink, Integer>> ret = new ArrayList<Tuple3<String, DFELink, Integer>>();
+        ret.add(new Tuple3<String, DFELink, Integer>(
                 String.format("kernel_%d", layer.getLayerId()),
                 convolutionUnit.getBlock().getInput(
-                    convolutionUnit.getKernel().getWeightsInputName())));
-        ret.add(new Pair<String, DFELink>(
+                    convolutionUnit.getKernel().getWeightsInputName()),
+                convolutionUnit.getKernel().initStreamSize()));
+        ret.add(new Tuple3<String, DFELink, Integer>(
                 String.format("bias_%d", layer.getLayerId()),
                 accumulator.getBlock().getInput(
-                    accumulator.getKernel().getBiasInputName())));
+                    accumulator.getKernel().getBiasInputName()),
+                accumulator.getKernel().initCycles()));
         return ret;
     }
 
