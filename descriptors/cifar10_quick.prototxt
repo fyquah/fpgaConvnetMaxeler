@@ -18,7 +18,7 @@ layer {
 layer {
     pool: {
         type: Max
-        dim: 2
+        dim: 3
         stride: 2
     }
     activation: Relu
@@ -44,7 +44,7 @@ layer {
 layer {
     pool: {
         type: Average
-        dim: 2
+        dim: 3
         stride: 2
     }
 }
@@ -68,7 +68,7 @@ layer {
 layer {
     pool: {
         type: Average
-        dim: 2
+        dim: 3
         stride: 2
     }
 }

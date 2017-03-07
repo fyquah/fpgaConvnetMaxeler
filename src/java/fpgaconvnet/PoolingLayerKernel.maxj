@@ -9,6 +9,8 @@ import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.CounterChain;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVector;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVectorType;
+import maxpower.ops.AssociativeOp;
+import maxpower.utils.TreeReduce;
 
 import fpgaconvnet.lib.StrideCounter;
 import fpgaconvnet.protos.Parameters.LayerParameter;
@@ -20,9 +22,18 @@ public class PoolingLayerKernel extends Kernel {
     int poolingDim;
     int stride;
     PoolingParameter.PoolingType poolingType;
-    PoolingUnit[] poolingUnits;
     DFEVectorType<DFEVar> outputType, inputType;
     LayerParameter layerParams;
+
+    private static final AssociativeOp<DFEVar> dfeMaxOp = new AssociativeOp<DFEVar>(){
+        @Override
+        public DFEVar op(DFEVar a, DFEVar b) { return a > b ? a : b; }
+    };
+
+    private static final AssociativeOp<DFEVar> dfeSumOp = new AssociativeOp<DFEVar>() {
+        @Override
+        public DFEVar op(DFEVar a, DFEVar b) { return a + b; }
+    };
 
     public int cyclesPerImage() {
         return inputDimension.height() * inputDimension.width();
@@ -51,7 +62,6 @@ public class PoolingLayerKernel extends Kernel {
         outputType = new DFEVectorType<DFEVar>(GlobalConfig.dataType, nChannels);
         inputType = new DFEVectorType<DFEVar>(GlobalConfig.dataType, nChannels);
 
-        poolingUnits = new PoolingUnit[inputDimension.channels()];
 
         DFEVector<DFEVar> input = inputType.newInstance(this);
         DFEVector<DFEVar> output = outputType.newInstance(this);
@@ -82,22 +92,51 @@ public class PoolingLayerKernel extends Kernel {
         rowStride.simWatch("row_stride");
         colStride.simWatch("col_stride");
 
+        float paddedPixel = 0.0f;
+        DFEVar dividend = null;
+        AssociativeOp<DFEVar> op;
+
+        if (poolingType.equals(PoolingParameter.PoolingType.Max)) {
+            paddedPixel = (float) -8;
+        }
+
+        if (poolingType.equals(PoolingParameter.PoolingType.Average)) {
+            dividend = poolDividend(inputRow, inputCol);
+            dividend.simWatch("pooling_dividend");
+        }
+
         for (int i = 0 ; i < inputDimension.channels() ; i++) {
-            poolingUnits[i] = new PoolingUnit(
+
+            DFEVar channelOutput = null;
+            SlidingWindow slidingWindow = new SlidingWindow(
                 this,
-                poolingType,
+                input[i],
                 inputDimension.height(),
                 inputDimension.width(),
-                poolingDim
+                poolingDim,
+                1,
+                constant.var(GlobalConfig.dataType, (double) paddedPixel),
+                0
             );
-            poolingUnits[i].setInput(input[i]);
 
+            if (poolingType.equals(PoolingParameter.PoolingType.Average)) {
+                op = dfeSumOp;
+                channelOutput = TreeReduce.reduce(op, slidingWindow.asList()) * dividend;
+
+            } else if (poolingType.equals(PoolingParameter.PoolingType.Max)) {
+                op = dfeMaxOp;
+                channelOutput = TreeReduce.reduce(op, slidingWindow.asList());
+
+            } else {
+                throw new RuntimeException("Unknown Pooling type!");
+
+            }
 
             if (layerParams.getActivation() == LayerParameter.Activation.None) {
-                output[i] <== poolingUnits[i].output();
+                output[i] <== channelOutput;
 
             } else if (layerParams.getActivation() == LayerParameter.Activation.Relu) {
-                DFEVar x = poolingUnits[i].output();
+                DFEVar x = channelOutput;
                 output[i] <== x > 0 ? x : 0;
 
             } else {
@@ -107,8 +146,6 @@ public class PoolingLayerKernel extends Kernel {
             output[i].simWatch(String.format("output_%d", i));
         }
         // poolingUnits[0].simWatch();
-
-        // end of dervived properties
 
         // set the kernel I/O interface
         input <== io.input("x", inputType);
@@ -136,6 +173,42 @@ public class PoolingLayerKernel extends Kernel {
         //         outputFlag,
         //         "PoolingLayerKernel[" + layer.getLayerId() + "] output = " + debug_s + "\n",
         //         debugValues.toArray(new Object[1]));
+    }
+
+    private DFEVar poolDividend(DFEVar row, DFEVar col) {
+        int lastRow = (outputDimension.height() - 1) * stride;
+        int lastCol = (outputDimension.width() - 1) * stride;
+        int heightResidue = inputDimension.height() - lastRow;
+        int widthResidue = inputDimension.width() - lastCol;
+
+        final DFEVar fullDim = constant.var(
+                GlobalConfig.dataType, 1.0 / ((double) poolingDim * poolingDim));
+        final DFEVar rowBorder = constant.var(
+                GlobalConfig.dataType, 1.0 / ((double) poolingDim * heightResidue));
+        final DFEVar colBorder = constant.var(
+                GlobalConfig.dataType, 1.0 / ((double) poolingDim * widthResidue));
+        final DFEVar corner = constant.var(
+                GlobalConfig.dataType, 1.0 / ((double) heightResidue * widthResidue));
+
+
+        if (heightResidue != poolingDim && widthResidue != poolingDim) {
+            return (row.eq(lastRow)
+                    ? (col.eq(lastCol)
+                        ? corner /* row == last && col == last */
+                        : rowBorder /* row == last && col != last */)
+                    : (col.eq(lastCol)
+                        ? colBorder /* row != last && col == last */
+                        : fullDim /* row != last && col != last */));
+
+        } else if (heightResidue != poolingDim) {
+            return (row.eq(lastRow) ? rowBorder : fullDim);
+
+        } else if (widthResidue != poolingDim) {
+            return (col.eq(lastCol) ? colBorder : fullDim);
+
+        } else {
+            return fullDim;
+        }
     }
 
     private DFEVar isBorder(DFEVar row, DFEVar col) {
