@@ -10,8 +10,8 @@ layer {
         kernel_size: 5
 
         worker_factor: 3
-        conv_folding_factor: 32
-        kernel_folding_factor: 5
+        conv_folding_factor: 7
+        kernel_folding_factor: 13
     }
 }
 
@@ -33,9 +33,9 @@ layer {
         pad: 2
         kernel_size: 5
 
-        worker_factor: 3
-        conv_folding_factor: 8
-        kernel_folding_factor: 8
+        worker_factor: 7
+        conv_folding_factor: 4
+        kernel_folding_factor: 25
     }
 
     activation: Relu
@@ -57,9 +57,9 @@ layer {
         kernel_size: 5
         stride: 1
 
-        worker_factor: 3
-        conv_folding_factor: 8
-        kernel_folding_factor: 8
+        worker_factor: 7
+        conv_folding_factor: 11
+        kernel_folding_factor: 5
     }
 
     activation: Relu

@@ -118,9 +118,9 @@ public class ConvolutionLayer {
         }
     }
 
-    public DFELink getFiltersInput(int workerId) {
+    public DFELink getFiltersInput() {
         return convolutionUnit.getBlock().getInput(
-                convolutionUnit.getKernel().getWeightsInputName(workerId));
+                convolutionUnit.getKernel().getWeightsInputName());
     }
 
     public DFELink getBiasInput() {
