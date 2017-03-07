@@ -93,7 +93,6 @@ public class PoolingLayerKernel extends Kernel {
             poolingUnits[i].setInput(input[i]);
 
 
-
             if (layerParams.getActivation() == LayerParameter.Activation.None) {
                 output[i] <== poolingUnits[i].output();
 
@@ -104,12 +103,17 @@ public class PoolingLayerKernel extends Kernel {
             } else {
                 throw new RuntimeException("Unsupported activation type");
             }
+
+            output[i].simWatch(String.format("output_%d", i));
         }
+        // poolingUnits[0].simWatch();
+
         // end of dervived properties
 
         // set the kernel I/O interface
         input <== io.input("x", inputType);
         DFEVar outputFlag = rowStride.eq(0) & colStride.eq(0);
+        outputFlag.simWatch("output_flag");
 
         if (layerParams.getIsLastLayer()) {
             /* Last layer - cast from fixed point to dfe float. */

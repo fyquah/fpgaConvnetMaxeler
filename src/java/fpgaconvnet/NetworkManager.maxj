@@ -95,14 +95,12 @@ public class NetworkManager extends CustomManager {
             ConvolutionLayer layer,
             InterfaceParam init) {
 
-        for (int worker = 0 ; worker < layerParams.getConv().getWorkerFactor(); worker++) {
-            final int streamSize = layer.getConvolutionUnit().getKernel().initStreamSize();
+        final int streamSize = layer.getConvolutionUnit().getKernel().initStreamSize();
 
-            ei.setStream(String.format("kernel_%d_%d", layerParams.getLayerId(), worker),
-                         CPUTypes.FLOAT,
-                         init ?
-                         (streamSize * CPUTypes.FLOAT.sizeInBytes()) : 0);
-        }
+        ei.setStream(String.format("kernel_%d", layerParams.getLayerId()),
+                     CPUTypes.FLOAT,
+                     init ?
+                     (streamSize * CPUTypes.FLOAT.sizeInBytes()) : 0);
 
         int biasStreamSize =
                 layer.getAccumulator().getKernel().initCycles() * CPUTypes.FLOAT.sizeInBytes();
@@ -159,12 +157,10 @@ public class NetworkManager extends CustomManager {
             Parameters.LayerParameter layer = networkParameters.getLayer(i);
 
             if (isConvLayer(layer)) {
-                for (int j = 0 ; j < layer.getConv().getWorkerFactor(); j++) {
-                    DFELink dataStream = addStreamFromCPU(
-                            String.format("kernel_%d_%d", layer.getLayerId(), j));
+                DFELink kernelDataStream = addStreamFromCPU(
+                        String.format("kernel_%d", layer.getLayerId()));
 
-                    convolutionLayers[convLayerId].getFiltersInput(j) <== dataStream;
-                }
+                convolutionLayers[convLayerId].getFiltersInput() <== kernelDataStream;
 
                 DFELink biasDataStream = addStreamFromCPU(
                         String.format("bias_%d", layer.getLayerId()));

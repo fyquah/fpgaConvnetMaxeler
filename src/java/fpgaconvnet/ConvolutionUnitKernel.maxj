@@ -49,6 +49,8 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
         CounterChain initChain = control.count.makeCounterChain();
         DFEVar initCycleIter = control.count.simpleCounter(
                 Utils.ceilLog2(initCycles()), initCycles());
+        DFEVar initWorkerIter = Utils.chainCounterOrZero(
+                this, initChain, layerParams.getConv().getWorkerFactor());
         DFEVar initConvIter = Utils.chainCounterOrZero(
                 this, initChain, layerParams.getConv().getConvFoldingFactor());
         DFEVar initAddress = Utils.chainCounterOrZero(this, initChain, totalAddressCount);
@@ -63,8 +65,9 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
                 .withInc(1)
                 .withMax(1)
                 .withWrapMode(Count.WrapMode.STOP_AT_MAX)
-                .withEnable(initAddress.eq(totalAddressCount - 1) &
-                            initConvIter.eq(layerParams.getConv().getConvFoldingFactor() - 1)));
+                .withEnable(initAddress.eq(totalAddressCount - 1)
+                            & initConvIter.eq(layerParams.getConv().getConvFoldingFactor() - 1)
+                            & initWorkerIter.eq(layerParams.getConv().getWorkerFactor() - 1)));
 
         DFEVar initWeightsFlag = io.scalarInput("init", dfeUInt(1));
         DFEVar initializationComplete = initializationCompleteCtr.getCount();
@@ -75,6 +78,8 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
         CounterChain chain = control.count.makeCounterChain(~isInitializingWeights);
         DFEVar iter = Utils.chainCounterOrZero(this, chain, getConvolutionIterations());
         DFEVar kernelIter = Utils.chainCounterOrZero(this, chain, getKernelIterations());
+
+        // TODO(fyq14):  Handle fully unrolled case.
         DFEVar address = control.count.simpleCounter(
                 Utils.ceilLog2(totalAddressCount), totalAddressCount);
 
@@ -85,6 +90,10 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
         initConvIter.simWatch("initConvIter");
         initAddress.simWatch("initAddress");
 
+        DFEVector<DFEVar> rawWeightsInputs = io.input(getWeightsInputName(),
+                                                      rawWeightInputVectorType,
+                                                      isInitializingWeights);
+
         for (int workerId = 0 ; workerId < params.getConv().getWorkerFactor() ; workerId++) {
 
             DFEVar inputControlFlag = ~isInitializingWeights & iter.eq(0) & kernelIter.eq(0);
@@ -92,9 +101,6 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
             DFEVector<DFEVar> inputWindow = io.input(getInputName(workerId),
                                                      inputVectorType,
                                                      inputControlFlag);
-            DFEVector<DFEVar> rawWeightsInputs = io.input(getWeightsInputName(workerId),
-                                                          rawWeightInputVectorType,
-                                                          isInitializingWeights);
             DFEVector<DFEVar> weightsInputs = rawWeightsInputs.cast(weightInputVectorType);
 
             DFEVector<DFEVar> output = outputVectorType.newInstance(this);
@@ -116,6 +122,7 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
                             weightsInputs[multId],
                             isInitializingWeights
                             & initConvIter.eq(convUnitIndex)
+                            & initWorkerIter.eq(workerId)
                             & ~isPaddingInit);
                     // debug.simPrintf(isInitializingWeights & initConvIter.eq(convUnitIndex),
                     //         "ConvolutionUnit | Writing %.3f to %d in conv %d mult %d\n",
@@ -138,7 +145,8 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
     }
 
     public int realInitCycles() {
-        return layerParams.getConv().getConvFoldingFactor()
+        return layerParams.getConv().getWorkerFactor()
+                * layerParams.getConv().getConvFoldingFactor()
                 * getSchedulerIterations()
                 * getConvolutionIterations()
                 * getKernelIterations();
@@ -168,8 +176,8 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
         return "input_" + workerId;
     }
 
-    public String getWeightsInputName(int workerId) {
-        return "weights_input_" + workerId;
+    public String getWeightsInputName() {
+        return "weights_input";
     }
 
     public String getOutputName(int workerId) {

@@ -16,8 +16,6 @@
 #else
     static const uint64_t N = 10000;
 #endif
-static const uint64_t CONV_IN_SIZE = 32 * 32 * 3;
-static const uint64_t CONV_OUT_SIZE = 4 * 4 * 64;
 
 
 template<typename T>
@@ -70,28 +68,32 @@ void load_cifar10(const char *filename, std::vector<float> &images, std::vector<
     images = std::vector<float>(10000 * 1024 * 3);
     std::ifstream fin(filename);
 
+    if (!fin.is_open()) {
+        throw fpgaconvnet::Exception("File not found");
+    }
+
     for (unsigned iter = 0 ; iter < N ; iter++) {
         char byte;
         std::vector<float> red(1024);
         std::vector<float> blue(1024);
         std::vector<float> green(1024);
 
-        fin.read(&byte, 1);
+        fin.read(static_cast<char*>(&byte), 1);
         labels.push_back(int(byte));
 
         for (int i = 0 ; i< 1024 ; i++) {
-            fin.read(&byte, 1);
-            red[i] = float(byte) / 255.0;
+            fin.read(static_cast<char*>(&byte), 1);
+            red[i] = float((unsigned char) byte) / 255.0;
         }
 
         for (int i = 0 ; i< 1024 ; i++) {
             fin.read(&byte, 1);
-            green[i] = float(byte) / 255.0;
+            green[i] = float((unsigned char) byte) / 255.0;
         }
 
         for (int i = 0 ; i< 1024 ; i++) {
             fin.read(&byte, 1);
-            blue[i] = float(byte) / 255.0;
+            blue[i] = float((unsigned char) byte) / 255.0;
         }
 
         for (int i = 0 ; i < 1024 ; i++) {
@@ -111,12 +113,12 @@ std::vector<float> run_feature_extraction(
 )
 {
     std::vector<std::string> filenames = {
-            "../test_data/cifar10_quick/weights/conv0_weights.txt",
-            "../test_data/cifar10_quick/weights/conv0_bias.txt",
-            "../test_data/cifar10_quick/weights/conv2_weights.txt",
-            "../test_data/cifar10_quick/weights/conv2_bias.txt",
-            "../test_data/cifar10_quick/weights/conv4_weights.txt",
-            "../test_data/cifar10_quick/weights/conv4_bias.txt" };
+            "../test_data/cifar10_quick/weights/conv0_weights",
+            "../test_data/cifar10_quick/weights/conv0_bias",
+            "../test_data/cifar10_quick/weights/conv2_weights",
+            "../test_data/cifar10_quick/weights/conv2_bias",
+            "../test_data/cifar10_quick/weights/conv4_weights",
+            "../test_data/cifar10_quick/weights/conv4_bias" };
     max_file_t *max_file = cifar10_quick_init();
     std::vector<float> extracted_features;
     fpgaconvnet::Convnet convnet(network_parameters, max_file, "");
@@ -127,12 +129,13 @@ std::vector<float> run_feature_extraction(
     // warm up the DFE with the weights.
     std::cout << "Runnin inference" << std::endl;
     extracted_features = convnet.max_run_inference(N, images, false);
-    extracted_features = convnet.max_run_inference(N, images, false);
+    extracted_features = convnet.max_run_inference(N, images, true);
     fpgaconvnet::verify_conv_output(
             network_parameters,
             N,
             &extracted_features[0],
-            "../test_data/lenet/output.txt");
+            "../test_data/cifar10_quick/pool3.bin",
+            fpgaconvnet::FORMAT_BINARY);
 
     return extracted_features;
 }
@@ -154,13 +157,17 @@ int main(int argc, char **argv)
         std::cout << "Loading netowork parameters from " << argv[1] << std::endl;
         fpgaconvnet::protos::Network network_parameters =
                 fpgaconvnet::load_network_proto(argv[1]);
+        fpgaconvnet::protos::LayerParameter first_layer = network_parameters.layer(0);
+        const uint32_t conv_in_size = 
+            first_layer.input_height() * first_layer.input_width()
+            * first_layer.num_inputs();
 
         std::cout << "Reading images ..." << std::endl;
         load_cifar10("cifar-10-batches-bin/data_batch_1.bin", images, labels);
 
         for (unsigned i = 0 ; i < N ; i++) {
-            for (unsigned j = 0 ; j < CONV_IN_SIZE ; j++) {
-                pixel_stream.push_back(images[i * CONV_IN_SIZE + j]);
+            for (unsigned j = 0 ; j < conv_in_size ; j++) {
+                pixel_stream.push_back(images[i * conv_in_size + j]);
             }
         } 
 
