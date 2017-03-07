@@ -14,6 +14,7 @@ import com.maxeler.maxcompiler.v2.managers.engine_interfaces.EngineInterface;
 import com.maxeler.maxcompiler.v2.managers.engine_interfaces.EngineInterface.Direction;
 import com.maxeler.maxcompiler.v2.managers.engine_interfaces.InterfaceParam;
 
+import fpgaconvnet.Utils.Pair;
 import fpgaconvnet.protos.Parameters;
 import fpgaconvnet.kernels.*;
 
@@ -154,15 +155,10 @@ public class NetworkManager extends CustomManager {
             Parameters.LayerParameter layer = networkParameters.getLayer(i);
 
             if (isConvLayer(layer)) {
-                DFELink kernelDataStream = addStreamFromCPU(
-                        String.format("kernel_%d", layer.getLayerId()));
-
-                convolutionLayers[convLayerId].getFiltersInput() <== kernelDataStream;
-
-                DFELink biasDataStream = addStreamFromCPU(
-                        String.format("bias_%d", layer.getLayerId()));
-                convolutionLayers[convLayerId].getBiasInput() <== biasDataStream;
-
+                for (Pair<String, DFELink> link : convolutionLayers[convLayerId].getInitializerInputs()) {
+                    DFELink dataStream = addStreamFromCPU(link.getFirst());
+                    link.getSecond() <== dataStream;
+                }
                 convLayerId++;
             }
         }

@@ -1,0 +1,32 @@
+package fpgaconvnet;
+
+import java.util.List;
+
+import com.maxeler.maxcompiler.v2.managers.custom.DFELink;
+import com.maxeler.maxcompiler.v2.managers.engine_interfaces.EngineInterface;
+import com.maxeler.maxcompiler.v2.managers.engine_interfaces.InterfaceParam;
+
+import fpgaconvnet.Utils.Pair;
+
+
+/* @brief Abstracts a chain of kernels representing a chain of kernels.
+ *
+ * The chain of computation doesn't have to be a related computation - i.e: A layer in CNN, although
+ * it can be useful to model it in that way.
+ *
+ * Each ComputationChain should have at least one kernel.
+ */
+interface ComputationChain {
+
+    /* The input link to the computation chain. */
+    DFELink getInput();
+
+    /* The output link of the computation chain. */
+    DFELink getOutput();
+
+    /* Set the number of ticks to the internal kernels. */
+    void setKernelTimings(EngineInterface ei, InterfaceParam numberOfImages, InterfaceParam init);
+
+    /* List of name of output and input link */
+    List<Pair<String, DFELink>> getInitializerInputs();
+}

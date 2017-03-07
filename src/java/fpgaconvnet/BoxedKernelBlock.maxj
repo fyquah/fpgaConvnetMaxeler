@@ -1,0 +1,24 @@
+package fpgaconvnet;
+
+import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
+import com.maxeler.maxcompiler.v2.managers.custom.blocks.KernelBlock;
+import com.maxeler.maxcompiler.v2.managers.custom.CustomManager;
+
+
+public class BoxedKernelBlock<T extends Kernel> {
+    private final KernelBlock block;
+    private final T kernel;
+
+    BoxedKernelBlock(CustomManager manager, T argKernel) {
+        kernel = argKernel;
+        block = manager.addKernel(kernel);
+    }
+
+    public T getKernel() {
+        return kernel;
+    }
+
+    public KernelBlock getBlock() {
+        return block;
+    }
+}

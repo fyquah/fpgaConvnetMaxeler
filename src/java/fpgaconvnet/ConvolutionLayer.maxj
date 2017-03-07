@@ -1,9 +1,10 @@
 package fpgaconvnet;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import com.maxeler.maxcompiler.v2.managers.custom.DFELink;
-import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
 import com.maxeler.maxcompiler.v2.managers.custom.CustomManager;
-import com.maxeler.maxcompiler.v2.managers.custom.blocks.KernelBlock;
 import com.maxeler.maxcompiler.v2.managers.engine_interfaces.EngineInterface;
 import com.maxeler.maxcompiler.v2.managers.engine_interfaces.InterfaceParam;
 
@@ -11,9 +12,10 @@ import fpgaconvnet.protos.Parameters.LayerParameter;
 import fpgaconvnet.kernels.ConvolutionSchedulerKernel;
 import fpgaconvnet.kernels.ConvolutionAccumulatorKernel;
 import fpgaconvnet.kernels.ConvolutionUnitKernel;
+import fpgaconvnet.Utils.Pair;
 
 
-public class ConvolutionLayer {
+public class ConvolutionLayer implements ComputationChain {
     private final LayerParameter layer;
     private final CustomManager manager;
     private final BoxedKernelBlock<ConvolutionSchedulerKernel> scheduler;
@@ -25,16 +27,19 @@ public class ConvolutionLayer {
         manager = argManager;
 
         scheduler = new BoxedKernelBlock<ConvolutionSchedulerKernel>(
+                manager,
                 new ConvolutionSchedulerKernel(
                         manager.makeKernelParameters("ConvolutionScheduler_" + layer.getLayerId()),
                                                      layer));
         accumulator = new BoxedKernelBlock<ConvolutionAccumulatorKernel>(
+                manager,
                 new ConvolutionAccumulatorKernel(
                         manager.makeKernelParameters(
                             "ConvolutionAccumulator_" + layer.getLayerId()),
                         layer));
 
         convolutionUnit = new BoxedKernelBlock<ConvolutionUnitKernel>(
+                manager,
                 new ConvolutionUnitKernel(
                         manager.makeKernelParameters(
                             String.format("ConvolutionUnit_%d", layer.getLayerId())),
@@ -52,9 +57,7 @@ public class ConvolutionLayer {
         return accumulator.getBlock().getOutput(accumulator.getKernel().getOutputName());
     }
 
-    // TODO(fyq14): Once pipelining is introduced, this function probably needs some
-    //              rewriting w.r.t. the cycles required.
-    protected void setKernelTimings(EngineInterface ei, InterfaceParam numberOfImages, InterfaceParam init) {
+    public void setKernelTimings(EngineInterface ei, InterfaceParam numberOfImages, InterfaceParam init) {
         /*
          * scheduler and convolution units do not have a loop offset, so we will not
          * need to deal with ei.getAutoLoopOffset.
@@ -103,32 +106,17 @@ public class ConvolutionLayer {
         }
     }
 
-    public class BoxedKernelBlock<T extends Kernel> {
-        private final KernelBlock block;
-        private final T kernel;
-
-        BoxedKernelBlock(T argKernel) {
-            kernel = argKernel;
-            block = manager.addKernel(kernel);
-        }
-
-        public T getKernel() {
-            return kernel;
-        }
-
-        public KernelBlock getBlock() {
-            return block;
-        }
-    }
-
-    public DFELink getFiltersInput() {
-        return convolutionUnit.getBlock().getInput(
-                convolutionUnit.getKernel().getWeightsInputName());
-    }
-
-    public DFELink getBiasInput() {
-        return accumulator.getBlock().getInput(
-                accumulator.getKernel().getBiasInputName());
+    public List<Pair<String, DFELink>> getInitializerInputs() {
+        ArrayList<Pair<String, DFELink>> ret = new ArrayList<Pair<String, DFELink>>();
+        ret.add(new Pair<String, DFELink>(
+                String.format("kernel_%d", layer.getLayerId()),
+                convolutionUnit.getBlock().getInput(
+                    convolutionUnit.getKernel().getWeightsInputName())));
+        ret.add(new Pair<String, DFELink>(
+                String.format("bias_%d", layer.getLayerId()),
+                accumulator.getBlock().getInput(
+                    accumulator.getKernel().getBiasInputName())));
+        return ret;
     }
 
     public BoxedKernelBlock<ConvolutionSchedulerKernel> getScheduler()

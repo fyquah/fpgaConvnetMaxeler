@@ -401,4 +401,22 @@ public class Utils {
     public static Dimension layerInputDimension(Parameters.LayerParameter layer) {
         return new Dimension(layer.getInputHeight(), layer.getInputWidth(), layer.getNumInputs());
     }
+
+    public static class Pair<L, R> {
+        final private L first;
+        final private R second;
+
+        public Pair(L left, R right) {
+            first = left;
+            second = right;
+        }
+
+        public L getFirst() {
+            return first;
+        }
+
+        public R getSecond() {
+            return second;
+        }
+    }
 }
