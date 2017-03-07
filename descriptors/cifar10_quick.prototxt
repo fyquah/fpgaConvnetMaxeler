@@ -20,6 +20,8 @@ layer {
         type: Max
         dim: 3
         stride: 2
+
+        channelFoldingFactor: 32
     }
     activation: Relu
 }
@@ -46,6 +48,8 @@ layer {
         type: Average
         dim: 3
         stride: 2
+
+        channelFoldingFactor: 32
     }
 }
 
@@ -70,5 +74,7 @@ layer {
         type: Average
         dim: 3
         stride: 2
+
+        channelFoldingFactor: 64
     }
 }

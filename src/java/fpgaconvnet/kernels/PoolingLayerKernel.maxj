@@ -1,5 +1,8 @@
 package fpgaconvnet.kernels;
 
+import java.util.List;
+import java.util.ArrayList;
+
 import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
 import com.maxeler.maxcompiler.v2.kernelcompiler.KernelParameters;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.CounterChain;
@@ -19,11 +22,16 @@ import fpgaconvnet.protos.Parameters.PoolingParameter;
 
 public class PoolingLayerKernel extends Kernel {
     Dimension inputDimension, outputDimension;
+    int channelFoldingFactor;
     int poolingDim;
     int stride;
     PoolingParameter.PoolingType poolingType;
     DFEVectorType<DFEVar> outputType, inputType;
+    DFEVector<DFEVar> input;
+    DFEVector<DFEVar> output;
     LayerParameter layerParams;
+    DFEVar[] poolingUnits;
+    SlidingWindow[] slidingWindows;
 
     private static final AssociativeOp<DFEVar> dfeMaxOp = new AssociativeOp<DFEVar>(){
         @Override
@@ -35,8 +43,17 @@ public class PoolingLayerKernel extends Kernel {
         public DFEVar op(DFEVar a, DFEVar b) { return a + b; }
     };
 
+    public int getPixelIterations() {
+        return getPoolingIterations();
+    }
+
+    public int getPoolingIterations() {
+        return Utils.divCeil(layerParams.getNumInputs(),
+                             layerParams.getPool().getChannelFoldingFactor());
+    }
+
     public int cyclesPerImage() {
-        return inputDimension.height() * inputDimension.width();
+        return inputDimension.height() * inputDimension.width() * getPixelIterations();
     }
 
     public PoolingLayerKernel(KernelParameters kp, LayerParameter argLayerParams) {
@@ -44,6 +61,7 @@ public class PoolingLayerKernel extends Kernel {
 
         // Parameters from PoolingParameters
         layerParams = argLayerParams;
+        channelFoldingFactor = layerParams.getPool().getChannelFoldingFactor();
         inputDimension = new Dimension(
                 layerParams.getInputHeight(),
                 layerParams.getInputWidth(),
@@ -62,26 +80,28 @@ public class PoolingLayerKernel extends Kernel {
         outputType = new DFEVectorType<DFEVar>(GlobalConfig.dataType, nChannels);
         inputType = new DFEVectorType<DFEVar>(GlobalConfig.dataType, nChannels);
 
-
-        DFEVector<DFEVar> input = inputType.newInstance(this);
-        DFEVector<DFEVar> output = outputType.newInstance(this);
+        input = inputType.newInstance(this);
+        output = outputType.newInstance(this);
 
         // the frame that we want to consider for top left / top right pixels.
         CounterChain masterChain = control.count.makeCounterChain();
         DFEVar inputRow = Utils.chainCounterOrZero(this, masterChain, inputDimension.height());
         DFEVar inputCol = Utils.chainCounterOrZero(this, masterChain, inputDimension.width());
+        DFEVar poolingIter = Utils.chainCounterOrZero(this, masterChain, getPoolingIterations());
 
         DFEVar colStride = control.count.makeCounter(
                 control.count.makeParams(Utils.ceilLog2(stride))
                 .withMax(stride)
-                .withReset(inputCol.eq(0)))
+                .withReset(inputCol.eq(0))
+                .withEnable(poolingIter.eq(getPoolingIterations() - 1)))
                     .getCount();
         DFEVar rowStride = control.count.makeCounter(
                 control.count.makeParams(Utils.ceilLog2(stride))
                 .withMax(stride)
                 .withInc(1)
                 .withReset(inputCol.eq(0) & inputRow.eq(0))
-                .withEnable(inputCol.eq(inputDimension.width() - 1)))
+                .withEnable(inputCol.eq(inputDimension.width() - 1)
+                            & poolingIter.eq(getPoolingIterations() - 1)))
                     .getCount();
 
         inputRow.simWatch("input_row");
@@ -102,27 +122,31 @@ public class PoolingLayerKernel extends Kernel {
             dividend.simWatch("pooling_dividend");
         }
 
-        for (int i = 0 ; i < inputDimension.channels() ; i++) {
+        poolingUnits = new DFEVar[channelFoldingFactor];
+        slidingWindows = new SlidingWindow[channelFoldingFactor];
+        for (int i = 0 ; i < channelFoldingFactor ; i++) {
 
-            DFEVar channelOutput = null;
-            SlidingWindow slidingWindow = new SlidingWindow(
+            DFEVar poolerOutput = null;
+            DFEVar poolerInput = toMuxedPixel(poolingIter, i);
+
+            slidingWindows[i] = new SlidingWindow(
                 this,
-                input[i],
+                poolerInput,
                 inputDimension.height(),
                 inputDimension.width(),
                 poolingDim,
-                1,
+                getPixelIterations(),
                 constant.var(GlobalConfig.dataType, (double) paddedPixel),
                 0
             );
 
             if (poolingType.equals(PoolingParameter.PoolingType.Average)) {
                 op = dfeSumOp;
-                channelOutput = TreeReduce.reduce(op, slidingWindow.asList()) * dividend;
+                poolerOutput = TreeReduce.reduce(op, slidingWindows[i].asList()) * dividend;
 
             } else if (poolingType.equals(PoolingParameter.PoolingType.Max)) {
                 op = dfeMaxOp;
-                channelOutput = TreeReduce.reduce(op, slidingWindow.asList());
+                poolerOutput = TreeReduce.reduce(op, slidingWindows[i].asList());
 
             } else {
                 throw new RuntimeException("Unknown Pooling type!");
@@ -130,23 +154,39 @@ public class PoolingLayerKernel extends Kernel {
             }
 
             if (layerParams.getActivation() == LayerParameter.Activation.None) {
-                output[i] <== channelOutput;
+                poolingUnits[i] = poolerOutput;
 
             } else if (layerParams.getActivation() == LayerParameter.Activation.Relu) {
-                DFEVar x = channelOutput;
-                output[i] <== x > 0 ? x : 0;
+                poolingUnits[i] = poolerOutput > 0 ? poolerOutput : 0;
 
             } else {
                 throw new RuntimeException("Unsupported activation type");
             }
 
-            output[i].simWatch(String.format("output_%d", i));
+            poolingUnits[i].simWatch(String.format("pooling_unit_%d", i));
         }
-        // poolingUnits[0].simWatch();
+
+        // logic for accumulating outputs
+        for (int channel = 0 ; channel < layerParams.getNumOutputs() ; channel++) {
+            DFEVar acc = GlobalConfig.dataType.newInstance(this);
+            DFEVar initFlag = poolingIter.eq(channel / channelFoldingFactor);
+            DFEVar prevAcc = stream.offset(acc, -1);
+
+            // push and pop pipelining factor required to make sure this accumulator runs at
+            // 0-tick latency (i.e: stream.offset(-1) works)
+            optimization.pushPipeliningFactor(0);
+            acc <== initFlag ? poolingUnits[channel % channelFoldingFactor] : prevAcc;
+            optimization.popPipeliningFactor();
+
+            output[channel] <== acc;
+            output[channel].simWatch("output_" + channel);
+        }
 
         // set the kernel I/O interface
-        input <== io.input("x", inputType);
-        DFEVar outputFlag = rowStride.eq(0) & colStride.eq(0);
+        input <== io.input("x", inputType, poolingIter.eq(0));
+        DFEVar outputFlag = rowStride.eq(0)
+                & colStride.eq(0)
+                & poolingIter.eq(getPixelIterations() - 1);
         outputFlag.simWatch("output_flag");
 
         if (layerParams.getIsLastLayer()) {
@@ -157,19 +197,6 @@ public class PoolingLayerKernel extends Kernel {
         } else {
             io.output("y", output, outputType, outputFlag);
         }
-
-        // debugging messages
-        // String debug_s = "[";
-        // List<Object> debugValues = new ArrayList<Object>();
-        // for (int i = 0 ; i < inputDimension.channels() ; i++) {
-        //      debug_s += "%.3f, ";
-        //      debugValues.add(output[i]);
-        // }
-        // debug_s += "]";
-        // debug.simPrintf(
-        //         outputFlag,
-        //         "PoolingLayerKernel[" + layer.getLayerId() + "] output = " + debug_s + "\n",
-        //         debugValues.toArray(new Object[1]));
     }
 
     private DFEVar poolDividend(DFEVar row, DFEVar col) {
@@ -205,6 +232,23 @@ public class PoolingLayerKernel extends Kernel {
 
         } else {
             return fullDim;
+        }
+    }
+
+    protected DFEVar toMuxedPixel(DFEVar iter, int pooler) {
+
+        List<DFEVar> arr = new ArrayList<DFEVar>();
+        for (int channel = pooler; channel < layerParams.getNumInputs(); channel += channelFoldingFactor) {
+            arr.add(input[channel]);
+        }
+        /* log2 casting required becaust it is possible, in a non-divisible case, that the number
+         * outputs is smaller.
+         */
+
+        if (arr.size() == 1) {
+            return arr[0];
+        } else {
+            return control.mux(iter.cast(dfeUInt(Utils.ceilLog2(arr.size()))), arr);
         }
     }
 }
