@@ -49,8 +49,7 @@ public class ConvolutionLayer implements ComputationChain {
     }
 
     public DFELink getInput() {
-        return scheduler.getBlock().getInput(
-                scheduler.getKernel().getInputName());
+        return scheduler.getBlock().getInput(scheduler.getKernel().getInputName());
     }
 
     public DFELink getOutput() {

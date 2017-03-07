@@ -1,0 +1,49 @@
+package fpgaconvnet;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import com.maxeler.maxcompiler.v2.managers.custom.DFELink;
+import com.maxeler.maxcompiler.v2.managers.custom.CustomManager;
+import com.maxeler.maxcompiler.v2.managers.engine_interfaces.EngineInterface;
+import com.maxeler.maxcompiler.v2.managers.engine_interfaces.InterfaceParam;
+
+import fpgaconvnet.kernels.PoolingLayerKernel;
+import fpgaconvnet.protos.Parameters.LayerParameter;
+import fpgaconvnet.Utils.Tuple3;
+
+
+public class PoolingLayer implements ComputationChain {
+
+    private final BoxedKernelBlock<PoolingLayerKernel> poolingKernel;
+
+    public PoolingLayer(LayerParameter layer, CustomManager manager) {
+        poolingKernel = new BoxedKernelBlock<PoolingLayerKernel>(
+                manager,
+                new PoolingLayerKernel(
+                        manager.makeKernelParameters("PoolingLayerKernel" + layer.getLayerId()),
+                                                     layer));
+    }
+
+    public DFELink getInput() {
+        return poolingKernel.getBlock().getInput("x");
+    }
+
+    public DFELink getOutput() {
+        return poolingKernel.getBlock().getOutput("y");
+    }
+
+    public void setKernelTimings(EngineInterface ei, InterfaceParam numberOfImages, InterfaceParam init) {
+        ei.setTicks(poolingKernel.getKernel().getName(),
+                    numberOfImages * poolingKernel.getKernel().cyclesPerImage());
+    }
+
+    public void setScalar(EngineInterface ei, String name, InterfaceParam param) {
+        /* There's no scalar that needs to be set in a pooling layer. */
+    }
+
+    public List<Tuple3<String, DFELink, Integer>> getInitializerInputs() {
+        /* There's no initializers in a pooling layer. */
+        return new ArrayList<Tuple3<String, DFELink, Integer>>();
+    }
+}
