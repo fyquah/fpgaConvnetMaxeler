@@ -183,7 +183,17 @@ public class PoolingLayerKernel extends Kernel {
         }
 
         // set the kernel I/O interface
-        input <== io.input("x", inputType, poolingIter.eq(0));
+        if (layerParams.getIsFirstLayer()) {
+            /* Last layer - cast from fixed point to dfe float. */
+            DFEVectorType<DFEVar> rawInputVectorType = new DFEVectorType<DFEVar>(
+                    GlobalConfig.cpuType, inputDimension.channels());
+            DFEVector<DFEVar> rawInput = io.input("x", rawInputVectorType, poolingIter.eq(0));
+            input <== rawInput.cast(inputType);
+
+        } else {
+            input <== io.input("x", inputType, poolingIter.eq(0));
+
+        }
         DFEVar outputFlag = rowStride.eq(0)
                 & colStride.eq(0)
                 & poolingIter.eq(getPixelIterations() - 1);

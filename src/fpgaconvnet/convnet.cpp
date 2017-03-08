@@ -14,6 +14,12 @@
 #include "fpgaconvnet/protos/parameters.pb.h"
 
 
+static double rng(const double lo, const double hi)
+{
+    return lo + (hi - lo) * ((double)rand()/(double)RAND_MAX);
+}
+
+
 static uint64_t gcd(uint64_t a, uint64_t b)
 {
     if (b > a) {
@@ -380,6 +386,24 @@ void allign_and_place_kernel_weights(
 }
 
 
+void Convnet::randomize_weights()
+{
+    for (int i = 0 ; i < conv_layer_params.size() ; i++) {
+        auto conv_layer = conv_layer_params[i];
+        uint64_t total_weights = calc_total_kernel_weights(conv_layer);
+        uint64_t total_bias = conv_layer.num_outputs();
+
+        for (int j = 0 ; j < total_weights; j++) {
+            kernels[i][j] = (float) rng(-0.75, 0.75);
+        }
+
+        for (int j = 0 ; j < total_bias ; j++) {
+            bias[i][j] = (float) rng(-0.75, 0.75);
+        }
+    }
+}
+
+
 void Convnet::set_layer_weights(
         max_actions_t *action,
         const protos::LayerParameter & layer,
@@ -531,24 +555,30 @@ std::vector<float> Convnet::max_run_inference(
     max_set_param_uint64t(run_action, "N", N);
 
     int i = 0;
+    bool has_conv = 0;
     for (auto it = network_params.layer().begin();
             it != network_params.layer().end();
             it++) {
         if (it->has_conv()) {
+            has_conv = 1;
             set_layer_weights(
                     run_action, *it, worker_kernels[i], bias[i]);
             i++;
         }
     }
 
-    if (initialized_weights) {
-        max_set_param_uint64t(run_action, "init", 0);
-    } else {
-        max_set_param_uint64t(run_action, "init", 1);
+    if (has_conv) {
+        if (initialized_weights) {
+            max_set_param_uint64t(run_action, "init", 0);
+        } else {
+            max_set_param_uint64t(run_action, "init", 1);
+        }
+        initialized_weights = 1;
     }
-    initialized_weights = 1;
 
 
+    std::cout << "input stream size = "
+            << images.size() * sizeof(float) << std::endl;
     max_queue_input(run_action,
                     "fromcpu",
                     (void*) &images[0],

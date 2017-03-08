@@ -112,6 +112,7 @@ public:
 
     void load_weights_from_files(
             std::vector<std::string> filenames, file_format_t file_type);
+    void randomize_weights();
 
     void max_init_weights();
     void max_load_input_data(const std::vector<float> & images, uint64_t N);

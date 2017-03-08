@@ -11,20 +11,18 @@
 #ifdef __SIM__
 
 #include "resource_bench_sim_lookup.h"
-const uint64_t N = 1;
 
 #else
 
 #include "resource_bench_dfe_lookup.h"
-const uint64_t N = 1000;
 
 #endif
 
 
+const uint64_t N = 5;
 void run_feature_extraction(
         const fpgaconvnet::protos::Network & network_parameters,
-        max_file_t*(max_file_fnc)(),
-        const std::vector<float> & images
+        max_file_t*(max_file_fnc)()
 )
 {
     std::cout << network_parameters.DebugString() << std::endl;
@@ -33,20 +31,21 @@ void run_feature_extraction(
             "../test_data/resource_bench/bias.txt"
     };
     max_file_t *max_file = max_file_fnc();
-    max_set_max_runnable_timing_score(max_file, 200000000);
     fpgaconvnet::Convnet convnet(network_parameters, max_file, "");
+    auto first_layer = network_parameters.layer(0);
+    uint64_t single_input_size = first_layer.num_inputs()
+            * first_layer.input_height()
+            * first_layer.input_width();
+    std::vector<float> images(single_input_size * N);
 
-    convnet.load_weights_from_files(filenames);
-    convnet.max_init_weights();
-    convnet.max_load_input_data(images, N);
-    convnet.max_run_inference(N);
-    std::vector<float> extracted_features = convnet.max_retrieve_features(N);
+    for (unsigned i = 0 ; i < images.size(); i++) {
+        images[i] = float(rand()) / float(RAND_MAX);
+    }
 
-    fpgaconvnet::verify_conv_output(
-            network_parameters,
-            N,
-            &extracted_features[0],
-            "../test_data/resource_bench/outputs.txt");
+    convnet.randomize_weights();
+    std::vector<float>extracted_features =
+            convnet.max_run_inference(N, images, false);
+
     std::cout << "============== END =============" << std::endl;
 }
 
@@ -54,27 +53,6 @@ void run_feature_extraction(
 int main (int argc, char **argv)
 {
     std::cout << "Running " << argc - 1 << " resource benchmarks." << std::endl;
-
-    std::vector<float> pixel_stream;
-    std::ifstream fin("../test_data/resource_bench/inputs.txt");
-    float x;
-    while (fin >> x) {
-        pixel_stream.push_back(x);
-    }
-    fin.close();
-
-    if (N > 100ul) {
-        int ori_stream_size = pixel_stream.size();
-        pixel_stream.resize(N / 100 * ori_stream_size);
-        for (int i = 1 ; i < N / 100; i++) {
-            std::memcpy(
-                    &pixel_stream[i * ori_stream_size],
-                    &pixel_stream[0],
-                    sizeof(float) * ori_stream_size);
-        }
-    }
-
-    std::cout << "Number of pixels: = " << pixel_stream.size() << std::endl;
 
     for (int i = 1 ; i < argc ; i++) {
         char buffer[100];
@@ -95,7 +73,7 @@ int main (int argc, char **argv)
         }
 
         if (fnc) {
-            run_feature_extraction(network_parameters, fnc, pixel_stream);
+            run_feature_extraction(network_parameters, fnc);
         } else {
             std::cout << "Cannot resolve function for " << argv[i] << std::endl;
         }
