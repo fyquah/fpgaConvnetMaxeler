@@ -26,6 +26,7 @@ message LayerParameter
     oneof params {
         ConvolutionParameter conv = 1;
         PoolingParameter pool = 2;
+        LrnParameter lrn = 14;
     }
 
     /* Used internally - users of this function are _not_ expected to complete this,
@@ -81,9 +82,19 @@ message LrnParameter
         WITHIN_CHANNEL = 1;
         ACROSS_CHANNELS = 2;
     }
+    enum ApproxMethod
+    {
+        BINOMIAL = 1;
+        LUT = 2;
+    }
 
     optional uint32 local_size = 1;
     optional float alpha = 2;
     optional float beta = 3;
     optional LrnRegion norm_region = 4;
+    optional ApproxMethod approx_method = 5 [default = BINOMIAL];
+    optional uint32 approx_degree = 6 [default = 1];  /* How many powers to approximate. */
+
+    /* Determines parallelism - channel_folding_factor == num_inputs means fully unrolled. */
+    optional uint32 channel_folding_factor = 7;
 }
