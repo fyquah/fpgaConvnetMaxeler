@@ -10,9 +10,7 @@ import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEType;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVector;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVectorType;
-import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Count.Counter;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.CounterChain;
-import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Stream.OffsetExpr;
 
 /* When the offset is defined as 0, the sliding window is identified by the top left corner of
  * the window. This is useful for cases like pooling where there is definitely no pooling layers.
@@ -39,12 +37,11 @@ public class SlidingWindow extends KernelLib {
     public final DFEVector<DFEVar> output;
     private final DFEVar row;
     private final DFEVar col;
-    private final DFEVar cycle;
     private final CounterChain chain;
 
     // slides a 2d convolution window
     // around a input stream
-    SlidingWindow(
+    public SlidingWindow(
         Kernel argKernel,
         DFEVar input,
         int inputHeight,
@@ -63,7 +60,7 @@ public class SlidingWindow extends KernelLib {
         chain = control.count.makeCounterChain();
         row = Utils.chainCounterOrZero(this, chain, inputHeight);
         col = Utils.chainCounterOrZero(this, chain, inputWidth);
-        cycle = Utils.chainCounterOrZero(this, chain, cyclesToHoldWindow);
+        Utils.chainCounterOrZero(this, chain, cyclesToHoldWindow);
 
         final DFEType rowType = dfeInt(
                 Utils.ceilLog2(inputHeight + kernelDim - 1 + offset) + 1);

@@ -401,4 +401,28 @@ public class Utils {
     public static Dimension layerInputDimension(Parameters.LayerParameter layer) {
         return new Dimension(layer.getInputHeight(), layer.getInputWidth(), layer.getNumInputs());
     }
+
+    public static class Tuple3<P, Q, R> {
+        final private P first;
+        final private Q second;
+        final private R third;
+
+        public Tuple3(P argFirst, Q argSecond, R argThird) {
+            first = argFirst;
+            second = argSecond;
+            third = argThird;
+        }
+
+        public P getFirst() {
+            return first;
+        }
+
+        public Q getSecond() {
+            return second;
+        }
+
+        public R getThird() {
+            return third;
+        }
+    }
 }

@@ -1,0 +1,254 @@
+package fpgaconvnet.kernels;
+
+import java.util.List;
+import java.util.ArrayList;
+
+import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
+import com.maxeler.maxcompiler.v2.kernelcompiler.KernelParameters;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.CounterChain;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVector;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVectorType;
+import maxpower.ops.AssociativeOp;
+import maxpower.utils.TreeReduce;
+
+import fpgaconvnet.Dimension;
+import fpgaconvnet.GlobalConfig;
+import fpgaconvnet.SlidingWindow;
+import fpgaconvnet.Utils;
+import fpgaconvnet.protos.Parameters.LayerParameter;
+import fpgaconvnet.protos.Parameters.PoolingParameter;
+
+
+public class PoolingLayerKernel extends Kernel {
+    Dimension inputDimension, outputDimension;
+    int channelFoldingFactor;
+    int poolingDim;
+    int stride;
+    PoolingParameter.PoolingType poolingType;
+    DFEVectorType<DFEVar> outputType, inputType;
+    DFEVector<DFEVar> input;
+    DFEVector<DFEVar> output;
+    LayerParameter layerParams;
+    DFEVar[] poolingUnits;
+    SlidingWindow[] slidingWindows;
+
+    private static final AssociativeOp<DFEVar> dfeMaxOp = new AssociativeOp<DFEVar>(){
+        @Override
+        public DFEVar op(DFEVar a, DFEVar b) { return a > b ? a : b; }
+    };
+
+    private static final AssociativeOp<DFEVar> dfeSumOp = new AssociativeOp<DFEVar>() {
+        @Override
+        public DFEVar op(DFEVar a, DFEVar b) { return a + b; }
+    };
+
+    public int getPixelIterations() {
+        return getPoolingIterations();
+    }
+
+    public int getPoolingIterations() {
+        return Utils.divCeil(layerParams.getNumInputs(),
+                             layerParams.getPool().getChannelFoldingFactor());
+    }
+
+    public int cyclesPerImage() {
+        return inputDimension.height() * inputDimension.width() * getPixelIterations();
+    }
+
+    public PoolingLayerKernel(KernelParameters kp, LayerParameter argLayerParams) {
+        super(kp);
+
+        // Parameters from PoolingParameters
+        layerParams = argLayerParams;
+        channelFoldingFactor = layerParams.getPool().getChannelFoldingFactor();
+        inputDimension = new Dimension(
+                layerParams.getInputHeight(),
+                layerParams.getInputWidth(),
+                layerParams.getNumInputs());
+        poolingDim = layerParams.getPool().getDim();
+        outputDimension = new Dimension(
+                layerParams.getOutputHeight(),
+                layerParams.getOutputWidth(),
+                layerParams.getNumOutputs());
+        poolingType = layerParams.getPool().getType();
+        stride = layerParams.getPool().getStride();
+        // end of extracted parameters
+
+        // derived properties
+        int nChannels = inputDimension.channels();
+        outputType = new DFEVectorType<DFEVar>(GlobalConfig.dataType, nChannels);
+        inputType = new DFEVectorType<DFEVar>(GlobalConfig.dataType, nChannels);
+
+        input = inputType.newInstance(this);
+        output = outputType.newInstance(this);
+
+        // the frame that we want to consider for top left / top right pixels.
+        CounterChain masterChain = control.count.makeCounterChain();
+        DFEVar inputRow = Utils.chainCounterOrZero(this, masterChain, inputDimension.height());
+        DFEVar inputCol = Utils.chainCounterOrZero(this, masterChain, inputDimension.width());
+        DFEVar poolingIter = Utils.chainCounterOrZero(this, masterChain, getPoolingIterations());
+
+        DFEVar colStride = control.count.makeCounter(
+                control.count.makeParams(Utils.ceilLog2(stride))
+                .withMax(stride)
+                .withReset(inputCol.eq(0))
+                .withEnable(poolingIter.eq(getPoolingIterations() - 1)))
+                    .getCount();
+        DFEVar rowStride = control.count.makeCounter(
+                control.count.makeParams(Utils.ceilLog2(stride))
+                .withMax(stride)
+                .withInc(1)
+                .withReset(inputCol.eq(0) & inputRow.eq(0))
+                .withEnable(inputCol.eq(inputDimension.width() - 1)
+                            & poolingIter.eq(getPoolingIterations() - 1)))
+                    .getCount();
+
+        inputRow.simWatch("input_row");
+        inputCol.simWatch("input_col");
+        rowStride.simWatch("row_stride");
+        colStride.simWatch("col_stride");
+
+        float paddedPixel = 0.0f;
+        DFEVar dividend = null;
+        AssociativeOp<DFEVar> op;
+
+        if (poolingType.equals(PoolingParameter.PoolingType.Max)) {
+            paddedPixel = (float) -8;
+        }
+
+        if (poolingType.equals(PoolingParameter.PoolingType.Average)) {
+            dividend = poolDividend(inputRow, inputCol);
+            dividend.simWatch("pooling_dividend");
+        }
+
+        poolingUnits = new DFEVar[channelFoldingFactor];
+        slidingWindows = new SlidingWindow[channelFoldingFactor];
+        for (int i = 0 ; i < channelFoldingFactor ; i++) {
+
+            DFEVar poolerOutput = null;
+            DFEVar poolerInput = toMuxedPixel(poolingIter, i);
+
+            slidingWindows[i] = new SlidingWindow(
+                this,
+                poolerInput,
+                inputDimension.height(),
+                inputDimension.width(),
+                poolingDim,
+                getPixelIterations(),
+                constant.var(GlobalConfig.dataType, (double) paddedPixel),
+                0
+            );
+
+            if (poolingType.equals(PoolingParameter.PoolingType.Average)) {
+                op = dfeSumOp;
+                poolerOutput = TreeReduce.reduce(op, slidingWindows[i].asList()) * dividend;
+
+            } else if (poolingType.equals(PoolingParameter.PoolingType.Max)) {
+                op = dfeMaxOp;
+                poolerOutput = TreeReduce.reduce(op, slidingWindows[i].asList());
+
+            } else {
+                throw new RuntimeException("Unknown Pooling type!");
+
+            }
+
+            if (layerParams.getActivation() == LayerParameter.Activation.None) {
+                poolingUnits[i] = poolerOutput;
+
+            } else if (layerParams.getActivation() == LayerParameter.Activation.Relu) {
+                poolingUnits[i] = poolerOutput > 0 ? poolerOutput : 0;
+
+            } else {
+                throw new RuntimeException("Unsupported activation type");
+            }
+
+            poolingUnits[i].simWatch(String.format("pooling_unit_%d", i));
+        }
+
+        // logic for accumulating outputs
+        for (int channel = 0 ; channel < layerParams.getNumOutputs() ; channel++) {
+            DFEVar acc = GlobalConfig.dataType.newInstance(this);
+            DFEVar initFlag = poolingIter.eq(channel / channelFoldingFactor);
+            DFEVar prevAcc = stream.offset(acc, -1);
+
+            // push and pop pipelining factor required to make sure this accumulator runs at
+            // 0-tick latency (i.e: stream.offset(-1) works)
+            optimization.pushPipeliningFactor(0);
+            acc <== initFlag ? poolingUnits[channel % channelFoldingFactor] : prevAcc;
+            optimization.popPipeliningFactor();
+
+            output[channel] <== acc;
+            output[channel].simWatch("output_" + channel);
+        }
+
+        // set the kernel I/O interface
+        input <== io.input("x", inputType, poolingIter.eq(0));
+        DFEVar outputFlag = rowStride.eq(0)
+                & colStride.eq(0)
+                & poolingIter.eq(getPixelIterations() - 1);
+        outputFlag.simWatch("output_flag");
+
+        if (layerParams.getIsLastLayer()) {
+            /* Last layer - cast from fixed point to dfe float. */
+            DFEVectorType<DFEVar> rawOutputVectorType = new DFEVectorType<DFEVar>(
+                    GlobalConfig.cpuType, outputDimension.channels());
+            io.output("y", output.cast(rawOutputVectorType), rawOutputVectorType, outputFlag);
+        } else {
+            io.output("y", output, outputType, outputFlag);
+        }
+    }
+
+    private DFEVar poolDividend(DFEVar row, DFEVar col) {
+        int lastRow = (outputDimension.height() - 1) * stride;
+        int lastCol = (outputDimension.width() - 1) * stride;
+        int heightResidue = inputDimension.height() - lastRow;
+        int widthResidue = inputDimension.width() - lastCol;
+
+        final DFEVar fullDim = constant.var(
+                GlobalConfig.dataType, 1.0 / ((double) poolingDim * poolingDim));
+        final DFEVar rowBorder = constant.var(
+                GlobalConfig.dataType, 1.0 / ((double) poolingDim * heightResidue));
+        final DFEVar colBorder = constant.var(
+                GlobalConfig.dataType, 1.0 / ((double) poolingDim * widthResidue));
+        final DFEVar corner = constant.var(
+                GlobalConfig.dataType, 1.0 / ((double) heightResidue * widthResidue));
+
+
+        if (heightResidue != poolingDim && widthResidue != poolingDim) {
+            return (row.eq(lastRow)
+                    ? (col.eq(lastCol)
+                        ? corner /* row == last && col == last */
+                        : rowBorder /* row == last && col != last */)
+                    : (col.eq(lastCol)
+                        ? colBorder /* row != last && col == last */
+                        : fullDim /* row != last && col != last */));
+
+        } else if (heightResidue != poolingDim) {
+            return (row.eq(lastRow) ? rowBorder : fullDim);
+
+        } else if (widthResidue != poolingDim) {
+            return (col.eq(lastCol) ? colBorder : fullDim);
+
+        } else {
+            return fullDim;
+        }
+    }
+
+    protected DFEVar toMuxedPixel(DFEVar iter, int pooler) {
+
+        List<DFEVar> arr = new ArrayList<DFEVar>();
+        for (int channel = pooler; channel < layerParams.getNumInputs(); channel += channelFoldingFactor) {
+            arr.add(input[channel]);
+        }
+        /* log2 casting required becaust it is possible, in a non-divisible case, that the number
+         * outputs is smaller.
+         */
+
+        if (arr.size() == 1) {
+            return arr[0];
+        } else {
+            return control.mux(iter.cast(dfeUInt(Utils.ceilLog2(arr.size()))), arr);
+        }
+    }
+}

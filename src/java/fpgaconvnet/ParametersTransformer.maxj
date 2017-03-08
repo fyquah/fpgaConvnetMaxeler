@@ -26,10 +26,6 @@ public class ParametersTransformer {
         System.out.println(String.format("[WARNING layer %d] => %s", layer_id, message));
     }
 
-    private void checkLayerDims() {
-
-    }
-
     private LayerParameter parseLayer(int layer_id, LayerParameter layerParameter,
                                       LayerParameter previousLayer) {
         LayerParameter.Builder builder = LayerParameter.newBuilder();

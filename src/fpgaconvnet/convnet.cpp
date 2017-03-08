@@ -305,15 +305,8 @@ void verify_conv_output(
 
             if (fin.eof()) {
                 fin.clear();
-                fin.seekg(0, std::ios::beg);
-                log_stdout(INFO) << "Verifier moving to the beginning of file!"
-                        << std::endl;
-
-                if (format == FORMAT_TXT) {
-                    fin >> expected;
-                } else {
-                    fin.read((char*) &expected, 4);
-                }
+                log_stdout(WARNING) << "Verifier terminated early!" << std::endl;
+                break;
             }
 
             total_error += std::abs(obtained  - expected);
@@ -327,7 +320,7 @@ void verify_conv_output(
             // }
         }
     }
-    log_stdout(INFO) << "pixel_error = " << float(total_error) / float(total_pixels) << std::endl;
+    log_stdout(INFO) << "Average pixel_error = " << float(total_error) / float(total_pixels) << std::endl;
     fin.close();
 }
 

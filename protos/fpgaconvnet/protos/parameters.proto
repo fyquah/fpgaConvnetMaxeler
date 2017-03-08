@@ -69,6 +69,8 @@ message PoolingParameter
     optional uint32 dim = 2;
     /* when stride is not given, stride will be assiged to dim. */
     optional uint32 stride = 3;
+
+    optional uint32 channelFoldingFactor = 4; /* 1 <= x <= num_inputs */
 }
 
 
