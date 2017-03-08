@@ -8,7 +8,7 @@ layer {
         channel_folding_factor: 384
 
         type: Max
-        kernel_size: 3
+        dim: 3
         stride: 2
     }
 }
