@@ -18,7 +18,7 @@ layer {
     pool: {
         type: Max
         dim: 2
-        channelFoldingFactor: 10
+        channel_folding_factor: 10
     }
 }
 layer {
@@ -43,6 +43,6 @@ layer {
     pool: {
         type: Max
         dim: 2
-        channelFoldingFactor: 5
+        channel_folding_factor: 5
     }
 }

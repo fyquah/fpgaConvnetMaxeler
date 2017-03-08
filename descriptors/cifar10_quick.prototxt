@@ -21,7 +21,7 @@ layer {
         dim: 3
         stride: 2
 
-        channelFoldingFactor: 32
+        channel_folding_factor: 32
     }
     activation: Relu
 }
@@ -49,7 +49,7 @@ layer {
         dim: 3
         stride: 2
 
-        channelFoldingFactor: 32
+        channel_folding_factor: 32
     }
 }
 
@@ -75,6 +75,6 @@ layer {
         dim: 3
         stride: 2
 
-        channelFoldingFactor: 64
+        channel_folding_factor: 64
     }
 }
