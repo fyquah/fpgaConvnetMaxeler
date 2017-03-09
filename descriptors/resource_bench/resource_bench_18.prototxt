@@ -5,7 +5,7 @@ layer {
     num_outputs: 384
 
     pool: {
-        channel_folding_factor: 256
+        channel_folding_factor: 64
 
         type: Max
         dim: 3
