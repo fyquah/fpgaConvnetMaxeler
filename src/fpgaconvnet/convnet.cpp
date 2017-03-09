@@ -144,6 +144,14 @@ uint64_t calc_total_kernel_weights(const protos::LayerParameter & layer)
 }
 
 
+uint64_t calc_conv_in_size(const protos::Network & network)
+{
+    return network.layer(0).num_inputs()
+	* network.layer(0).input_height()
+	* network.layer(0).input_width();
+}
+
+
 uint64_t calc_total_rom_size(const protos::LayerParameter & layer)
 {
     return layer.conv().worker_factor()

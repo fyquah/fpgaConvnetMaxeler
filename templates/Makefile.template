@@ -1,0 +1,103 @@
+WHEREISROOT={WHEREISROOT}
+
+include $(WHEREISROOT)/Makefile.base
+
+{PRJ}_NAME={prj}
+{PRJ}_SIMMAXDIR=$(MAXCOMPILER_BUILD_DIR)/$({PRJ}_NAME)_$(DFEModel)_DFE_SIM/results
+{PRJ}_DFEMAXDIR=$(MAXCOMPILER_BUILD_DIR)/$({PRJ}_NAME)_$(DFEModel)_DFE/results
+{PRJ}_SIM_MAXFILE=$(MAXCOMPILER_BUILD_DIR)/$({PRJ}_NAME)_$(DFEModel)_DFE_SIM/results/$({PRJ}_NAME).max
+{PRJ}_DFE_MAXFILE=$(MAXCOMPILER_BUILD_DIR)/$({PRJ}_NAME)_$(DFEModel)_DFE/results/$({PRJ}_NAME).max
+{PRJ}_DESCRIPTOR=../descriptors/{prj}.prototxt
+{PRJ}_OPTIMIZED_DESCRIPTOR={prj}.optimized.prototxt
+
+
+$({PRJ}_OPTIMIZED_DESCRIPTOR): fpgaconvnet/optimizer.py $({PRJ}_DESCRIPTOR) $(PYTHON_PROTOS)
+	python $< --resource-bench ../results/resource_bench.yaml --output $@ \
+	    $({PRJ}_DESCRIPTOR)
+
+
+# ==============================
+#           Simulation
+# ==============================
+
+$({PRJ}_SIM_MAXFILE): $(ENGINEFILES) $(JAVA_PROTOS) ../descriptors/{prj}.prototxt
+	$(MAXJC) $(JFLAGS) $(filter %.java,$^) $(filter %.maxj,$^)
+	MAXAPPJCP='.:$(CP)' MAXSOURCEDIRS=$(SOURCE_DIRS) \
+		  $(MAXJAVARUN) fpgaconvnet.GenericNetworkBuilder \
+		  DFEModel=$(DFEModel) \
+		  maxFileName=$({PRJ}_NAME) \
+		  target="DFE_SIM" \
+		  descriptor="../descriptors/{prj}.prototxt" \
+		  enableMPCX=$(MPCX)
+
+
+{prj}_sim.o: $({PRJ}_SIM_MAXFILE)
+	$(SLICCOMPILE) $< $@
+
+
+{prj}_main_sim.o: main.cpp $({PRJ}_SIM_MAXFILE)
+	$(CPUCOMPILER) $< $(ALL_FLAGS) \
+		-I$(MAXCOMPILER_BUILD_DIR) -I$({PRJ}_SIMMAXDIR) \
+		-D__SIM__ -DDESIGN_NAME=$({PRJ}_NAME) -c -o $@
+
+
+{prj}_sim: $(FPGACONVNET_OBJ_FILES) \
+	    {prj}_sim.o {prj}_main_sim.o
+	$(CPUCOMPILER) $(ALL_FLAGS) -o $@ $^ $(LFLAGS)
+
+
+run_{prj}_sim: {prj}_sim $({PRJ}_DATA)
+	$(MAXCOMPILERSIM) -n $(USER)a -c$(DEVICENUM) -d$(NUMDEVICES) restart
+	SLIC_CONF+="use_simulation=$(USER)a; default_topology_timeout=-1" \
+		   LD_PRELOAD=$(MAXOS_SIM) \
+		   ./$< $({PRJ}_DESCRIPTOR)
+	make stopsim
+
+# ==============================
+#          DFE
+# ==============================
+
+$({PRJ}_DFE_MAXFILE): $(ENGINEFILES) $(JAVA_PROTOS)
+	$(MAXJC) $(JFLAGS) $^
+	MAXAPPJCP='.:$(CP)' MAXSOURCEDIRS=$(SOURCE_DIRS) \
+		  $(MAXJAVARUN) fpgaconvnet.GenericNetworkBuilder \
+		  DFEModel=$(DFEModel) \
+		  maxFileName=$({PRJ}_NAME) \
+		  target="DFE" \
+		  descriptor=$({PRJ}_DESCRIPTOR) \
+		  enableMPCX=$(MPCX)
+
+
+fpgaconvnet/{prj}_dfe.o: $({PRJ}_DFE_MAXFILE)
+	$(SLICCOMPILE) $< $@
+
+
+fpgaconvnet/{prj}_main_dfe.o: fpgaconvnet/{prj}_main.cpp $({PRJ}_DFE_MAXFILE)
+	$(CPUCOMPILER) $< $(ALL_FLAGS) \
+		-I$(MAXCOMPILER_BUILD_DIR) -I$({PRJ}_DFEMAXDIR) \
+		-DDESIGN_NAME=$({PRJ}_NAME) -c -o $@
+
+
+{prj}_dfe: $(FPGACONVNET_OBJ_FILES) \
+	    fpgaconvnet/{prj}_dfe.o fpgaconvnet/{prj}_main_dfe.o \
+	    fpgaconvnet/protos/parameters.pb.o
+	$(CPUCOMPILER) $(ALL_FLAGS) -o $@ $^ $(LFLAGS)
+
+
+run_{prj}_dfe: {prj}_dfe $({PRJ}_DATA) $({PRJ}_DESCRIPTOR)
+	SLIC_CONF="$(SLIC_CONF)" LD_PRELOAD=$(MAXOS_HW) ./$< $({PRJ}_DESCRIPTOR)
+
+
+# ---- Debug ----
+
+debug:
+	maxdebug -v -g {PRJ}Graph -s {PRJ}Graph -c -d $(USER)a0:$(USER)a \
+	    {PRJ}_SIM_MAXFILE
+
+sim: {prj}_sim
+
+runsim: run_{prj}_sim
+
+dfe: {prj}_dfe
+
+rundfe: run_{prj}_dfe

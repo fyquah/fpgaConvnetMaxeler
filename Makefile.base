@@ -1,0 +1,117 @@
+include $(WHEREISROOT)/Makefile.Maia.hardware
+
+NUMDEVICES ?= 1
+
+# ---- Paths ----
+MAXCOMPILER_BUILD_DIR=.
+MAXELEROSDIR_SIM:=$(MAXCOMPILERDIR)/lib/maxeleros-sim
+VPATH=$(WHEREISROOT)/src:$(WHEREISROOT)/protos:../src:.
+
+# ---- Source files ----
+PROTOS=fpgaconvnet/protos/parameters.proto
+JAVA_PROTOS=java/fpgaconvnet/protos/Parameters.java
+CPP_PROTOS=fpgaconvnet/protos/parameters.pb.h fpgaconvnet/protos/parameters.pb.cc
+PYTHON_PROTOS=fpgaconvnet/protos/parameters_pb2.py
+ALL_GENERATED_PROTOS=$(JAVA_PROTOS) $(PYTHON_PROTOS) $(CPP_PROTOS)
+
+# ---- Source files ----
+SOURCE_DIRS="${WHEREISROOT}/src/java/:${WHEREISROOT}/src/javatest/:./java/"
+ENGINEFILES=$(shell cd ${WHEREISROOT}/src && find ./java -name "*.maxj")
+TESTENGINEFILES=$(shell cd ${WHEREISROOT}/src && find ./javatest -name "*.maxj")
+CPUFILES=$(shell cd ${WHEREISROOT}/src && find . -name "*.cpp")
+
+# ---- Compiler settings ----
+CXXFLAGS+= -std=c++0x $(INCFLAGS)
+
+# detect the language: do we have .cpp extensions?
+ifneq ($(findstring cpp, $(CPUFILES)), )
+    # language: C++
+    CXX ?= icpc
+    CPUCOMPILER = $(CXX)
+
+    # Assuming CXX points to g++/c++ by default
+    COMPILER_CFLAGS = -fopenmp -std=c++0x
+    OPT_FLAGS = -march=native -O3
+
+    ifeq ($(CXX), icpc)
+      COMPILER_CFLAGS = -openmp
+      OPT_FLAGS = -xHost -O3
+    endif
+else
+    # language: C
+    CC ?= icc
+    CPUCOMPILER = $(CC)
+
+    # Assuming CC points to gcc/cc by default
+    COMPILER_CFLAGS = -std=c99 -fopenmp
+    OPT_FLAGS = -march=native -O3
+
+    ifeq ($(CC), icc)
+      COMPILER_CFLAGS = -std=c99 -openmp
+      OPT_FLAGS = -xHost -O3
+    endif
+endif
+
+
+# ---- Command alias ----
+
+PROTOC=protoc
+MAXFILECOMPILE=maxfilecompile
+SLICCOMPILE=sliccompile
+MAXGUESSBUILDDIR=maxGuessBuildDir
+MAXFILESTITCH=maxfilestitch
+MAXJAVARUN=maxJavaRun -v -m 16384
+MAXJC=maxjc
+MAXDEBUG=maxdebug
+MAXRENDERGRAPHS=maxRenderGraphs
+MAXCOMPILERSIM=maxcompilersim
+
+MAXOS_HW=/opt/maxeler/maxeleros/lib/libmaxeleros.so
+MAXOS_SIM=$(MAXELEROSDIR_SIM)/lib/libmaxeleros.so
+
+CP='$(WHEREISROOT)/lib/maxpower.jar:$(WHEREISROOT)/lib/junit-4.12.jar:$(WHEREISROOT)/lib/hamcrest-core-1.3.jar:$(WHEREISROOT)/lib/protobuf-java-3.0.0.jar'
+JFLAGS=-cp '$(MAXCOMPILERDIR)/lib/MaxCompiler.jar:$(CP)' -1.6 -d .
+INCFLAGS =  -I/src/ -I${MAXCOMPILERDIR}/include \
+	-I${MAXCOMPILERDIR}/include/slic -I${MAXELEROSDIR}/include \
+	-I$(WHEREISROOT)/include/ -I$(WHEREISROOT)/src/
+CFLAGS= $(COMPILER_CFLAGS) $(OPT_FLAGS) -Wall -D_XOPEN_SOURCE=600 $(INCFLAGS)
+LFLAGS=-L${MAXCOMPILERDIR}/lib -L${MAXELEROSDIR}/lib -lmaxeleros \
+       -lslic -lm -lpthread -lprotobuf
+
+# Add this on the command line to pass to make when compiling
+# Useful for debug/optimization flags
+EXTRA_CFLAGS?=
+
+# This is set in the gdbsim/gdbdfe targets
+DEBUG_FLAGS?=
+
+ALL_FLAGS = $(CFLAGS) $(EXTRA_CFLAGS) $(DEBUG_FLAGS)
+# ---- Default DFE ----
+DFEID=/dev/maxeler0
+
+# Files to remove on clean
+TRASH=*~ ../src/*~ *.o
+DIST_TRASH=Maxfiles.h *.class *.o debug* *.dot *.png
+
+all: runsim build
+
+
+# Rules for protobufs
+$(ALL_GENERATED_PROTOS): $(PROTOS)
+	mkdir -p java/
+	$(PROTOC) $< -I$(WHEREISROOT)/protos --java_out=./java --python_out=./ --cpp_out=./
+	touch fpgaconvnet/__init__.py fpgaconvnet/protos/__init__.py
+
+protos: $(ALL_GENERATED_PROTOS)
+
+fpgaconvnet:
+	mkdir -p $@
+
+fpgaconvnet/convnet.o: fpgaconvnet fpgaconvnet/protos/parameters.pb.h
+
+fpgaconvnet/feedforward.o: fpgaconvnet
+
+fpgaconvnet/convnet.o: fpgaconvnet
+
+FPGACONVNET_OBJ_FILES=fpgaconvnet/feedforward.o fpgaconvnet/convnet.o \
+		      fpgaconvnet/protos/parameters.pb.o
