@@ -71,9 +71,12 @@ std::vector<float> run_feature_extraction(
     }
 
     std::cout << "size = " << expected_output.size() << ", " << extracted_features.size() << std::endl;
+    float err = 0;
     for (int i = 0 ; i < expected_output.size() ; i++) {
+        err += std::abs(expected_output[i] - extracted_features[i]);
         std::cout << (i % 128) << " : " << expected_output[i] << ", " << extracted_features[i] << "\n";
     }
+    std::cout << "Average error = " << err / expected_output.size() << std::endl;
 
     return extracted_features;
 }

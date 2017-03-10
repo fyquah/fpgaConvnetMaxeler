@@ -9,6 +9,6 @@ layer {
         alpha: 0.0001
         beta: 0.75
         norm_region: ACROSS_CHANNELS
-        channel_folding_factor: 128
+        channel_folding_factor: 37
     }
 }
