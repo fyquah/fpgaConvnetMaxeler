@@ -42,12 +42,36 @@ message LayerParameter
 
 message ConvolutionParameter
 {
+    /*
+     * worker_factor <= bram_input_factor <= num_inputs
+     * conv_folding_factor <= bram_output_factor <= num_outputs
+     *
+     * The number of kernels to be stored in BRAM at any point in time.
+     * if bram_input_factor == num_inputs and bram_output_factor == num_outputs,
+     * that means all the weights stored in BRAM and no off-chip RAM reads
+     * will not be required. fpgaConvNet will generate a graph that reads
+     * the weights directly from the host to the FPGA.
+     *
+     * bram_input_factor and bram_output_factor has to be at least as large as
+     * worker_factor and conv_folding_factor simply because setting them to
+     * be lower values makes unnecessary stalls the extra (wasted) memory
+     * cycles. They should also, ideally, be a multiples of worker_factor and
+     * conv_folding_factor. fpgaConvNet is not smart enough to optimize non-
+     * alligned memory access (yet).
+     *
+     * bram_input_factor and bram_output_factor do not affect how bias are
+     * alligned. Those are stored in BRam in all cases.
+     */
+    optional uint32 bram_input_factor = 4;
+    optional uint32 bram_output_factor = 5;
+
     optional uint32 worker_factor = 1;         // 1 <= x <= num_inputs
     optional uint32 conv_folding_factor = 2;    // 1 <= x <= num_outputs
                                               // - number of convoluters per worker.
     optional uint32 kernel_folding_factor = 3;  // 1 <= x <= kernel_dim * kernel_dim
                                               // - number of multipliers per convoluter.
                                               // - must be a factor of kernelDim * kernelDim
+
     /* input_height, input_width and num_inputs must be provided at the input layer and are
      * optional at subsequent layers. They will be used for checking if they are provided.
      */
