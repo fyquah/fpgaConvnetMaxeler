@@ -125,9 +125,4 @@ protos: $(ALL_GENERATED_PROTOS)
 # Rules for arbitary object files.
 fpgaconvnet/convnet.o: fpgaconvnet/protos/parameters.pb.h
 
-
-
 include $(WHEREISROOT)/Makefile.resource.bench
-include $(WHEREISROOT)/Makefile.scene
-include $(WHEREISROOT)/Makefile.lenet
-include $(WHEREISROOT)/Makefile.cifar10.quick
