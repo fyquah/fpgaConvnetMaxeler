@@ -1,12 +1,14 @@
 *.swp
 *.pyc
 
+build/
+!build/Makefile
+
 # Project-specific makefiles
 !projects/lenet/build/Makefile
 
 !build/fpgaconvnet/.gitkeep
 !build/java/.gitkeep
 !build/javatest/.gitkeep
-build/
 __pycache__
 venv/
