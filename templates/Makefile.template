@@ -46,11 +46,11 @@ $({PRJ}_SIM_MAXFILE): $(ENGINEFILES) $(JAVA_PROTOS) $({PRJ}_OPTIMIZED_DESCRIPTOR
 	$(CPUCOMPILER) $(ALL_FLAGS) -o $@ $^ $(LFLAGS)
 
 
-run_{prj}_sim: {prj}_sim $({PRJ}_DATA)
+run_{prj}_sim: {prj}_sim $({PRJ}_DATA) $({PRJ}_OPTIMIZED_DESCRIPTOR)
 	$(MAXCOMPILERSIM) -n $(USER)a -c$(DEVICENUM) -d$(NUMDEVICES) restart
 	SLIC_CONF+="use_simulation=$(USER)a; default_topology_timeout=-1" \
 		   LD_PRELOAD=$(MAXOS_SIM) \
-		   ./$< $({PRJ}_DESCRIPTOR)
+		   ./$< $({PRJ}_OPTIMIZED_DESCRIPTOR)
 	make stopsim
 
 # ==============================
@@ -84,8 +84,8 @@ fpgaconvnet/{prj}_main_dfe.o: fpgaconvnet/{prj}_main.cpp $({PRJ}_DFE_MAXFILE)
 	$(CPUCOMPILER) $(ALL_FLAGS) -o $@ $^ $(LFLAGS)
 
 
-run_{prj}_dfe: {prj}_dfe $({PRJ}_DATA) $({PRJ}_DESCRIPTOR)
-	SLIC_CONF="$(SLIC_CONF)" LD_PRELOAD=$(MAXOS_HW) ./$< $({PRJ}_DESCRIPTOR)
+run_{prj}_dfe: {prj}_dfe $({PRJ}_DATA) $({PRJ}_OPTIMIZED_DESCRIPTOR)
+	SLIC_CONF="$(SLIC_CONF)" LD_PRELOAD=$(MAXOS_HW) ./$< $({PRJ}_OPTIMIZED_DESCRIPTOR)
 
 
 # ---- Debug ----
