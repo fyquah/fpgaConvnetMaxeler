@@ -104,15 +104,12 @@ $(ALL_GENERATED_PROTOS): $(PROTOS)
 
 protos: $(ALL_GENERATED_PROTOS)
 
-fpgaconvnet:
-	mkdir -p $@
-
 fpgaconvnet/convnet.o: fpgaconvnet fpgaconvnet/protos/parameters.pb.h
 
 fpgaconvnet/feedforward.o: fpgaconvnet
 
 fpgaconvnet/convnet.o: fpgaconvnet
 
-FPGACONVNET_OBJ_FILES=fpgaconvnet/feedforward.o fpgaconvnet/convnet.o \
-		      fpgaconvnet/mnist.o \
-		      fpgaconvnet/protos/parameters.pb.o
+FPGACONVNET_OBJ_FILES=fpgaconvnet/protos/parameters.pb.o \
+		      fpgaconvnet/feedforward.o fpgaconvnet/convnet.o \
+		      fpgaconvnet/mnist.o
