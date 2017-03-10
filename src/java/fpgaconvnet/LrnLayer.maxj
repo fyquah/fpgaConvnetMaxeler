@@ -1,0 +1,49 @@
+package fpgaconvnet;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import com.maxeler.maxcompiler.v2.managers.custom.DFELink;
+import com.maxeler.maxcompiler.v2.managers.custom.CustomManager;
+import com.maxeler.maxcompiler.v2.managers.engine_interfaces.EngineInterface;
+import com.maxeler.maxcompiler.v2.managers.engine_interfaces.InterfaceParam;
+
+import fpgaconvnet.kernels.LrnLayerKernel;
+import fpgaconvnet.protos.Parameters.LayerParameter;
+import fpgaconvnet.Utils.Tuple3;
+
+
+public class LrnLayer implements ComputationChain {
+
+    private final BoxedKernelBlock<LrnLayerKernel> lrnKernel;
+
+    public LrnLayer(LayerParameter layer, CustomManager manager) {
+        lrnKernel = new BoxedKernelBlock<LrnLayerKernel>(
+                manager,
+                new LrnLayerKernel(
+                        manager.makeKernelParameters("LrnLayer" + layer.getLayerId()),
+                                                     layer));
+    }
+
+    public DFELink getInput() {
+        return lrnKernel.getBlock().getInput("x");
+    }
+
+    public DFELink getOutput() {
+        return lrnKernel.getBlock().getOutput("y");
+    }
+
+    public void setKernelTimings(EngineInterface ei, InterfaceParam numberOfImages, InterfaceParam init) {
+        ei.setTicks(lrnKernel.getKernel().getName(),
+                    numberOfImages * lrnKernel.getKernel().cyclesPerImage());
+    }
+
+    public void setScalar(EngineInterface ei, String name, InterfaceParam param) {
+        ei.setScalar(lrnKernel.getKernel().getName(), "approx_factor", param);
+    }
+
+    public List<Tuple3<String, DFELink, Integer>> getInitializerInputs() {
+        /* There's no initializers in a lrn layer. */
+        return new ArrayList<Tuple3<String, DFELink, Integer>>();
+    }
+}

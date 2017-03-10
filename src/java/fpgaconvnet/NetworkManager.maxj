@@ -32,6 +32,10 @@ public class NetworkManager extends CustomManager {
         return layer.getParamsCase().equals(Parameters.LayerParameter.ParamsCase.POOL);
     }
 
+    private static boolean isLrnLayer(Parameters.LayerParameter layer) {
+        return layer.getParamsCase().equals(Parameters.LayerParameter.ParamsCase.LRN);
+    }
+
     private EngineInterface interfaceDefault () {
         EngineInterface ei = new EngineInterface();
 
@@ -63,6 +67,12 @@ public class NetworkManager extends CustomManager {
                             CPUTypes.FLOAT,
                             init ? link.getThird() * CPUTypes.FLOAT.sizeInBytes() : 0);
                 }
+
+            } else if (isLrnLayer(layerParams)) {
+                InterfaceParam approx_factor = ei.addParam(
+                        "approx_factor_" + layerParams.getLayerId(), CPUTypes.FLOAT);
+                computationChains[i].setScalar(ei, "approx_factor", approx_factor);
+
             }
         }
 
@@ -77,6 +87,10 @@ public class NetworkManager extends CustomManager {
                 computationChains.add(new ConvolutionLayer(layer, this));
             } else if (isPoolLayer(layer)) {
                 computationChains.add(new PoolingLayer(layer, this));
+            } else if (isLrnLayer(layer)) {
+                computationChains.add(new LrnLayer(layer, this));
+            } else {
+                throw new RuntimeException("Unknown layer!");
             }
         }
     }

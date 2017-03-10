@@ -8,6 +8,7 @@ import fpgaconvnet.protos.Parameters;
 import fpgaconvnet.protos.Parameters.LayerParameter;
 import fpgaconvnet.protos.Parameters.ConvolutionParameter;
 import fpgaconvnet.protos.Parameters.PoolingParameter;
+import fpgaconvnet.protos.Parameters.LrnParameter;
 
 
 public class ParametersTransformer {
@@ -134,6 +135,22 @@ public class ParametersTransformer {
                     .mergeFrom(poolParams)
                     .setStride(stride)
                     .build());
+
+        } else if (paramsCase.equals(LayerParameter.ParamsCase.LRN)) {
+            LrnParameter lrnParams = layerParameter.getLrn();
+
+            numOutputs = numInputs;
+            pad = 0;
+            kernelSize = 1;
+            stride = 1;
+
+            if (layerParameter.hasNumOutputs() &&
+                    layerParameter.getNumOutputs() != numInputs) {
+                    raiseError(layer_id,
+                               "num_inputs and num_outputs for LRN layer should be the same");
+            }
+
+            builder.setLrn(lrnParams);
 
         } else {
             raiseError(layer_id, "Either pool of conv has to be set!");

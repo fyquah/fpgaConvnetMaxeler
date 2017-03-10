@@ -91,7 +91,7 @@ message LrnParameter
     optional uint32 local_size = 1;
     optional float alpha = 2;
     optional float beta = 3;
-    optional LrnRegion norm_region = 4;
+    optional LrnRegion norm_region = 4 [default = ACROSS_CHANNELS];
     optional ApproxMethod approx_method = 5 [default = BINOMIAL];
     optional uint32 approx_degree = 6 [default = 1];  /* How many powers to approximate. */
 

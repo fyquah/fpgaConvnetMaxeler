@@ -20,6 +20,7 @@ public class LrnLayerKernel extends Kernel {
     private final DFEVector<DFEVar> input;
     private final DFEVector<DFEVar> output;
     private final DFEVectorType<DFEVar> ioType;
+    private final DFEVectorType<DFEVar> rawIoType;
     private final DFEVar approxFactor;
     private final DFEVar iter;
     private final LayerParameter layerParams;
@@ -28,7 +29,7 @@ public class LrnLayerKernel extends Kernel {
 
     public int getIterations() {
         return Utils.divCeil(layerParams.getNumInputs(),
-                             layerParams.getPool().getChannelFoldingFactor());
+                             layerParams.getLrn().getChannelFoldingFactor());
     }
 
     public LrnLayerKernel(KernelParameters kp, LayerParameter argLayerParams) {
@@ -36,9 +37,14 @@ public class LrnLayerKernel extends Kernel {
 
         layerParams = argLayerParams;
         lrnParams = layerParams.getLrn();
-        iter = control.count.simpleCounter(Utils.ceilLog2(getIterations()), getIterations());
+        if (getIterations() == 1) {
+            iter = constant.var(dfeUInt(1), 0);
+        } else {
+            iter = control.count.simpleCounter(Utils.ceilLog2(getIterations()), getIterations());
+        }
         channelFoldingFactor = layerParams.getLrn().getChannelFoldingFactor();
         ioType = new DFEVectorType<DFEVar>(GlobalConfig.dataType, layerParams.getNumOutputs());
+        rawIoType = new DFEVectorType<DFEVar>(GlobalConfig.cpuType, layerParams.getNumOutputs());
         input = ioType.newInstance(this);
         output = ioType.newInstance(this);
 
@@ -49,28 +55,45 @@ public class LrnLayerKernel extends Kernel {
             approxFactor = null;
         }
 
-
-        /* Get workers to calculate the LRN for every channel.
-         *
-         * The very complex logic, can be simplified to:
-         *
-         * Which is why we need functional languages. Damn it.
-         * */
         List<DFEVar> workerOutput = new ArrayList<DFEVar>();
 
         for (int worker = 0 ; worker < lrnParams.getChannelFoldingFactor() ; worker++) {
+            /* Get workers to calculate the LRN for every channel.
+             *
+             * The complex logic below is simply a transpose operation, i.e:
+             * [(4, 3, 0, 1, 2),
+             *  (4, 0, 1, 2, 3),
+             *  (0, 1, 2, 3, 4),
+             *  (1, 2, 3, 4, 5),
+             *  ....
+             * ]
+             *
+             * ->
+             *
+             * [control.mux(iter, input[4], input[4], input[0], input[1], ...),
+             *  control.mux(iter, input[3], input[0], input[1], input[2], ...),
+             *  control.mux(iter, input[0], input[1], input[2], input[3], ...),
+             *  control.mux(iter, input[1], input[2], input[3], input[4], ...),
+             *  control.mux(iter, input[2], input[3], input[4], input[5], ...),
+             * ]
+             *
+             */
             List<int[]> localRegions = calcAcrossChannelLocalRegion(worker);
             List<DFEVar> localRegionVars = new ArrayList<DFEVar>();
 
-            for (int j = 0 ; j < localRegions[0].length ; j++) {
+            for (int j = 0 ; j < lrnParams.getLocalSize() ; j++) {
                 List<DFEVar> pixelLocalRegionVars = new ArrayList<DFEVar>();
 
                 for (int i = 0 ; i < localRegions.size() ; i++) {
                     pixelLocalRegionVars.add(input[localRegions[i][j]]);
                 }
 
-                localRegionVars.add(control.mux(iter.cast(dfeUInt(Utils.ceilLog2(pixelLocalRegionVars.size()))),
-                                    pixelLocalRegionVars));
+                if (pixelLocalRegionVars.size() == 1) {
+                    localRegionVars.add(pixelLocalRegionVars[0]);
+                } else {
+                    localRegionVars.add(control.mux(iter.cast(dfeUInt(Utils.ceilLog2(pixelLocalRegionVars.size()))),
+                                        pixelLocalRegionVars));
+                }
             }
 
             workerOutput.add(computeAcrossChannel(localRegionVars));
@@ -96,16 +119,30 @@ public class LrnLayerKernel extends Kernel {
 
 
         /* Set IO interface. */
-        input <== io.input(getInputName(), ioType, iter.eq(0));
-        io.output(getOutputName(), output, ioType, iter.eq(getIterations() - 1));
+        if (layerParams.getIsFirstLayer()) {
+            input <== io.input(getInputName(), rawIoType, iter.eq(0)).cast(ioType);
+
+        } else {
+            input <== io.input(getInputName(), ioType, iter.eq(0));
+
+        }
+
+        if (layerParams.getIsLastLayer()) {
+            io.output(getOutputName(), output.cast(rawIoType), rawIoType,
+                    iter.eq(getIterations() - 1));
+
+        } else {
+            io.output(getOutputName(), output, ioType, iter.eq(getIterations() - 1));
+
+        }
     }
 
     public String getInputName() {
-        return "input";
+        return "x";
     }
 
     public String getOutputName() {
-        return "output";
+        return "y";
     }
 
     private List<int[]> calcAcrossChannelLocalRegion(int worker) {
@@ -133,8 +170,9 @@ public class LrnLayerKernel extends Kernel {
 
                 if (channel < 0) {
                     channel = lrnParams.getLocalSize() / 2 - j;
-                } else if (j >= layerParams.getNumInputs()) {
-                    channel = -lrnParams.getLocalSize() / 2 + (j - layerParams.getNumInputs());
+                } else if (channel >= layerParams.getNumInputs()) {
+                    channel = layerParams.getNumInputs() - lrnParams.getLocalSize() / 2
+                                - (j + 1);
                 }
 
                 local[j + lrnParams.getLocalSize() / 2] = channel;
@@ -171,5 +209,9 @@ public class LrnLayerKernel extends Kernel {
             throw new RuntimeException("Unknown approximation method!");
 
         }
+    }
+
+    public int cyclesPerImage() {
+        return getIterations() * layerParams.getInputHeight() * layerParams.getInputWidth();
     }
 }

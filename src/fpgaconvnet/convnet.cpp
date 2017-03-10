@@ -186,7 +186,8 @@ protos::Network load_network_proto(const std::string & filename)
             it->set_output_width(
                     (it->input_width() - it->conv().kernel_size() + 2 * it->conv().pad())
                     / it->conv().stride() + 1);
-        } else {
+
+        } else if (it->has_pool()) {
             uint32_t stride;
 
             if (it->pool().has_stride()) {
@@ -200,6 +201,15 @@ protos::Network load_network_proto(const std::string & filename)
             it->set_num_outputs(it->num_inputs());
             it->set_output_height(div_ceil(it->input_height(), stride));
             it->set_output_width(div_ceil(it->input_width(), stride));
+
+        } else if (it->has_lrn()) {
+            it->set_num_outputs(it->num_inputs());
+            it->set_output_height(it->input_height());
+            it->set_output_width(it->input_width());
+
+        } else {
+            throw fpgaconvnet::Exception("Unknown layer " + std::to_string((long long unsigned) i));
+
         }
     }
     log_stdout() << network.DebugString() << std::endl;
@@ -436,11 +446,6 @@ void Convnet::set_layer_weights(
     sprintf(buffer, "kernel_%d", layer.layer_id());
 
     if (initialized_weights) {
-        /* TODO(fyq14): Fix third argument
-         * Third argument here doens't really matter what we pass in, as the stream size is
-         * 0, but for defensive purposes, it still makes more sense to pass in the actual
-         * pointer to the queue weights.
-         */
         max_queue_input(action, buffer, NULL, 0);
 
     } else {
@@ -572,6 +577,15 @@ std::vector<float> Convnet::max_run_inference(
             set_layer_weights(
                     run_action, *it, worker_kernels[i], bias[i]);
             i++;
+        } else if (it->has_lrn()) {
+            /* assuming binomial approximation used. */
+            char buffer[30];
+
+            sprintf(buffer, "approx_factor_%d", it->layer_id());
+            max_set_param_double(
+                    run_action,
+                    buffer,
+                    -it->lrn().alpha() * it->lrn().beta() / float(it->lrn().local_size()));
         }
     }
 
