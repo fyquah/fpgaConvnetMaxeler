@@ -33,5 +33,4 @@ public class IterationCounter {
     public int getSchedulerIterations() {
         return Utils.divCeil(layerParams.getNumInputs(), layerParams.getConv().getWorkerFactor());
     }
-
 }

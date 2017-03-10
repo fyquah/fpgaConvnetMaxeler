@@ -43,8 +43,18 @@ message LayerParameter
 message ConvolutionParameter
 {
     /*
-     * worker_factor <= bram_input_factor <= num_inputs
-     * conv_folding_factor <= bram_output_factor <= num_outputs
+     * conv_folding_factor * worker_factor <= bram_factor <= num_inputs * num_outputs
+     * 1 (no lookahead) <= look_ahead <= input_height * input_width (full lookahead)
+     *
+     * Consequently, the amount of BRAM used by each multiplier would be
+     * proportional to:
+     * 
+     * `(bram_factor / (worker_factor * conv_folding_factor))
+     *   * ceil(kernel_size^2 / kernel_folding_factor)`.
+     * 
+     * The total amount of blockram required will then be:
+     * 
+     * `bram_factor * kernel_size * kernel_size`
      *
      * The number of kernels to be stored in BRAM at any point in time.
      * if bram_input_factor == num_inputs and bram_output_factor == num_outputs,
@@ -52,18 +62,26 @@ message ConvolutionParameter
      * will not be required. fpgaConvNet will generate a graph that reads
      * the weights directly from the host to the FPGA.
      *
-     * bram_input_factor and bram_output_factor has to be at least as large as
-     * worker_factor and conv_folding_factor simply because setting them to
-     * be lower values makes unnecessary stalls the extra (wasted) memory
-     * cycles. They should also, ideally, be a multiples of worker_factor and
-     * conv_folding_factor. fpgaConvNet is not smart enough to optimize non-
-     * alligned memory access (yet).
+     * bram_factor has to be at least as large as `worker_factor * conv_folding_factor`
+     * simply because setting them to be lower values makes unnecessary stalls
+     * the extra (wasted) memory cycles.
+     *
+     * They should also, ideally, be a multiples of `worker_factor * conv_folding_factor`
+     * fpgaConvNet is not smart enough to optimize non-
+     * alligned memory access (yet). There isn't much reason to optimize
+     * non-multiple memory accesses cases - the total amount of iterations
+     * will not improve (and might even degrade due to unncessary off-chip
+     * memory accesses!)
      *
      * bram_input_factor and bram_output_factor do not affect how bias are
      * alligned. Those are stored in BRam in all cases.
+     * 
+     * look_ahead affects the frequency of memory lookups. Higher lookahead
+     * means less frequent off-chip memory lookup, but higher on-chip memory
+     * usage.
      */
-    optional uint32 bram_input_factor = 4;
-    optional uint32 bram_output_factor = 5;
+    optional uint32 bram_factor = 4;
+    optional uint32 look_ahead = 5 [default = 1]; /* Must be a factor of image size. */
 
     optional uint32 worker_factor = 1;         // 1 <= x <= num_inputs
     optional uint32 conv_folding_factor = 2;    // 1 <= x <= num_outputs

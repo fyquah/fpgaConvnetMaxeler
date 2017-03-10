@@ -22,6 +22,12 @@ public abstract class ConvolutionKernelBase extends Kernel {
         iterCounter = new IterationCounter(layerParams);
     }
 
+    public int getTotalIterations() {
+        return getSchedulerIterations()
+            * getKernelIterations()
+            * getConvolutionIterations();
+    }
+
     public int getKernelIterations() {
         return iterCounter.getKernelIterations();
     }
