@@ -425,8 +425,9 @@ def main():
 
         elif layer.HasField("pool"):
             layer.num_outputs = layer.num_inputs
-            layer.output_height = layer.input_height / layer.pool.dim
-            layer.output_width =  layer.input_width / layer.pool.dim
+            stride = layer.pool.stride or layer.pool.dim
+            layer.output_height = div_ceil(layer.input_height, stride)
+            layer.output_width =  div_ceil(layer.input_width, stride)
 
         else:
             raise RuntimeError("Unknown layer!")
