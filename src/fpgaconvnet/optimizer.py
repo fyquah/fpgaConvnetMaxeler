@@ -154,6 +154,7 @@ def run_optimizer(network, models, constraints):
         if layer.HasField("conv"):
             num_conv_layers += 1
 
+    minimized_states = []
     for i in range(5):
         problem = OptimizationProblem(network, models, constraints,
                                       num_conv_layers * 3 * [1])
@@ -166,7 +167,7 @@ def run_optimizer(network, models, constraints):
         total_m20k = constraints["block_memory"] \
                             - problem.bram_constraint(state)
 
-        print "Attempt", i
+        print "=> Attempt", i
         print "Estimated total logic utilization: %d (%.3f)" % \
                 (total_logic_used,
                  float(total_logic_used) / constraints["logic_utilization"])
@@ -178,22 +179,10 @@ def run_optimizer(network, models, constraints):
                 (total_m20k,
                  float(total_m20k) / constraints["block_memory"])
         print "Estimated GOps:", problem.gops_fn(state), "\n"
+        minimized_states.append(state)
 
-    return scale_x(state)
-
-
-    # print "Iter", iter
-    # print "Estimated total logic utilization: %d (%.3f)" % \
-    #         (total_logic_used,
-    #          float(total_logic_used) / constraints["logic_utilization"])
-    # print "Estimated total multipliers: %d (%.3f)" % \
-    #         (total_multipliers,
-    #          float(total_multipliers) / constraints["multiplier"])
-    # print "Violation:", multiplier_constraint(results.x)
-    # print "Optimal params:", parameters
-    # print "Estimated GOps:", gops_fn(rounded_xs), "\n"
-
-    return parameters
+    # TODO(fyq14): Choose the best state, rather than returning the first one..
+    return scale_x(minimized_states[0])
 
 
 def div_ceil(a, b):
@@ -414,7 +403,7 @@ def main():
 
     logic_utilization_model = make_model_from_lm(logic_utilization_model)
     base_logic_model = lambda x: base_logic
-    residual_logic_model = lambda x: logic_utilization_model(x) - base_logic[0]
+    residual_logic_model = lambda x: logic_utilization_model(x) - base_logic
     residual_block_memory_model = make_model_from_lm(residual_block_memory_model)
 
     with open(FLAGS.design, "r") as f:

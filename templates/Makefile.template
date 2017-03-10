@@ -12,7 +12,7 @@ include $(WHEREISROOT)/Makefile.base
 
 
 $({PRJ}_OPTIMIZED_DESCRIPTOR): fpgaconvnet/optimizer.py $({PRJ}_DESCRIPTOR) $(PYTHON_PROTOS)
-	python $< --resource-bench ../results/resource_bench.yaml --output $@ \
+	python $< --resource-bench $(WHEREISROOT)/results/resource_bench.yaml --output $@ \
 	    $({PRJ}_DESCRIPTOR)
 
 
@@ -20,14 +20,14 @@ $({PRJ}_OPTIMIZED_DESCRIPTOR): fpgaconvnet/optimizer.py $({PRJ}_DESCRIPTOR) $(PY
 #           Simulation
 # ==============================
 
-$({PRJ}_SIM_MAXFILE): $(ENGINEFILES) $(JAVA_PROTOS) ../descriptors/{prj}.prototxt
+$({PRJ}_SIM_MAXFILE): $(ENGINEFILES) $(JAVA_PROTOS) $({PRJ}_OPTIMIZED_DESCRIPTOR)
 	$(MAXJC) $(JFLAGS) $(filter %.java,$^) $(filter %.maxj,$^)
 	MAXAPPJCP='.:$(CP)' MAXSOURCEDIRS=$(SOURCE_DIRS) \
 		  $(MAXJAVARUN) fpgaconvnet.GenericNetworkBuilder \
 		  DFEModel=$(DFEModel) \
 		  maxFileName=$({PRJ}_NAME) \
 		  target="DFE_SIM" \
-		  descriptor="../descriptors/{prj}.prototxt" \
+		  descriptor=$({PRJ}_OPTIMIZED_DESCRIPTOR) \
 		  enableMPCX=$(MPCX)
 
 
@@ -57,14 +57,14 @@ run_{prj}_sim: {prj}_sim $({PRJ}_DATA)
 #          DFE
 # ==============================
 
-$({PRJ}_DFE_MAXFILE): $(ENGINEFILES) $(JAVA_PROTOS)
-	$(MAXJC) $(JFLAGS) $^
+$({PRJ}_DFE_MAXFILE): $(ENGINEFILES) $(JAVA_PROTOS) $({PRJ}_OPTIMIZED_DESCRIPTOR)
+	$(MAXJC) $(JFLAGS) $(filter %.java,$^) $(filter %.maxj,$^)
 	MAXAPPJCP='.:$(CP)' MAXSOURCEDIRS=$(SOURCE_DIRS) \
 		  $(MAXJAVARUN) fpgaconvnet.GenericNetworkBuilder \
 		  DFEModel=$(DFEModel) \
 		  maxFileName=$({PRJ}_NAME) \
 		  target="DFE" \
-		  descriptor=$({PRJ}_DESCRIPTOR) \
+		  descriptor=$({PRJ}_OPTIMIZED_DESCRIPTOR) \
 		  enableMPCX=$(MPCX)
 
 

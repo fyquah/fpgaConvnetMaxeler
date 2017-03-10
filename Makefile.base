@@ -114,4 +114,5 @@ fpgaconvnet/feedforward.o: fpgaconvnet
 fpgaconvnet/convnet.o: fpgaconvnet
 
 FPGACONVNET_OBJ_FILES=fpgaconvnet/feedforward.o fpgaconvnet/convnet.o \
+		      fpgaconvnet/mnist.o \
 		      fpgaconvnet/protos/parameters.pb.o
