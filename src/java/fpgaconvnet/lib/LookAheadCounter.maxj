@@ -1,0 +1,90 @@
+package fpgaconvnet.lib;
+
+import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
+import com.maxeler.maxcompiler.v2.kernelcompiler.KernelLib;
+
+import fpgaconvnet.kernels.ConvolutionUnit;
+import fpgaconvnet.protos.Parameters.ConvolutionParameter;
+
+
+public class LookAheadCounter extends KernelLib {
+
+    private final IterationCounter ctr;
+    private final DFEVar weightWriteAddress;
+    private final DFEVar weightReadAddress;
+    private final DFEVar weightWriteEnable;
+    private final DFEVar pixelWriteAddress;
+    private final DFEVar pixelReadAddress;
+    private final DFEVar weightInputEnable;
+    private final DFEVar pixelInputEnable;
+    private final int weightsUsageCycles;
+    private final int totalIterationsPerWindow;
+
+    LookAheadCounter(ConvolutionUnit kernel, LayerParameter layerParams) {
+        super(kernel);
+       
+        ctr = new IterationCounter(layerParams);
+        totalIterationsPerWindow = ctr.getKernelIterartions() * ctr.getConvolutionIterations();
+        weightsUsageCycles = ctr.getKernelIterations()
+                * convParams.getBramFactor()
+                / (convParams.getWorkerFactor() * convParams.getConvFoldingFactor());
+        weightWriteAddress = control.count.makeCounter(
+                control.count.makeParams(Utils.ceilLog2(weightsUsage))
+                .withMax(weightsUsage)
+                .withEnable()).getCount();
+
+        CounterChain pixelChain = control.count.makeCounterChain(initTick);
+        DFEVar lookAhead = Utils.chainCounterOrZero(this, pixelChain, layerParams.getConv().getLookAhead());
+        DFEVar pixelWriteAddress = Utils.chainCounterOrZero(this, pixelChain, weightReadAddress);
+
+        CounterChain chain = control.count.makeCounterChain();
+        DFEVar lookAhead = Utils.chainCounterOrZero(
+                this, chain, layerParams.getConv().getLookAhead());
+        DFEVar weightUsage = Utils.chainCounterOrZero(this, chain, weightsUsageCycles);
+    }
+
+    public DFEVar getWeightsInputFlag() {
+        return lookAhead.eq(0);
+    }
+
+    public DFEVar getWriteEnable(int workerId, int convUnitIndex) {
+        return lookAhead.eq(0);
+    }
+
+    public DFEVar getInputControlFlag() {
+        /* Number of iterations to spend per channel. */
+        final int channelIterations = getConvolutionIterations * getKernelIterations();
+
+        DFEVar channelIterBase = control.count.makeCounter(
+                control.count.makeParams(Utils.ceilLog2(ctr.getTotalIterations()))
+                .withInit(0)
+                .withInc(weightsUsageCycles)
+                .withMax(channelIterations)
+                .withEnable(lookAhead.eq(layerParams.getConv().getLookAhead() - 1)
+                            & weightUsage.eq(weightsUsageCycles - 1))
+                .withReset()
+            ).getCount();
+
+        /* Defines the stage at which we are using a particular channel. */
+        DFEVar channelIter = dfeUInt(32).newInstance(this);
+        optimization.pushPipeliningFactor(0.0);
+        channelIter = (weightUsage.eq(0)
+                       ? channelIterBase
+                       : modInc(stream.offset(channelIter, -1), channelIterations));
+        optimization.popPipeliningFactor();
+
+        return channelIter.eq(0)
+    }
+
+    private DFEVar modInc(DFEVar x, int cap) {
+        return (x == (cap - 1) ? 0 : x + 1);
+    }
+
+    public DFEVar getOutputControlFlag() {
+        return constant.var(dfeBool(), 1);
+    }
+
+    public DFEVar getPixelWriteEnable() {
+        getPixelWriteEnable
+    }
+}

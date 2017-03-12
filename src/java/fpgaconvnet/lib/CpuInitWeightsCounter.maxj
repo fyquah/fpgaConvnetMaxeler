@@ -1,0 +1,80 @@
+package fpgaconvnet.lib;
+
+import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
+import com.maxeler.maxcompiler.v2.kernelcompiler.KernelLib;
+
+import fpgaconvnet.kernels.ConvolutionUnit;
+import fpgaconvnet.protos.Parameters.ConvolutionParameter;
+
+
+public class CpuInitWeightsCounter extends KernelLib {
+
+    final IterationCounter iterCounter;
+    final DFEVar initWeightsFlag;
+    final DFEVar initializationComplete;
+    final DFEVar isInitializingWeights;
+    final DFEVar isPaddingInit;
+    final DFEVar iter;
+    final DFEVar kernelIter;
+
+    CpuInitWeightsCounter(ConvolutionUnit kernel, LayerParameter layerParams) {
+        super(kernel);
+
+        iterCounter = new IterationCounter(layerParams);
+        CounterChain initChain = control.count.makeCounterChain();
+        DFEVar initCycleIter = control.count.simpleCounter(
+                Utils.ceilLog2(kernel.initCycles()), kernel.initCycles());
+        DFEVar initWorkerIter = Utils.chainCounterOrZero(
+                this, initChain, layerParams.getConv().getWorkerFactor());
+        DFEVar initConvIter = Utils.chainCounterOrZero(
+                this, initChain, layerParams.getConv().getConvFoldingFactor());
+        DFEVar initAddress = Utils.chainCounterOrZero(this, initChain, totalAddressCount);
+        Counter initializationCompleteCtr = control.count.makeCounter(
+                control.count.makeParams(1)
+                .withInc(1)
+                .withMax(1)
+                .withWrapMode(Count.WrapMode.STOP_AT_MAX)
+                .withEnable(initCycleIter.eq(initCycles() - 1)));
+        Counter paddingInitCtr = control.count.makeCounter(
+                control.count.makeParams(1)
+                .withInc(1)
+                .withMax(1)
+                .withWrapMode(Count.WrapMode.STOP_AT_MAX)
+                .withEnable(initAddress.eq(totalAddressCount - 1)
+                            & initConvIter.eq(layerParams.getConv().getConvFoldingFactor() - 1)
+                            & initWorkerIter.eq(layerParams.getConv().getWorkerFactor() - 1)));
+
+        initWeightsFlag = io.scalarInput("init", dfeUInt(1));
+        initializationComplete = initializationCompleteCtr.getCount();
+        isInitializingWeights = initWeightsFlag & ~initializationComplete;
+        isPaddingInit = paddingInitCtr.getCount();
+
+        // Runtime
+        CounterChain chain = control.count.makeCounterChain(~isInitializingWeights);
+        iter = Utils.chainCounterOrZero(this, chain, iterCounter.getConvolutionIterations());
+        kernelIter = Utils.chainCounterOrZero(this, chain, iterCounter.getKernelIterations());
+    }
+
+    public DFEVar getWriteEnable(int workerId, int convUnitIndex) {
+        return isInitializingWeights
+                & initConvIter.eq(convUnitIndex)
+                & initWorkerIter.eq(workerId)
+                & ~isPaddingInit;
+    }
+
+    public DFEVar getInputControlFlag() {
+        return ~isInitializingWeights & iter.eq(0) & kernelIter.eq(0);
+    }
+
+    public DFEVar getOutputControlFlag() {
+        return ~isInitializingWeights;
+    }
+
+    public DFEVar getKernelIter() {
+        return kernelIter;
+    }
+
+    public DFEVar getConvIter() {
+        return iter;
+    }
+}
