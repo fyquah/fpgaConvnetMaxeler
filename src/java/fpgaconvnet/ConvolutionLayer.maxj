@@ -115,7 +115,7 @@ public class ConvolutionLayer implements ComputationChain {
         ret.add(new Tuple3<String, DFELink, Integer>(
                 String.format("kernel_%d", layer.getLayerId()),
                 convolutionUnit.getBlock().getInput(
-                    convolutionUnit.getKernel().getWeightsInputName()),
+                    convolutionUnit.getKernel().getCpuWeightsInputName()),
                 convolutionUnit.getKernel().initStreamSize()));
         ret.add(new Tuple3<String, DFELink, Integer>(
                 String.format("bias_%d", layer.getLayerId()),

@@ -1,32 +1,50 @@
 package fpgaconvnet.lib;
 
-import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
 import com.maxeler.maxcompiler.v2.kernelcompiler.KernelLib;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Count;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Count.Counter;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.CounterChain;
 
-import fpgaconvnet.kernels.ConvolutionUnit;
+import fpgaconvnet.IterationCounter;
+import fpgaconvnet.Utils;
+import fpgaconvnet.kernels.ConvolutionUnitKernel;
+import fpgaconvnet.protos.Parameters.LayerParameter;
 import fpgaconvnet.protos.Parameters.ConvolutionParameter;
 
 
 public class CpuInitWeightsCounter extends KernelLib {
 
     final IterationCounter iterCounter;
+    final ConvolutionParameter convParams;
+    final LayerParameter layerParams;
+    final DFEVar initConvIter;
+    final DFEVar initWorkerIter;
     final DFEVar initWeightsFlag;
     final DFEVar initializationComplete;
     final DFEVar isInitializingWeights;
     final DFEVar isPaddingInit;
-    final DFEVar iter;
+    final DFEVar convIter;
     final DFEVar kernelIter;
+    final int totalAddressCount;
 
-    CpuInitWeightsCounter(ConvolutionUnit kernel, LayerParameter layerParams) {
+    public CpuInitWeightsCounter(ConvolutionUnitKernel kernel, LayerParameter argLayerParams) {
         super(kernel);
 
+        layerParams = argLayerParams;
         iterCounter = new IterationCounter(layerParams);
+        convParams = layerParams.getConv();
+        totalAddressCount =
+                iterCounter.getSchedulerIterations()
+                * iterCounter.getConvolutionIterations()
+                * iterCounter.getKernelIterations();
+
         CounterChain initChain = control.count.makeCounterChain();
         DFEVar initCycleIter = control.count.simpleCounter(
                 Utils.ceilLog2(kernel.initCycles()), kernel.initCycles());
-        DFEVar initWorkerIter = Utils.chainCounterOrZero(
+        initWorkerIter = Utils.chainCounterOrZero(
                 this, initChain, layerParams.getConv().getWorkerFactor());
-        DFEVar initConvIter = Utils.chainCounterOrZero(
+        initConvIter = Utils.chainCounterOrZero(
                 this, initChain, layerParams.getConv().getConvFoldingFactor());
         DFEVar initAddress = Utils.chainCounterOrZero(this, initChain, totalAddressCount);
         Counter initializationCompleteCtr = control.count.makeCounter(
@@ -51,7 +69,7 @@ public class CpuInitWeightsCounter extends KernelLib {
 
         // Runtime
         CounterChain chain = control.count.makeCounterChain(~isInitializingWeights);
-        iter = Utils.chainCounterOrZero(this, chain, iterCounter.getConvolutionIterations());
+        convIter = Utils.chainCounterOrZero(this, chain, iterCounter.getConvolutionIterations());
         kernelIter = Utils.chainCounterOrZero(this, chain, iterCounter.getKernelIterations());
     }
 
@@ -62,8 +80,12 @@ public class CpuInitWeightsCounter extends KernelLib {
                 & ~isPaddingInit;
     }
 
+    public DFEVar getWeightsInputFlag() {
+        return isInitializingWeights;
+    }
+
     public DFEVar getInputControlFlag() {
-        return ~isInitializingWeights & iter.eq(0) & kernelIter.eq(0);
+        return ~isInitializingWeights & convIter.eq(0) & kernelIter.eq(0);
     }
 
     public DFEVar getOutputControlFlag() {
@@ -75,6 +97,25 @@ public class CpuInitWeightsCounter extends KernelLib {
     }
 
     public DFEVar getConvIter() {
-        return iter;
+        return convIter;
+    }
+
+    public int stallInitCycles() {
+        return initCycles() - realInitCycles();
+    }
+
+    public int realInitCycles() {
+        return layerParams.getConv().getWorkerFactor()
+                * layerParams.getConv().getConvFoldingFactor()
+                * iterCounter.getSchedulerIterations()
+                * iterCounter.getConvolutionIterations()
+                * iterCounter.getKernelIterations();
+    }
+
+    public int initCycles() {
+        int multipleBase =
+                ((int) Utils.lcm(4, layerParams.getConv().getKernelFoldingFactor()))
+                / layerParams.getConv().getKernelFoldingFactor();
+        return Utils.divCeil(realInitCycles(), multipleBase) * multipleBase;
     }
 }
