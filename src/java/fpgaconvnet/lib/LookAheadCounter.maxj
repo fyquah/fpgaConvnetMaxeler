@@ -60,7 +60,7 @@ public class LookAheadCounter extends KernelLib {
         final int channelIterations = ctr.getConvolutionIterations() * ctr.getKernelIterations();
 
         DFEVar channelIterBase = control.count.makeCounter(
-                control.count.makeParams(Utils.ceilLog2(ctr.getTotalIterations()))
+                control.count.makeParams(Utils.ceilLog2(channelIterations))
                 .withInitValue(0l)
                 .withInc(weightsUsageCycles * ctr.getKernelIterations())
                 .withMax(channelIterations)

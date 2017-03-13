@@ -64,7 +64,6 @@ static void generic_load_binary(std::string filename, int count, float *output)
     fin.close();
 }
 
-
 namespace fpgaconvnet {
 
 // Logging stuff
@@ -160,6 +159,10 @@ uint64_t calc_total_rom_size(const protos::LayerParameter & layer)
             * calc_total_iterations(layer);
 }
 
+static bool is_layer_cpu_initialized(const protos::LayerParameter & layer)
+{
+    return layer.conv().bram_factor() >= (layer.num_inputs() * layer.num_outputs());
+}
 
 protos::Network load_network_proto(const std::string & filename)
 {
@@ -348,7 +351,7 @@ void verify_conv_output(
     fin.close();
 }
 
-void allign_and_place_kernel_weights(
+void allign_and_place_cpu_initialized_kernel_weights(
         const protos::LayerParameter & layer,
         float *dest_base,
         float *src_base
@@ -362,6 +365,10 @@ void allign_and_place_kernel_weights(
     const uint64_t rom_per_worker =
             calc_total_rom_size(layer) / layer.conv().worker_factor();
 
+    /* This for loop makes dest_base into
+     *
+     * wf * scheduler_iterations * cff * kff
+     */
     for (int i = 0 ; i < worker_factor ; i++) {
         float *dest = dest_base + (i * rom_per_worker);
         float *src = src_base + (i * kernel_dim * kernel_dim);
@@ -403,6 +410,45 @@ void allign_and_place_kernel_weights(
     }
 }
 
+
+void allign_and_place_lmem_initialized_kernel_weights(
+        const protos::LayerParameter & layer,
+        float *dest_base,
+        float *src_base
+)
+{
+    const uint64_t total_rom_size = calc_total_rom_size(layer);
+    float *tmp = new float[total_rom_size];
+    const uint64_t rom_per_worker =
+            total_rom_size / layer.conv().worker_factor();
+    const uint64_t rom_per_conv =
+            rom_per_worker
+            / (calc_scheduler_iterations(layer) * layer.conv().conv_folding_factor());
+    const uint64_t total_iterations = calc_total_iterations(layer);
+
+    allign_and_place_cpu_initialized_kernel_weights(
+            layer,
+            tmp,
+            src_base);
+
+    uint64_t addr = 0;
+    for (int iter = 0 ; iter < total_iterations ; iter++) {
+        for (int worker = 0 ; worker < layer.conv().worker_factor() ; worker++) {
+            float *copy_base = tmp + rom_per_worker;
+
+            for (int conv = 0 ; conv < layer.conv().conv_folding_factor() ; conv++) {
+
+                std::memcpy(
+                        dest_base + addr,
+                        copy_base + (conv * rom_per_conv),
+                        sizeof(float) * layer.conv().kernel_folding_factor());
+                addr += layer.conv().kernel_folding_factor();
+            }
+        }
+    }
+
+    delete[] tmp;
+}
 
 void Convnet::randomize_weights()
 {
@@ -482,7 +528,7 @@ Convnet::Convnet(
             conv_layer_params.push_back(*it);
             kernels.push_back(new float[calc_total_kernel_weights(*it)]);
             bias.push_back(new float[div_ceil(it->num_outputs(), 4) * 4]);
-            worker_kernels.push_back(new float[calc_total_rom_size(*it)]);
+            worker_kernels.push_back(new float[div_ceil(calc_total_rom_size(*it), 96) * 96]);
             memset(worker_kernels.back(), 0,
                    sizeof(float) * calc_total_kernel_weights(*it));
         }
@@ -528,9 +574,46 @@ void Convnet::load_weights_from_files(std::vector<std::string> filenames, file_f
         }
     }
     for (int i = 0; i < conv_layer_params.size() ; i++) {
-        allign_and_place_kernel_weights(
-                conv_layer_params[i], worker_kernels[i], kernels[i]);
+        if (is_layer_cpu_initialized(conv_layer_params[i])) {
+            allign_and_place_cpu_initialized_kernel_weights(
+                    conv_layer_params[i], worker_kernels[i], kernels[i]);
+        } else {
+            allign_and_place_lmem_initialized_kernel_weights(
+                    conv_layer_params[i], worker_kernels[i], kernels[i]);
+        }
     }
+}
+
+
+void Convnet::max_init_weights()
+{
+    uint64_t start = 0;
+    std::vector<int8_t*> buffer_ptrs;
+
+    for (int i = 0; i < conv_layer_params.size() ; i++) {
+        if (is_layer_cpu_initialized(conv_layer_params[i])) {
+            log_stdout(INFO) << "layer " << i << " is host-initialized." << std::endl;
+            continue;
+        }
+
+        auto & layer = conv_layer_params[i];
+        max_actions_t *write_action = max_actions_init(max_file, "writeLMem");
+        const uint64_t stream_size =
+                div_ceil(calc_total_rom_size(layer) * sizeof(float), 384) * 384;
+
+        log_stdout(INFO) << "Initializing weights in LMEM at layer " << i << std::endl;
+        max_set_param_uint64t(write_action, "start", 0);
+        max_set_param_uint64t(write_action, "size", stream_size);
+        max_queue_input(
+                write_action,
+                "weights_in",
+                (void*) &worker_kernels[i],
+                stream_size);
+        max_run(dfe, write_action);
+        max_actions_free(write_action);
+        log_stdout(INFO) << "Done!" << std::endl;
+    }
+
 }
 
 
@@ -568,12 +651,12 @@ std::vector<float> Convnet::max_run_inference(
     max_set_param_uint64t(run_action, "N", N);
 
     int i = 0;
-    bool has_conv = 0;
+    bool has_cpu_init_conv = 0;
     for (auto it = network_params.layer().begin();
             it != network_params.layer().end();
             it++) {
-        if (it->has_conv()) {
-            has_conv = 1;
+        if (it->has_conv() && is_layer_cpu_initialized(*it)) {
+            has_cpu_init_conv = 1;
             set_layer_weights(
                     run_action, *it, worker_kernels[i], bias[i]);
             i++;
@@ -589,14 +672,12 @@ std::vector<float> Convnet::max_run_inference(
         }
     }
 
-    if (has_conv) {
-        if (initialized_weights) {
-            max_set_param_uint64t(run_action, "init", 0);
-        } else {
-            max_set_param_uint64t(run_action, "init", 1);
-        }
-        initialized_weights = 1;
+    if (initialized_weights) {
+        max_set_param_uint64t(run_action, "init", 0);
+    } else {
+        max_set_param_uint64t(run_action, "init", 1);
     }
+    initialized_weights = 1;
 
 
     std::cout << "input stream size = "

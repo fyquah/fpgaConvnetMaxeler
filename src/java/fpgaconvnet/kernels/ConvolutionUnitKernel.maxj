@@ -229,6 +229,8 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
                 * layerParams.getConv().getKernelFoldingFactor();
         DFEVectorType<DFEVar> weightInputType = new DFEVectorType<DFEVar>(
                 GlobalConfig.dataType, size);
+        DFEVectorType<DFEVar> rawWeightInputType = new DFEVectorType<DFEVar>(
+                GlobalConfig.cpuType, size);
 
         if (lmemWeightsInput != null) {
             return lmemWeightsInput;
@@ -237,8 +239,8 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
                 || getWeightsLoadStrategy() == WeightsLoadStrategy.STREAM_FROM_LMEM) {
             lmemWeightsInput = io.input(
                     getLMemWeightName(),
-                    weightInputType,
-                    lookAheadCounter.getWeightsInputFlag());
+                    rawWeightInputType,
+                    lookAheadCounter.getWeightsInputFlag()).cast(weightInputType);
             return lmemWeightsInput;
 
         } else {

@@ -125,17 +125,18 @@ std::vector<float> run_feature_extraction(
 
     std::cout << "Loading weights from file." << std::endl;
     convnet.load_weights_from_files(filenames, fpgaconvnet::FORMAT_BINARY);
+    convnet.max_init_weights();
 
     // warm up the DFE with the weights.
     std::cout << "Runnin inference" << std::endl;
     extracted_features = convnet.max_run_inference(N, images, false);
     extracted_features = convnet.max_run_inference(N, images, true);
-    fpgaconvnet::verify_conv_output(
-            network_parameters,
-            N,
-            &extracted_features[0],
-            "../test_data/pool3.bin",
-            fpgaconvnet::FORMAT_BINARY);
+    // fpgaconvnet::verify_conv_output(
+    //         network_parameters,
+    //         N,
+    //         &extracted_features[0],
+    //         "../test_data/conv1.bin",
+    //         fpgaconvnet::FORMAT_BINARY);
 
     return extracted_features;
 }

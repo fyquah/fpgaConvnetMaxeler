@@ -39,15 +39,13 @@ public class NetworkManager extends CustomManager {
         return layer.getParamsCase().equals(Parameters.LayerParameter.ParamsCase.LRN);
     }
 
-
-
     private static EngineInterface interfaceWrite(String name) {
         EngineInterface ei = new EngineInterface(name);
-        InterfaceParam size = ei.addParam("size", CPUTypes.UINT8);
-        InterfaceParam start = ei.addParam("start", CPUTypes.UINT8);
+        InterfaceParam size = ei.addParam("size", CPUTypes.UINT64);
+        InterfaceParam start = ei.addParam("start", CPUTypes.UINT64);
         InterfaceParam sizeInBytes = size;
 
-        ei.setStream("weights_in", CPUTypes.UINT8, sizeInBytes);
+        ei.setStream("weights_in", CPUTypes.INT8, sizeInBytes);
         ei.setLMemLinear("cpu2lmem", start, sizeInBytes);
         ei.ignoreAll(Direction.IN_OUT);
         return ei;
