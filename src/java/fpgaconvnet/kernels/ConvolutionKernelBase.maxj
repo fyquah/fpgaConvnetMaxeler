@@ -14,7 +14,7 @@ import fpgaconvnet.IterationCounter;
 public abstract class ConvolutionKernelBase extends Kernel {
     
     private final Parameters.LayerParameter layerParams;
-    private final IterationCounter iterCounter;
+    protected final IterationCounter iterCounter;
 
     public ConvolutionKernelBase (KernelParameters kp, Parameters.LayerParameter argParams) {
         super(kp);

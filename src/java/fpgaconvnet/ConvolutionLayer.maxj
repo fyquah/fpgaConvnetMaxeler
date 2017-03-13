@@ -148,17 +148,11 @@ public class ConvolutionLayer implements ComputationChain {
             return ret;
         }
 
-        for (int worker = 0; worker < convParams.getWorkerFactor() ; worker++) {
-            for (int conv = 0 ; conv < convParams.getConvFoldingFactor() ; conv++) {
-                for (int mult = 0 ; mult < convParams.getKernelFoldingFactor(); mult++) {
-                    ret.add(new Tuple3<String, DFELink, Integer>(
-                                convolutionUnit.getKernel().getLMemWeightName(worker, conv, mult),
-                                convolutionUnit.getBlock().getInput(
-                                    convolutionUnit.getKernel().getLMemWeightName(worker, conv, mult)),
-                                convolutionUnit.getKernel().lmemStreamSizePerImage()));
-                }
-            }
-        }
+        ret.add(new Tuple3<String, DFELink, Integer>(
+                    convolutionUnit.getKernel().getLMemWeightName(),
+                    convolutionUnit.getBlock().getInput(
+                        convolutionUnit.getKernel().getLMemWeightName()),
+                    convolutionUnit.getKernel().lmemStreamSizePerImage()));
 
         return ret;
     }
