@@ -492,24 +492,31 @@ void Convnet::set_layer_weights(
     sprintf(buffer, "kernel_%d", layer.layer_id());
 
     if (initialized_weights) {
+        if (is_layer_cpu_initialized(layer)) {
+            sprintf(buffer, "kernel_%d", layer.layer_id());
+            max_queue_input(action, buffer, NULL, 0);
+        }
+        sprintf(buffer, "bias_%d", layer.layer_id());
         max_queue_input(action, buffer, NULL, 0);
 
     } else {
-        float *values = new float[padded_rom_size];
+        if (is_layer_cpu_initialized(layer)) {
+            float *values = new float[padded_rom_size];
+            queue_weights.push_back(values);
+            std::memcpy(values, worker_kernels, sizeof(float) * total_rom_size);
+            max_queue_input(
+                    action,
+                    buffer,
+                    values,
+                    sizeof(float) * padded_rom_size);
 
-        queue_weights.push_back(values);
-        std::memcpy(values, worker_kernels, sizeof(float) * total_rom_size);
-        max_queue_input(
-                action,
-                buffer,
-                values,
-                sizeof(float) * padded_rom_size);
+        }
 
+        sprintf(buffer, "bias_%d", layer.layer_id());
+        max_queue_input(action, buffer, bias,
+                        sizeof(float) * div_ceil(layer.num_outputs(), 4) * 4);
     }
 
-    sprintf(buffer, "bias_%d", layer.layer_id());
-    max_queue_input(action, buffer, bias,
-                    sizeof(float) * div_ceil(layer.num_outputs(), 4) * 4);
 }
 
 
@@ -655,7 +662,7 @@ std::vector<float> Convnet::max_run_inference(
     for (auto it = network_params.layer().begin();
             it != network_params.layer().end();
             it++) {
-        if (it->has_conv() && is_layer_cpu_initialized(*it)) {
+        if (it->has_conv()) {
             has_cpu_init_conv = 1;
             set_layer_weights(
                     run_action, *it, worker_kernels[i], bias[i]);

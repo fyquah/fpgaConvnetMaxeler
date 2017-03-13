@@ -86,8 +86,8 @@ public class NetworkManager extends CustomManager {
                     ei.setLMemLinearWrapped(
                             link.getFirst(),                       /* streamName */
                             ei.addConstant(0l),                    /* address */
-                            ei.addConstant(link.getThird()),       /* arrSize */
-                            N * link.getThird(),                   /* rwSize */
+                            ei.addConstant(link.getThird()) * CPUTypes.FLOAT.sizeInBytes(), /* arrSize */
+                            N * link.getThird() * CPUTypes.FLOAT.sizeInBytes(),                   /* rwSize */
                             ei.addConstant(0l)                     /* offset */
                     );
                 }

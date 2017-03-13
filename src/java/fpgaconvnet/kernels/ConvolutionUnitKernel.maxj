@@ -318,6 +318,10 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
         int totalPixels =
                 layerParams.getOutputHeight() * layerParams.getOutputWidth()
                 / layerParams.getConv().getLookAhead();
-        return getTotalIterations() * totalPixels;
+        return totalPixels
+                * getTotalIterations()
+                * (convParams.getWorkerFactor()
+                        * convParams.getConvFoldingFactor()
+                        * convParams.getKernelFoldingFactor());
     }
 }

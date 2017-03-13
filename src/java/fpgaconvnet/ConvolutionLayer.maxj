@@ -68,9 +68,17 @@ public class ConvolutionLayer implements ComputationChain {
         ei.setTicks(scheduler.getKernel().getName(),
                     numberOfImages * scheduler.getKernel().cyclesPerImage());
 
-        ei.setTicks(convolutionUnit.getKernel().getName(),
+        InterfaceParam convUnitTicks;
+        if (convolutionUnit.getKernel().getWeightsLoadStrategy()
+                    == WeightsLoadStrategy.INIT_FROM_CPU) {
+            int initCycles = convolutionUnit.getKernel().initCycles();
+            convUnitTicks =
                     numberOfImages * convolutionUnit.getKernel().cyclesPerImage()
-                    + (init ? convolutionUnit.getKernel().initCycles() : 0));
+                    + (init ? initCycles : 0);
+        } else {
+            convUnitTicks = numberOfImages * convolutionUnit.getKernel().cyclesPerImage();
+        }
+        ei.setTicks(convolutionUnit.getKernel().getName(), convUnitTicks);
 
         /* Accumulator */
         InterfaceParam latency = ei.getAutoLoopOffset(
