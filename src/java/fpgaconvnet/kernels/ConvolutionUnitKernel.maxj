@@ -8,6 +8,7 @@ import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVector;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVectorType;
 import com.maxeler.maxcompiler.v2.kernelcompiler.KernelParameters;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.memory.Memory;
+import com.maxeler.maxcompiler.v2.managers.engine_interfaces.InterfaceParam;
 
 import fpgaconvnet.GlobalConfig;
 import fpgaconvnet.Utils;
@@ -57,9 +58,15 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
                  / (convParams.getWorkerFactor() * convParams.getConvFoldingFactor()))
                 * getKernelIterations();
 
-        // TODO(fyq14):  Handle fully unrolled case.
-        DFEVar address = control.count.simpleCounter(
-                Utils.ceilLog2(totalAddressCount), totalAddressCount);
+        DFEVar address;
+        if (totalAddressCount <= 1) {
+            address = constant.var(dfeBool(), 0);
+
+        } else {
+            address = control.count.simpleCounter(
+                   Utils.ceilLog2(totalAddressCount), totalAddressCount);
+
+        }
 
         DFEVar inputControlFlag = null;
         DFEVar outputControlFlag = null;
@@ -215,7 +222,7 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
 
         case WITH_CACHE:
             Memory<DFEVar> pixelsMem = mem.alloc(GlobalConfig.dataType, getKernelIterations());
-            DFEVar pixel = control.mux(cpuInitWeightsCounter.getKernelIter(), pixelChoices);
+            DFEVar pixel = control.mux(lookAheadCounter.getKernelIter(), pixelChoices);
             pixelsMem.write(
                     lookAheadCounter.getKernelIter(),
                     pixel,
@@ -292,5 +299,12 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
 
         /* Makes compiler happy. */
         return null;
+    }
+
+    public int lmemStreamSizePerImage() {
+        int totalPixels =
+                layerParams.getOutputHeight() * layerParams.getOutputWidth()
+                / layerParams.getConv().getLookAhead();
+        return Utils.divCeil(getTotalIterations(), weightsRefreshPeriod) * totalPixels;
     }
 }

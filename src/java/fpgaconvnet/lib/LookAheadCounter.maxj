@@ -35,9 +35,14 @@ public class LookAheadCounter extends KernelLib {
         lookAhead = Utils.chainCounterOrZero(
                 this, chain, layerParams.getConv().getLookAhead());
         weightUsage = Utils.chainCounterOrZero(this, chain, weightsUsageCycles);
-        kernelIter = control.count.simpleCounter(
-                Utils.ceilLog2(ctr.getKernelIterations()),
-                ctr.getKernelIterations());
+
+        if (ctr.getKernelIterations() <= 1) {
+            kernelIter = constant.var(dfeBool(), 0);
+        } else {
+            kernelIter = control.count.simpleCounter(
+                    Utils.ceilLog2(ctr.getKernelIterations()),
+                    ctr.getKernelIterations());
+        }
     }
 
     public DFEVar getWeightsInputFlag() {
@@ -62,7 +67,7 @@ public class LookAheadCounter extends KernelLib {
             ).getCount();
 
         /* Defines the stage at which we are using a particular channel. */
-        DFEVar channelIter = dfeUInt(32).newInstance(this);
+        DFEVar channelIter = dfeUInt(Utils.ceilLog2(ctr.getTotalIterations())).newInstance(this);
         optimization.pushPipeliningFactor(0.0);
         channelIter = (weightUsage.eq(0)
                        ? channelIterBase

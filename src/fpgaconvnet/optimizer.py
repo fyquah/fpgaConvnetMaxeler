@@ -155,7 +155,7 @@ def run_optimizer(network, models, constraints):
             num_conv_layers += 1
 
     minimized_states = []
-    for i in range(5):
+    for i in range(1):
         problem = OptimizationProblem(network, models, constraints,
                                       num_conv_layers * 3 * [1])
         problem.copy_strategy = "slice"  

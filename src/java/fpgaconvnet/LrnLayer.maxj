@@ -39,10 +39,17 @@ public class LrnLayer implements ComputationChain {
     }
 
     public void setScalar(EngineInterface ei, String name, InterfaceParam param) {
-        ei.setScalar(lrnKernel.getKernel().getName(), "approx_factor", param);
+        if (name.equals("approx_factor")) {
+            ei.setScalar(lrnKernel.getKernel().getName(), "approx_factor", param);
+        }
     }
 
     public List<Tuple3<String, DFELink, Integer>> getInitializerInputs() {
+        /* There's no initializers in a lrn layer. */
+        return new ArrayList<Tuple3<String, DFELink, Integer>>();
+    }
+
+    public List<Tuple3<String, DFELink, Integer>> getLMemInputs() {
         /* There's no initializers in a lrn layer. */
         return new ArrayList<Tuple3<String, DFELink, Integer>>();
     }

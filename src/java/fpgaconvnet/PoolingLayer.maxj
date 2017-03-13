@@ -46,4 +46,9 @@ public class PoolingLayer implements ComputationChain {
         /* There's no initializers in a pooling layer. */
         return new ArrayList<Tuple3<String, DFELink, Integer>>();
     }
+
+    public List<Tuple3<String, DFELink, Integer>> getLMemInputs() {
+        /* There's no LMem inputs in a pooling layer. */
+        return new ArrayList<Tuple3<String, DFELink, Integer>>();
+    }
 }

@@ -9,14 +9,17 @@ import com.maxeler.maxcompiler.v2.managers.engine_interfaces.EngineInterface;
 import com.maxeler.maxcompiler.v2.managers.engine_interfaces.InterfaceParam;
 
 import fpgaconvnet.protos.Parameters.LayerParameter;
+import fpgaconvnet.protos.Parameters.ConvolutionParameter;
 import fpgaconvnet.kernels.ConvolutionSchedulerKernel;
 import fpgaconvnet.kernels.ConvolutionAccumulatorKernel;
 import fpgaconvnet.kernels.ConvolutionUnitKernel;
+import fpgaconvnet.kernels.ConvolutionUnitKernel.WeightsLoadStrategy;
 import fpgaconvnet.Utils.Tuple3;
 
 
 public class ConvolutionLayer implements ComputationChain {
     private final LayerParameter layer;
+    private final ConvolutionParameter convParams;
     private final CustomManager manager;
     private final BoxedKernelBlock<ConvolutionSchedulerKernel> scheduler;
     private final BoxedKernelBlock<ConvolutionUnitKernel> convolutionUnit;
@@ -24,6 +27,7 @@ public class ConvolutionLayer implements ComputationChain {
     
     ConvolutionLayer(LayerParameter argLayer, CustomManager argManager) {
         layer = argLayer;
+        convParams = layer.getConv();
         manager = argManager;
 
         scheduler = new BoxedKernelBlock<ConvolutionSchedulerKernel>(
@@ -106,22 +110,56 @@ public class ConvolutionLayer implements ComputationChain {
     }
 
     public void setScalar(EngineInterface ei, String name, InterfaceParam param) {
-        ei.setScalar(convolutionUnit.getKernel().getName(), name, param);
+        if (name.equals("init")) {
+            if (convolutionUnit.getKernel().getWeightsLoadStrategy()
+                    == WeightsLoadStrategy.INIT_FROM_CPU) {
+                ei.setScalar(convolutionUnit.getKernel().getName(), "init", param);
+            }
+        } else {
+            ei.setScalar(convolutionUnit.getKernel().getName(), name, param);
+        }
         ei.setScalar(accumulator.getKernel().getName(), name, param);
     }
 
     public List<Tuple3<String, DFELink, Integer>> getInitializerInputs() {
         ArrayList<Tuple3<String, DFELink, Integer>> ret = new ArrayList<Tuple3<String, DFELink, Integer>>();
-        ret.add(new Tuple3<String, DFELink, Integer>(
-                String.format("kernel_%d", layer.getLayerId()),
-                convolutionUnit.getBlock().getInput(
-                    convolutionUnit.getKernel().getCpuWeightsInputName()),
-                convolutionUnit.getKernel().initStreamSize()));
+        if (convolutionUnit.getKernel().getWeightsLoadStrategy()
+                == WeightsLoadStrategy.INIT_FROM_CPU) {
+            ret.add(new Tuple3<String, DFELink, Integer>(
+                    String.format("kernel_%d", layer.getLayerId()),
+                    convolutionUnit.getBlock().getInput(
+                        convolutionUnit.getKernel().getCpuWeightsInputName()),
+                    convolutionUnit.getKernel().initStreamSize()));
+        }
         ret.add(new Tuple3<String, DFELink, Integer>(
                 String.format("bias_%d", layer.getLayerId()),
                 accumulator.getBlock().getInput(
                     accumulator.getKernel().getBiasInputName()),
                 accumulator.getKernel().initCycles()));
+        return ret;
+    }
+
+    public List<Tuple3<String, DFELink, Integer>> getLMemInputs() {
+        ArrayList<Tuple3<String, DFELink, Integer>> ret =
+                new ArrayList<Tuple3<String, DFELink, Integer>>();
+
+        if (convolutionUnit.getKernel().getWeightsLoadStrategy()
+                == WeightsLoadStrategy.INIT_FROM_CPU) {
+            return ret;
+        }
+
+        for (int worker = 0; worker < convParams.getWorkerFactor() ; worker++) {
+            for (int conv = 0 ; conv < convParams.getConvFoldingFactor() ; conv++) {
+                for (int mult = 0 ; mult < convParams.getKernelFoldingFactor(); mult++) {
+                    ret.add(new Tuple3<String, DFELink, Integer>(
+                                convolutionUnit.getKernel().getLMemWeightName(worker, conv, mult),
+                                convolutionUnit.getBlock().getInput(
+                                    convolutionUnit.getKernel().getLMemWeightName(worker, conv, mult)),
+                                convolutionUnit.getKernel().lmemStreamSizePerImage()));
+                }
+            }
+        }
+
         return ret;
     }
 
