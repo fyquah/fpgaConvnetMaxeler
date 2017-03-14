@@ -115,9 +115,6 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
             }
 
             io.output(getOutputName(workerId), output, outputVectorType, outputControlFlag);
-
-            pixelVars[1].simWatch("pixel_0");
-            weightVars[3][0].simWatch(String.format("weight_3_0"));
         }
     }
 

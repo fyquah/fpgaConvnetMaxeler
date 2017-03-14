@@ -19,10 +19,15 @@ public class IterationCounter {
     }
 
     public int getWeightIterations() {
-        return Math.min(
-                getConvolutionIterations() * getSchedulerIterations(),
-                convParams.getBramFactor() /
-                    (convParams.getWorkerFactor() * convParams.getConvFoldingFactor()));
+        if (convParams.getBramFactor()
+                >= layerParams.getNumInputs() * layerParams.getNumOutputs()) {
+            return getConvolutionIterations() * getSchedulerIterations();
+
+        } else {
+            return convParams.getBramFactor()
+                    / (convParams.getWorkerFactor() * convParams.getConvFoldingFactor());
+
+        }
     }
 
     /* The number of cycles to perform _one_ convolution */
