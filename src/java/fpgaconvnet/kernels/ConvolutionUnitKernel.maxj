@@ -116,10 +116,8 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
 
             io.output(getOutputName(workerId), output, outputVectorType, outputControlFlag);
 
-            lookAheadCounter.getInputControlFlag().simWatch("ctrl_flag");
-            lookAheadCounter.getPixelWriteEnable().simWatch("pixel_write_enable");
-            pixelVars[0].simWatch("pixel_0");
-            weightVars[0][0].simWatch(String.format("weight_0"));
+            pixelVars[1].simWatch("pixel_0");
+            weightVars[3][0].simWatch(String.format("weight_3_0"));
         }
     }
 

@@ -513,6 +513,9 @@ void Convnet::set_layer_weights(
     sprintf(buffer, "kernel_%d", layer.layer_id());
 
     if (initialized_weights) {
+        log_stdout(INFO)
+                << "Host-initialized weights has been set in previous calls."
+                << std::endl;
         if (is_layer_cpu_initialized(layer)) {
             sprintf(buffer, "kernel_%d", layer.layer_id());
             max_queue_input(action, buffer, NULL, 0);
@@ -521,6 +524,10 @@ void Convnet::set_layer_weights(
         max_queue_input(action, buffer, NULL, 0);
 
     } else {
+        log_stdout(INFO)
+                << "Passing in host-initialized weights (This will only be done once)."
+                << std::endl;
+
         if (is_layer_cpu_initialized(layer)) {
             float *values = new float[padded_rom_size];
             queue_weights.push_back(values);
@@ -624,7 +631,7 @@ void Convnet::max_init_weights()
 
     for (int i = 0; i < conv_layer_params.size() ; i++) {
         if (is_layer_cpu_initialized(conv_layer_params[i])) {
-            log_stdout(INFO) << "layer " << i << " is host-initialized." << std::endl;
+            log_stdout(INFO) << "layer " << i << " is host-initialized. Skipping .." << std::endl;
             continue;
         }
 
@@ -684,12 +691,12 @@ std::vector<float> Convnet::max_run_inference(
     max_set_param_uint64t(run_action, "N", N);
 
     int i = 0;
-    bool has_cpu_init_conv = 0;
+    bool has_conv = 0;
     for (auto it = network_params.layer().begin();
             it != network_params.layer().end();
             it++) {
         if (it->has_conv()) {
-            has_cpu_init_conv = 1;
+            has_conv = 1;
             set_layer_weights(
                     run_action, *it, worker_kernels[i], bias[i]);
             i++;
@@ -705,10 +712,12 @@ std::vector<float> Convnet::max_run_inference(
         }
     }
 
-    if (initialized_weights) {
-        max_set_param_uint64t(run_action, "init", 0);
-    } else {
-        max_set_param_uint64t(run_action, "init", 1);
+    if (has_conv) {
+        if (initialized_weights) {
+            max_set_param_uint64t(run_action, "init", 0);
+        } else {
+            max_set_param_uint64t(run_action, "init", 1);
+        }
     }
     initialized_weights = 1;
 
