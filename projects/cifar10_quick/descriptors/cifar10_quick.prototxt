@@ -12,6 +12,8 @@ layer {
         worker_factor: 3
         conv_folding_factor: 7
         kernel_folding_factor: 13
+        bram_factor: 96
+        look_ahead: 1
     }
 }
 
@@ -38,6 +40,8 @@ layer {
         worker_factor: 7
         conv_folding_factor: 4
         kernel_folding_factor: 25
+        bram_factor: 1024
+        look_ahead: 1
     }
 
     activation: Relu
@@ -64,6 +68,8 @@ layer {
         worker_factor: 7
         conv_folding_factor: 11
         kernel_folding_factor: 5
+        bram_factor: 2048
+        look_ahead: 1
     }
 
     activation: Relu
