@@ -41,11 +41,11 @@ public class NetworkManager extends CustomManager {
 
     private static EngineInterface interfaceWrite(String name) {
         EngineInterface ei = new EngineInterface(name);
-        InterfaceParam size = ei.addParam("size", CPUTypes.UINT64);
         InterfaceParam start = ei.addParam("start", CPUTypes.UINT64);
+        InterfaceParam size = ei.addParam("size", CPUTypes.UINT64);
         InterfaceParam sizeInBytes = size;
 
-        ei.setStream("weights_in", CPUTypes.INT8, sizeInBytes);
+        ei.setStream("weights_in", CPUTypes.FLOAT, sizeInBytes);
         ei.setLMemLinear("cpu2lmem", start, sizeInBytes);
         ei.ignoreAll(Direction.IN_OUT);
         return ei;
@@ -83,11 +83,21 @@ public class NetworkManager extends CustomManager {
                             init ? link.getThird() * CPUTypes.FLOAT.sizeInBytes() : 0);
                 }
                 for (Tuple3<String, DFELink, Integer> link : computationChains[i].getLMemInputs()) {
+                    /* Third is stream size perPixel */
+                    int arrSize = link.getThird() * CPUTypes.FLOAT.sizeInBytes();
+                    InterfaceParam rwSize =
+                            layerParams.getOutputHeight() * layerParams.getOutputWidth()
+                            / layerParams.getConv().getLookAhead()
+                            * N * arrSize;
+                    // ei.setLMemLinear(
+                    //         link.getFirst(),
+                    //         ei.addConstant(0l),
+                    //         rwSize);
                     ei.setLMemLinearWrapped(
                             link.getFirst(),                       /* streamName */
                             ei.addConstant(0l),                    /* address */
-                            ei.addConstant(link.getThird()) * CPUTypes.FLOAT.sizeInBytes(), /* arrSize */
-                            N * link.getThird() * CPUTypes.FLOAT.sizeInBytes(),                   /* rwSize */
+                            ei.addConstant(arrSize), /* arrSize */
+                            rwSize,                   /* rwSize */
                             ei.addConstant(0l)                     /* offset */
                     );
                 }

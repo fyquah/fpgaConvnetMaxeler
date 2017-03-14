@@ -159,10 +159,24 @@ uint64_t calc_total_rom_size(const protos::LayerParameter & layer)
             * calc_total_iterations(layer);
 }
 
+
+static uint64_t calc_weights_vector_size(
+        const protos::LayerParameter & layer)
+{
+    uint64_t weights_per_iter =
+            layer.conv().worker_factor()
+            * layer.conv().conv_folding_factor()
+            * layer.conv().kernel_folding_factor();
+    return div_ceil(weights_per_iter, 96) * 96;
+}
+
+
+
 static bool is_layer_cpu_initialized(const protos::LayerParameter & layer)
 {
     return layer.conv().bram_factor() >= (layer.num_inputs() * layer.num_outputs());
 }
+
 
 protos::Network load_network_proto(const std::string & filename)
 {
@@ -431,16 +445,16 @@ void allign_and_place_lmem_initialized_kernel_weights(
             tmp,
             src_base);
 
-    uint64_t addr = 0;
     for (int iter = 0 ; iter < total_iterations ; iter++) {
+        uint64_t addr = iter * calc_weights_vector_size(layer);
+
         for (int worker = 0 ; worker < layer.conv().worker_factor() ; worker++) {
-            float *copy_base = tmp + rom_per_worker;
-
             for (int conv = 0 ; conv < layer.conv().conv_folding_factor() ; conv++) {
-
                 std::memcpy(
                         dest_base + addr,
-                        copy_base + (conv * rom_per_conv),
+                        tmp + (iter * layer.conv().kernel_folding_factor())
+                            + (worker * rom_per_worker)
+                            + (conv * rom_per_conv),
                         sizeof(float) * layer.conv().kernel_folding_factor());
                 addr += layer.conv().kernel_folding_factor();
             }
@@ -532,12 +546,13 @@ Convnet::Convnet(
             it != network_params.layer().end();
             it++) {
         if (it->has_conv()) {
+            uint64_t worker_kernel_total_size =
+                    calc_weights_vector_size(*it) * calc_total_iterations(*it);
+
             conv_layer_params.push_back(*it);
             kernels.push_back(new float[calc_total_kernel_weights(*it)]);
             bias.push_back(new float[div_ceil(it->num_outputs(), 4) * 4]);
-            worker_kernels.push_back(new float[div_ceil(calc_total_rom_size(*it), 96) * 96]);
-            memset(worker_kernels.back(), 0,
-                   sizeof(float) * calc_total_kernel_weights(*it));
+            worker_kernels.push_back(new float[worker_kernel_total_size]);
         }
     }
 
@@ -571,6 +586,7 @@ Convnet::~Convnet ()
 
 void Convnet::load_weights_from_files(std::vector<std::string> filenames, file_format_t file_type)
 {
+    log_stdout(INFO) << "Loading weights from file." << std::endl;
     for (int i = 0 ; i < conv_layer_params.size(); i++) {
         if (file_type == FORMAT_TXT) {
             load_kernels_from_file(filenames[2 * i], conv_layer_params[i], kernels[i]);
@@ -580,6 +596,7 @@ void Convnet::load_weights_from_files(std::vector<std::string> filenames, file_f
             load_bias_from_binary_file(filenames[2 * i + 1], conv_layer_params[i], bias[i]);
         }
     }
+    log_stdout(INFO) << "Alligning weights." << std::endl;
     for (int i = 0; i < conv_layer_params.size() ; i++) {
         if (is_layer_cpu_initialized(conv_layer_params[i])) {
             allign_and_place_cpu_initialized_kernel_weights(
@@ -589,6 +606,7 @@ void Convnet::load_weights_from_files(std::vector<std::string> filenames, file_f
                     conv_layer_params[i], worker_kernels[i], kernels[i]);
         }
     }
+    log_stdout(INFO) << "Done!" << std::endl;
 }
 
 
@@ -606,7 +624,8 @@ void Convnet::max_init_weights()
         auto & layer = conv_layer_params[i];
         max_actions_t *write_action = max_actions_init(max_file, "writeLMem");
         const uint64_t stream_size =
-                div_ceil(calc_total_rom_size(layer) * sizeof(float), 384) * 384;
+                calc_total_iterations(layer) * calc_weights_vector_size(layer)
+                * sizeof(float);
 
         log_stdout(INFO) << "Initializing weights in LMEM at layer " << i << std::endl;
         max_set_param_uint64t(write_action, "start", 0);
@@ -614,7 +633,7 @@ void Convnet::max_init_weights()
         max_queue_input(
                 write_action,
                 "weights_in",
-                (void*) &worker_kernels[i],
+                (void*) &worker_kernels[i][0],
                 stream_size);
         max_run(dfe, write_action);
         max_actions_free(write_action);
@@ -687,7 +706,7 @@ std::vector<float> Convnet::max_run_inference(
     initialized_weights = 1;
 
 
-    std::cout << "input stream size = "
+    log_stdout(INFO) << "input stream size = "
             << images.size() * sizeof(float) << std::endl;
     max_queue_input(run_action,
                     "fromcpu",

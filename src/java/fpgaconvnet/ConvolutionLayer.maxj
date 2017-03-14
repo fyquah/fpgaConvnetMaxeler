@@ -50,6 +50,10 @@ public class ConvolutionLayer implements ComputationChain {
                         layer));
 
         joinKernels();
+
+        System.out.println(
+                "ConvolutionUnit Caching strategy = "
+                + convolutionUnit.getKernel().getWeightsLoadStrategy());
     }
 
     public DFELink getInput() {
@@ -160,7 +164,7 @@ public class ConvolutionLayer implements ComputationChain {
                     convolutionUnit.getKernel().getLMemWeightName(),
                     convolutionUnit.getBlock().getInput(
                         convolutionUnit.getKernel().getLMemWeightName()),
-                    convolutionUnit.getKernel().lmemStreamSizePerImage()));
+                    convolutionUnit.getKernel().lmemStreamSizePerPixel()));
 
         return ret;
     }

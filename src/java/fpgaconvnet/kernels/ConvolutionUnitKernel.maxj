@@ -76,8 +76,6 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
             break;
 
         case STREAM_FROM_LMEM:
-            throw new RuntimeException("STREAM_FROM_LMEM not implemented");
-
         case WITH_CACHE:
             lookAheadCounter = new LookAheadCounter(this, layerParams);
             inputControlFlag = lookAheadCounter.getInputControlFlag();
@@ -117,6 +115,11 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
             }
 
             io.output(getOutputName(workerId), output, outputVectorType, outputControlFlag);
+
+            lookAheadCounter.getInputControlFlag().simWatch("ctrl_flag");
+            lookAheadCounter.getPixelWriteEnable().simWatch("pixel_write_enable");
+            pixelVars[0].simWatch("pixel_0");
+            weightVars[0][0].simWatch(String.format("weight_0"));
         }
     }
 
@@ -204,8 +207,6 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
             return control.mux(cpuInitWeightsCounter.getKernelIter(), pixelChoices);
 
         case STREAM_FROM_LMEM:
-            return null;
-
         case WITH_CACHE:
             Memory<DFEVar> pixelsMem = mem.alloc(GlobalConfig.dataType, getKernelIterations());
             DFEVar pixel = control.mux(lookAheadCounter.getKernelIter(), pixelChoices);
@@ -213,6 +214,7 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
                     lookAheadCounter.getKernelIter(),
                     pixel,
                     lookAheadCounter.getPixelWriteEnable());
+
             return (lookAheadCounter.getPixelWriteEnable()
                     ? pixel
                     : pixelsMem.read(lookAheadCounter.getKernelIter()));
@@ -222,25 +224,34 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
         return null;
     }
 
-    private DFEVector<DFEVar> getLMemWeightsInput() {
+    private int getWeightInputSize() {
         final int size =
                 layerParams.getConv().getWorkerFactor()
                 * layerParams.getConv().getConvFoldingFactor()
                 * layerParams.getConv().getKernelFoldingFactor();
+        return Utils.divCeil(size, GlobalConfig.burstSizeBytes / 4)
+                * (GlobalConfig.burstSizeBytes / 4);
+    }
+
+    private DFEVector<DFEVar> getLMemWeightsInput() {
+
+        /* TODO(fyq14): Optimize this. */
         DFEVectorType<DFEVar> weightInputType = new DFEVectorType<DFEVar>(
-                GlobalConfig.dataType, size);
+                GlobalConfig.dataType, getWeightInputSize());
         DFEVectorType<DFEVar> rawWeightInputType = new DFEVectorType<DFEVar>(
-                GlobalConfig.cpuType, size);
+                GlobalConfig.cpuType, getWeightInputSize());
 
         if (lmemWeightsInput != null) {
             return lmemWeightsInput;
 
         } else if (getWeightsLoadStrategy() == WeightsLoadStrategy.WITH_CACHE
                 || getWeightsLoadStrategy() == WeightsLoadStrategy.STREAM_FROM_LMEM) {
-            lmemWeightsInput = io.input(
+            DFEVector<DFEVar> rawInputWeight = io.input(
                     getLMemWeightName(),
                     rawWeightInputType,
-                    lookAheadCounter.getWeightsInputFlag()).cast(weightInputType);
+                    lookAheadCounter.getWeightsInputFlag());
+            lmemWeightsInput = rawInputWeight.cast(weightInputType);
+
             return lmemWeightsInput;
 
         } else {
@@ -279,6 +290,7 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
     public DFEVar getConvWeights(
             int workerId, int convUnitIndex, int multId, DFEVar address) {
         Memory<DFEVar> filtersRom = null;
+        int idx;
 
         switch (getWeightsLoadStrategy()) {
         case INIT_FROM_CPU:
@@ -291,11 +303,14 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
             return filtersRom.read(address);
 
         case STREAM_FROM_LMEM:
-            return null;
+            idx = workerId;
+            idx = (idx * convParams.getConvFoldingFactor()) + convUnitIndex;
+            idx = (idx * convParams.getKernelFoldingFactor()) + multId;
+            return getLMemWeightsInput()[idx];
 
         case WITH_CACHE:
             filtersRom = mem.alloc(GlobalConfig.dataType, totalAddressCount);
-            int idx = workerId;
+            idx = workerId;
             idx = (idx * convParams.getConvFoldingFactor()) + convUnitIndex;
             idx = (idx * convParams.getKernelFoldingFactor()) + multId;
 
@@ -314,14 +329,7 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
         return null;
     }
 
-    public int lmemStreamSizePerImage() {
-        int totalPixels =
-                layerParams.getOutputHeight() * layerParams.getOutputWidth()
-                / layerParams.getConv().getLookAhead();
-        return totalPixels
-                * getTotalIterations()
-                * (convParams.getWorkerFactor()
-                        * convParams.getConvFoldingFactor()
-                        * convParams.getKernelFoldingFactor());
+    public int lmemStreamSizePerPixel() {
+        return getTotalIterations() * getWeightInputSize();
     }
 }
