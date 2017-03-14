@@ -8,7 +8,6 @@ import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVector;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVectorType;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.CounterChain;
-import maxpower.kernel.mem.Transpose;
 
 import fpgaconvnet.SlidingWindow;
 import fpgaconvnet.Dimension;
@@ -16,6 +15,7 @@ import fpgaconvnet.GlobalConfig;
 import fpgaconvnet.Utils;
 import fpgaconvnet.kernels.ConvolutionKernelBase;
 import fpgaconvnet.lib.StrideCounter;
+import fpgaconvnet.maxpower.Transpose;
 import fpgaconvnet.protos.Parameters.LayerParameter;
 
 /* 
@@ -111,11 +111,12 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
 
         for (int workerId = 0 ; workerId < workerFactor ; workerId++) {
             List<Integer> channelList = getSchedulerChannels(workerId);
-            output_y[workerId] <== toMuxedPixel(iter, channelList);
-            // output_y[workerId] <== Transpose.transpose(
-            //         toMuxedPixel(iter, channelList),
-            //         getSchedulerIterations(),
-            //         layerParams.getConv().getLookAhead());
+            // output_y[workerId] <== toMuxedPixel(iter, channelList);
+            output_y[workerId] <== Transpose.transpose(
+                    toMuxedPixel(iter, channelList),
+                    getSchedulerIterations(),
+                    layerParams.getConv().getLookAhead(),
+                    constant.var(dfeBool(), 0));
             io.output(getOutputName(workerId),
                       output_y[workerId],
                       outputVectorType,

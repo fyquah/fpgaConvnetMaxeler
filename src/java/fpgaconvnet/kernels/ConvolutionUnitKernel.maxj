@@ -86,9 +86,8 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
 
         for (int workerId = 0 ; workerId < params.getConv().getWorkerFactor() ; workerId++) {
 
-            DFEVector<DFEVar> inputWindow = io.input(getInputName(workerId),
-                                                     inputVectorType,
-                                                     inputControlFlag);
+            DFEVector<DFEVar> inputWindow = io.input(
+                    getInputName(workerId), inputVectorType, inputControlFlag);
 
             DFEVector<DFEVar> output = outputVectorType.newInstance(this);
             final DFEVar[] pixelVars = new DFEVar[layerParams.getConv().getKernelFoldingFactor()];
