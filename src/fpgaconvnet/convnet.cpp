@@ -436,8 +436,7 @@ void allign_and_place_lmem_initialized_kernel_weights(
     const uint64_t rom_per_worker =
             total_rom_size / layer.conv().worker_factor();
     const uint64_t rom_per_conv =
-            rom_per_worker
-            / (calc_scheduler_iterations(layer) * layer.conv().conv_folding_factor());
+            rom_per_worker / layer.conv().conv_folding_factor();
     const uint64_t total_iterations = calc_total_iterations(layer);
 
     allign_and_place_cpu_initialized_kernel_weights(
@@ -450,12 +449,20 @@ void allign_and_place_lmem_initialized_kernel_weights(
 
         for (int worker = 0 ; worker < layer.conv().worker_factor() ; worker++) {
             for (int conv = 0 ; conv < layer.conv().conv_folding_factor() ; conv++) {
+                uint64_t offset =
+                        (iter * layer.conv().kernel_folding_factor())
+                        + (worker * rom_per_worker)
+                        + (conv * rom_per_conv);
+
                 std::memcpy(
                         dest_base + addr,
-                        tmp + (iter * layer.conv().kernel_folding_factor())
-                            + (worker * rom_per_worker)
-                            + (conv * rom_per_conv),
+                        tmp + offset,
                         sizeof(float) * layer.conv().kernel_folding_factor());
+                std::cout << "iter = " << iter
+                        << " worker = " << worker
+                        << " conv = " << conv
+                        << " offset = " << offset
+                        << std::endl;
                 addr += layer.conv().kernel_folding_factor();
             }
         }
