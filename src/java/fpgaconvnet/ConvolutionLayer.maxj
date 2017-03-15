@@ -65,13 +65,11 @@ public class ConvolutionLayer implements ComputationChain {
     }
 
     public void setKernelTimings(EngineInterface ei, InterfaceParam numberOfImages, InterfaceParam init) {
-        /*
-         * scheduler and convolution units do not have a loop offset, so we will not
-         * need to deal with ei.getAutoLoopOffset.
-         */
+        /* Scheduler */
         ei.setTicks(scheduler.getKernel().getName(),
                     numberOfImages * scheduler.getKernel().cyclesPerImage());
 
+        /* convolutionUnit */
         InterfaceParam convUnitTicks;
         if (convolutionUnit.getKernel().getWeightsLoadStrategy()
                     == WeightsLoadStrategy.INIT_FROM_CPU) {
@@ -85,13 +83,8 @@ public class ConvolutionLayer implements ComputationChain {
         ei.setTicks(convolutionUnit.getKernel().getName(), convUnitTicks);
 
         /* Accumulator */
-        InterfaceParam latency = ei.getAutoLoopOffset(
-                accumulator.getKernel().getName(),
-                accumulator.getKernel().getOffsetExprName());
-        ei.ignoreAutoLoopOffset(accumulator.getKernel().getName(),
-                                accumulator.getKernel().getOffsetExprName());
         ei.setTicks(accumulator.getKernel().getName(),
-                    numberOfImages * accumulator.getKernel().cyclesPerImage() * latency
+                    numberOfImages * accumulator.getKernel().cyclesPerImage()
                     + (init ? accumulator.getKernel().initCycles() : 0));
     }
 

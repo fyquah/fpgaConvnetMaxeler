@@ -17,10 +17,12 @@ public class LookAheadCounter extends KernelLib {
     private final DFEVar lookAhead;
     private final DFEVar weightUsageIter;
     private final DFEVar kernelIter;
+    private final int totalPixelAddress;
     private final int weightsUsageCycles;
     private final LayerParameter layerParams;
     private final ConvolutionParameter convParams;
     private final DFEVar weightAddress;
+    private final DFEVar pixelAddress;
 
     public LookAheadCounter(ConvolutionUnitKernel kernel, LayerParameter argLayerParams) {
         super(kernel);
@@ -35,6 +37,7 @@ public class LookAheadCounter extends KernelLib {
                 this, chain, layerParams.getConv().getLookAhead());
         weightUsageIter = Utils.chainCounterOrZero(this, chain, weightsUsageCycles);
         kernelIter = Utils.chainCounterOrZero(this, chain, ctr.getKernelIterations());
+        totalPixelAddress = convParams.getLookAhead() * ctr.getKernelIterations();
 
         if (getTotalWeightAddress() <= 1) {
             weightAddress = constant.var(dfeBool(), 0);
@@ -45,13 +48,24 @@ public class LookAheadCounter extends KernelLib {
                     getTotalWeightAddress());
 
         }
+
+        DFEVar pixelAddressBase = control.count.makeCounter(
+                control.count.makeParams(Utils.ceilLog2(totalPixelAddress))
+                .withInitValue(0l)
+                .withInc(ctr.getKernelIterations())
+                .withMax(totalPixelAddress)
+                .withEnable(weightUsageIter.eq(weightsUsageCycles - 1)
+                            & kernelIter.eq(ctr.getKernelIterations() - 1))
+            ).getCount();
+        pixelAddress = pixelAddressBase + kernelIter.cast(
+                dfeUInt(Utils.ceilLog2(totalPixelAddress)));
     }
 
     public DFEVar getWeightsInputFlag() {
         return lookAhead.eq(0);
     }
 
-    public DFEVar getWriteEnable() {
+    public DFEVar getWeightWriteEnable() {
         return lookAhead.eq(0);
     }
 
@@ -74,7 +88,7 @@ public class LookAheadCounter extends KernelLib {
         optimization.pushPipeliningFactor(0.0);
         channelIter <== (weightUsageIter.eq(0) & kernelIter.eq(0)
                          ? channelIterBase
-                         : modInc(stream.offset(channelIter, -1), channelIterations));
+                         : Utils.modInc(stream.offset(channelIter, -1), channelIterations));
         optimization.popPipeliningFactor();
 
         return channelIter;
@@ -82,10 +96,6 @@ public class LookAheadCounter extends KernelLib {
 
     public DFEVar getInputControlFlag() {
         return getChannelIter().eq(0);
-    }
-
-    private DFEVar modInc(DFEVar x, int cap) {
-        return (x.eq(cap - 1) ? 0 : x + 1);
     }
 
     public DFEVar getOutputControlFlag() {
@@ -100,7 +110,11 @@ public class LookAheadCounter extends KernelLib {
         return kernelIter;
     }
 
-    public DFEVar getAddress() {
+    public DFEVar getPixelAddress() {
+        return pixelAddress;
+    }
+
+    public DFEVar getWeightAddress() {
         return weightAddress;
     }
 

@@ -115,6 +115,12 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
 
             io.output(getOutputName(workerId), output, outputVectorType, outputControlFlag);
         }
+
+        lookAheadCounter.getInputControlFlag().simWatch("input_control_flag");
+        lookAheadCounter.getWeightWriteEnable().simWatch("weight_write_enable");
+        lookAheadCounter.getPixelWriteEnable().simWatch("pixel_write_enable");
+        lookAheadCounter.getPixelAddress().simWatch("pixel_address");
+        lookAheadCounter.getChannelIter().simWatch("channelIter");
     }
 
     /* initCycles used only in CPU initialization. */
@@ -202,16 +208,18 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
 
         case STREAM_FROM_LMEM:
         case WITH_CACHE:
-            Memory<DFEVar> pixelsMem = mem.alloc(GlobalConfig.dataType, getKernelIterations());
+            Memory<DFEVar> pixelsMem = mem.alloc(
+                    GlobalConfig.dataType,
+                    convParams.getLookAhead() * getKernelIterations());
             DFEVar pixel = control.mux(lookAheadCounter.getKernelIter(), pixelChoices);
             pixelsMem.write(
-                    lookAheadCounter.getKernelIter(),
+                    lookAheadCounter.getPixelAddress(),
                     pixel,
                     lookAheadCounter.getPixelWriteEnable());
 
             return (lookAheadCounter.getPixelWriteEnable()
                     ? pixel
-                    : pixelsMem.read(lookAheadCounter.getKernelIter()));
+                    : pixelsMem.read(lookAheadCounter.getPixelAddress()));
         }
 
         /* Makes compiler happy. */
@@ -310,12 +318,12 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
 
             DFEVar weightInput = getLMemWeightsInput()[idx];
             filtersRom.write(
-                    lookAheadCounter.getAddress(),
+                    lookAheadCounter.getWeightAddress(),
                     weightInput,
-                    lookAheadCounter.getWriteEnable());
-            return (lookAheadCounter.getWriteEnable()
+                    lookAheadCounter.getWeightWriteEnable());
+            return (lookAheadCounter.getWeightWriteEnable()
                     ? weightInput 
-                    : filtersRom.read(lookAheadCounter.getAddress()));
+                    : filtersRom.read(lookAheadCounter.getWeightAddress()));
 
         }
 

@@ -425,4 +425,8 @@ public class Utils {
             return third;
         }
     }
+
+    public static DFEVar modInc(DFEVar x, int cap) {
+        return (x.eq(cap - 1) ? 0 : x + 1);
+    }
 }
