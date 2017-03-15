@@ -181,6 +181,7 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
         for (int i = 0 ; i < layerParams.getConv().getWorkerFactor() ; i++) {
             inputVectors.add(io.input(getInputName(i), inputVectorType, inputControlFlag));
         }
+
         if (layerParams.getIsLastLayer()) {
             /* Last layer - cast from fixed point to dfe float. */
             DFEVectorType<DFEVar> rawOutputVectorType = new DFEVectorType<DFEVar>(
@@ -238,7 +239,14 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
             lookAheadOutputs.add(lookAheadOutput);
         }
 
-        DFEVector<DFEVar> chosen = control.mux(lookAheadIter, lookAheadOutputs);
+        DFEVector<DFEVar> chosen;
+        if (convParams.getLookAhead() == 1) {
+            chosen = lookAheadOutputs[0];
+
+        } else {
+            chosen = control.mux(lookAheadIter, lookAheadOutputs);
+
+        }
 
         if (layerParams.getActivation() == LayerParameter.Activation.None) {
             output <== chosen;

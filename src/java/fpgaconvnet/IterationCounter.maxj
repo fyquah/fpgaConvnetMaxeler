@@ -20,7 +20,7 @@ public class IterationCounter {
 
     public int getRevisitIterations() {
         return Utils.divCeil(
-                getWeightIterations(), getConvolutionIterations() * getSchedulerIterations());
+                getConvolutionIterations() * getSchedulerIterations(), getWeightIterations());
     }
 
     public int getWeightIterations() {
