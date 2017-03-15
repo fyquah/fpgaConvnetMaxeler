@@ -77,6 +77,11 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
         col = Utils.chainCounterOrZero(this, masterChain, inputDimension.width());
         iter = Utils.chainCounterOrZero(this, masterChain, getSchedulerIterations());
 
+        CounterChain newChain = control.count.makeCounterChain();
+        DFEVar lookAheadIter = Utils.chainCounterOrZero(
+                this, newChain, layerParams.getConv().getLookAhead());
+        Utils.chainCounterOrZero(this, newChain, getSchedulerIterations());
+
         StrideCounter strideCounter = new StrideCounter(
                 this,
                 layerParams.getConv().getStride(),
@@ -89,11 +94,6 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
                     & col.eq(inputDimension.width() - 1)
                     & row.eq(inputDimension.height() - 1));
         DFEVar outputControlFlag = strideCounter.isOutputReady() & ~isBorder(row, col);
-
-        row.simWatch("row");
-        col.simWatch("col");
-        iter.simWatch("iter");
-        outputControlFlag.simWatch("outputControlFlag");
 
         if (layerParams.getIsFirstLayer()) {
             /* First layer - cast from dfefloat to fixed point. */
@@ -111,17 +111,25 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
 
         for (int workerId = 0 ; workerId < workerFactor ; workerId++) {
             List<Integer> channelList = getSchedulerChannels(workerId);
-            // output_y[workerId] <== toMuxedPixel(iter, channelList);
-            output_y[workerId] <== Transpose.transpose(
-                    toMuxedPixel(iter, channelList),
-                    getSchedulerIterations(),
-                    layerParams.getConv().getLookAhead(),
-                    constant.var(dfeBool(), 0));
+            DFEVector<DFEVar>pixelWindow = toMuxedPixel(iter, channelList);
+            // output_y[workerId] <== pixelWindow;
+            output_y[workerId] <== stream.offset(Transpose.transpose(
+                        pixelWindow,
+                        getSchedulerIterations(),
+                        layerParams.getConv().getLookAhead(),
+                        outputControlFlag),
+                    getSchedulerIterations() * layerParams.getConv().getLookAhead());
             io.output(getOutputName(workerId),
                       output_y[workerId],
                       outputVectorType,
                       outputControlFlag);
+            lookAheadIter.simWatch("look_ahead");
+            iter.simWatch("iter");
+            pixelWindow[0].simWatch("ori");
+            output_y[workerId][0].simWatch("output");
         }
+
+
     }
 
     public int cyclesPerImage() {
