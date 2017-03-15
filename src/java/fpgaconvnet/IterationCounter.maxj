@@ -18,6 +18,11 @@ public class IterationCounter {
         return getKernelIterations() * getConvolutionIterations() * getSchedulerIterations();
     }
 
+    public int getRevisitIterations() {
+        return Utils.divCeil(
+                getWeightIterations(), getConvolutionIterations() * getSchedulerIterations());
+    }
+
     public int getWeightIterations() {
         if (convParams.getBramFactor()
                 >= layerParams.getNumInputs() * layerParams.getNumOutputs()) {
