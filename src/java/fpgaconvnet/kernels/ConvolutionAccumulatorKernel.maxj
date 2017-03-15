@@ -48,7 +48,7 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
         return control.count.simpleCounter(Utils.ceilLog2(x), x);
     }
 
-    private DFEVar getChannelIter(DFEVar lookAhead, DFEVar weightUsageIter, DFEVar kernelIter) {
+    private DFEVar getChannelIter(DFEVar enable, DFEVar lookAhead, DFEVar weightUsageIter, DFEVar kernelIter) {
         /* Number of iterations to spend per channel. */
         final int channelIterations = ctr.getConvolutionIterations() * ctr.getKernelIterations();
         final int weightsUsageCycles = ctr.getWeightIterations();
@@ -58,7 +58,8 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
                 .withInitValue(0l)
                 .withInc(weightsUsageCycles * ctr.getKernelIterations())
                 .withMax(channelIterations)
-                .withEnable(lookAhead.eq(layerParams.getConv().getLookAhead() - 1)
+                .withEnable(enable
+                            & lookAhead.eq(layerParams.getConv().getLookAhead() - 1)
                             & weightUsageIter.eq(weightsUsageCycles - 1)
                             & kernelIter.eq(ctr.getKernelIterations() - 1))
             ).getCount();
@@ -74,7 +75,7 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
         return channelIter;
     }
 
-    private DFEVar getConvIter(DFEVar lookAheadIter, DFEVar weightUsageIter, DFEVar kernelIter) {
+    private DFEVar getConvIter(DFEVar enable, DFEVar lookAheadIter, DFEVar weightUsageIter, DFEVar kernelIter) {
 
         /* The number of convIter that a weightIter yields. */
         DFEVar convIterBase = control.count.makeCounter(
@@ -82,7 +83,8 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
                 .withInitValue(0)
                 .withInc(ctr.getWeightIterations())
                 .withMax(getConvolutionIterations())
-                .withEnable(lookAheadIter.eq(layerParams.getConv().getLookAhead() - 1)
+                .withEnable(enable
+                            & lookAheadIter.eq(layerParams.getConv().getLookAhead() - 1)
                             & weightUsageIter.eq(ctr.getWeightIterations() - 1)
                             & kernelIter.eq(ctr.getKernelIterations() - 1))
             ).getCount();
@@ -157,10 +159,12 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
             DFEVar loopIter = Utils.chainCounterOrZero(this, chain, ctr.getRevisitIterations());
             lookAheadIter = Utils.chainCounterOrZero(this, chain, convParams.getLookAhead());
             DFEVar weightIter = Utils.chainCounterOrZero(this, chain, ctr.getWeightIterations());
-            DFEVar kernelIter = simpleCounter(getKernelIterations());
+            DFEVar kernelIter = Utils.chainCounterOrZero(this, chain, getKernelIterations());
 
-            convIter = getConvIter(lookAheadIter, weightIter, kernelIter);
-            channelIter = getChannelIter(lookAheadIter, weightIter, kernelIter);
+            convIter = getConvIter(
+                    ~isInitializingWeights, lookAheadIter, weightIter, kernelIter);
+            channelIter = getChannelIter(
+                    ~isInitializingWeights, lookAheadIter, weightIter, kernelIter);
 
             /* This is wrong - wouldn't work is the bram_factor numbers don't divide the
              * n_scheduler * n_convolution nicely.
@@ -168,7 +172,17 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
             outputControlFlag =
                     ~isInitializingWeights
                     & loopIter.eq(ctr.getRevisitIterations() - 1)
-                    & weightIter.eq(ctr.getWeightIterations() - 1);
+                    & weightIter.eq(ctr.getWeightIterations() - 1)
+                    & kernelIter.eq(ctr.getKernelIterations() - 1);
+
+            isInitializingWeights.simWatch("initializingWeights");
+            loopIter.simWatch("loopIter");
+            lookAheadIter.simWatch("lookAheadIter");
+            weightIter.simWatch("weightIter");
+            kernelIter.simWatch("kernelIter");
+            convIter.simWatch("convIter");
+            channelIter.simWatch("channelIter");
+            outputControlFlag.simWatch("outputControlFlag");
         }
 
         // Kernel IO interfaces
