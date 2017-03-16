@@ -30,6 +30,7 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
     private final DFEVectorType<DFEVar> inputVectorType;
     private final DFEVectorType<DFEVar> outputVectorType;
     private final IterationCounter ctr;
+    private final DFEVar batchCounter;
 
     private List<DFEVar> map(List<DFEVector<DFEVar>> list, int index) {
         /* Gets the index-th element of every vector in list. */
@@ -62,6 +63,7 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
                             & lookAhead.eq(layerParams.getConv().getLookAhead() - 1)
                             & chain.getCounterWrap(weightIter)
                             & kernelIter.eq(ctr.getKernelIterations() - 1))
+                .withReset(batchCounter.eq(0))
             ).getCount();
 
         /* Defines the stage at which we are using a particular channel. */
@@ -88,6 +90,7 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
                             & lookAheadIter.eq(layerParams.getConv().getLookAhead() - 1)
                             & chain.getCounterWrap(weightIter)
                             & kernelIter.eq(ctr.getKernelIterations() - 1))
+                .withReset(batchCounter.eq(0))
             ).getCount();
 
         DFEVar convIter = dfeUInt(
@@ -138,6 +141,14 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
         DFEVar isInitializingWeights = initWeightsFlag & ~initializationComplete;
 
         // Runtime Counters and loop variables
+        batchCounter = control.count.makeCounter(
+                control.count.makeParams(Utils.ceilLog2(
+                        convParams.getLookAhead() * ctr.getTotalIterations()))
+                .withInitValue(0l)
+                .withInc(1l)
+                .withMax(convParams.getLookAhead() * ctr.getTotalIterations())
+                .withEnable(~isInitializingWeights)
+            ).getCount();
         DFEVar convIter;
         DFEVar lookAheadIter;
         DFEVar pixelIter;
@@ -171,15 +182,13 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
                         * ctr.getWeightIterations()
                         * ctr.getKernelIterations()
                         * convParams.getLookAhead();
-                DFEVar batchCounter = control.count.simpleCounter(
-                        Utils.ceilLog2(convParams.getLookAhead() * ctr.getTotalIterations()),
-                        convParams.getLookAhead() * ctr.getTotalIterations());
                 DFEType type = dfeUInt(1 + Utils.ceilLog2(ctr.getWeightIterations()));
                 DFEVar muxedWeightUsageCycles = (
                         (batchCounter < totalBeforeLastloopIterations)
                         ? constant.var(type, ctr.getWeightIterations())
                         : constant.var(type, ctr.getLastWeightIterations()));
-
+                System.out.println(totalBeforeLastloopIterations);
+                muxedWeightUsageCycles.simWatch("muxedWeightsCycles");
                 weightIter = chain.addCounter(muxedWeightUsageCycles, 1);
             }
 
@@ -196,6 +205,7 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
                     & weightIter.eq(ctr.getLastWeightIterations() - 1)
                     & kernelIter.eq(ctr.getKernelIterations() - 1);
 
+            batchCounter.simWatch("batchCounter");
             isInitializingWeights.simWatch("initializingWeights");
             loopIter.simWatch("loopIter");
             lookAheadIter.simWatch("lookAheadIter");
