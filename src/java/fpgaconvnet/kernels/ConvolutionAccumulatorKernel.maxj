@@ -8,7 +8,6 @@ import java.util.ArrayList;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Count;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Count.Counter;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.CounterChain;
-import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Stream.OffsetExpr;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.memory.Memory;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVector;
@@ -42,10 +41,6 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
 
     private DFEVar relu(DFEVar x) {
         return (x > 0 ? x : 0);
-    }
-
-    private DFEVar simpleCounter(int x) {
-        return control.count.simpleCounter(Utils.ceilLog2(x), x);
     }
 
     private DFEVar getPixelIter(DFEVar enable, DFEVar lookAhead, DFEVar weightUsageIter, DFEVar kernelIter) {
@@ -149,7 +144,7 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
             final int totalIter =
                     getKernelIterations() * getConvolutionIterations() * getSchedulerIterations();
             CounterChain chain = control.count.makeCounterChain(~isInitializingWeights);
-            DFEVar schedulerIter = Utils.chainCounterOrZero(this, chain, getSchedulerIterations());
+            Utils.chainCounterOrZero(this, chain, getSchedulerIterations());
             convIter = Utils.chainCounterOrZero(this, chain, getConvolutionIterations());
             Utils.chainCounterOrZero(this, chain, getKernelIterations());
             pixelIter = control.count.simpleCounter(Utils.ceilLog2(totalIter), totalIter);

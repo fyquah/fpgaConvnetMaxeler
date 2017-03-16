@@ -9,7 +9,6 @@ import com.maxeler.maxcompiler.v2.managers.engine_interfaces.EngineInterface;
 import com.maxeler.maxcompiler.v2.managers.engine_interfaces.InterfaceParam;
 
 import fpgaconvnet.protos.Parameters.LayerParameter;
-import fpgaconvnet.protos.Parameters.ConvolutionParameter;
 import fpgaconvnet.kernels.ConvolutionSchedulerKernel;
 import fpgaconvnet.kernels.ConvolutionAccumulatorKernel;
 import fpgaconvnet.kernels.ConvolutionUnitKernel;
@@ -19,7 +18,6 @@ import fpgaconvnet.Utils.Tuple3;
 
 public class ConvolutionLayer implements ComputationChain {
     private final LayerParameter layer;
-    private final ConvolutionParameter convParams;
     private final CustomManager manager;
     private final BoxedKernelBlock<ConvolutionSchedulerKernel> scheduler;
     private final BoxedKernelBlock<ConvolutionUnitKernel> convolutionUnit;
@@ -27,7 +25,6 @@ public class ConvolutionLayer implements ComputationChain {
     
     ConvolutionLayer(LayerParameter argLayer, CustomManager argManager) {
         layer = argLayer;
-        convParams = layer.getConv();
         manager = argManager;
 
         scheduler = new BoxedKernelBlock<ConvolutionSchedulerKernel>(
