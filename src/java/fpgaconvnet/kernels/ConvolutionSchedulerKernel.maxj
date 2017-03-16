@@ -131,8 +131,10 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
                 DFEVector<DFEVar> pixelWindow = toMuxedPixelChecked(iter, channelList);
                 CounterChain chain = control.count.makeCounterChain();
                 Pair<Integer, Integer> minmax = offsetCounter.computeOffsetMinMax();
-                DFEType offsetType = dfeInt(1 + Utils.ceilLog2(Math.max(
-                            Math.abs(minmax.getFirst()), Math.abs(minmax.getSecond()))));
+                DFEType thresholdType =
+                        dfeUInt(1 + Utils.ceilLog2(offsetCounter.getNormalZMax()));
+                DFEType offsetType = dfeInt(1 + Utils.ceilLog2(
+                    getSchedulerIterations() * layerParams.getConv().getLookAhead()));
 
                 DFEVar x = Utils.chainCounterOrZero(
                         this, chain, offsetCounter.getXMax(), offsetCounter.getXInc());
@@ -151,8 +153,8 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
                             * offsetCounter.getNormalZMax();
                     z = chain.addCounter(
                             (batchIter < threshold)
-                             ? constant.var(offsetType, offsetCounter.getNormalZMax())
-                             : constant.var(offsetType, offsetCounter.getLastZMax())
+                             ? constant.var(thresholdType, offsetCounter.getNormalZMax())
+                             : constant.var(thresholdType, offsetCounter.getLastZMax())
                             , 1);
 
                 }
@@ -162,6 +164,7 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
                 output_y[workerId] <== stream.offset(
                         pixelWindow, offset, minmax.getFirst(), minmax.getSecond());
 
+                streamlookAheadIter.simWatch("lookahead");
                 iter.simWatch("iter");
                 toMuxedPixel(iter, channelList)[0].simWatch("original");
                 output_y[workerId][0].simWatch("output");
