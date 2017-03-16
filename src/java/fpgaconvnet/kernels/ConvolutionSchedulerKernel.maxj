@@ -9,6 +9,7 @@ import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVector;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVectorType;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.CounterChain;
 
+import fpgaconvnet.IterationCounter;
 import fpgaconvnet.SlidingWindow;
 import fpgaconvnet.Dimension;
 import fpgaconvnet.GlobalConfig;
@@ -43,11 +44,13 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
     private final DFEVar iter, row, col;
     private final CounterChain masterChain;
     private final LayerParameter layerParams;
+    private final IterationCounter ctr;
 
     public ConvolutionSchedulerKernel(KernelParameters kp, LayerParameter argLayerParams) {
         super(kp, argLayerParams);
 
         layerParams = argLayerParams;
+        ctr = new IterationCounter(layerParams);
         inputDimension = Utils.layerInputDimension(layerParams);
         kernelDim = layerParams.getConv().getKernelSize();
         workerFactor = layerParams.getConv().getWorkerFactor();
@@ -111,8 +114,9 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
 
         for (int workerId = 0 ; workerId < workerFactor ; workerId++) {
             List<Integer> channelList = getSchedulerChannels(workerId);
-            DFEVector<DFEVar> pixelWindow = toMuxedPixel(iter, channelList);
+
             if (layerParams.getConv().getLookAhead() > 1) {
+                DFEVector<DFEVar> pixelWindow = toMuxedPixel(iter, channelList);
                 output_y[workerId] <== stream.offset(Transpose.transpose(
                             pixelWindow,
                             getSchedulerIterations(),
@@ -121,16 +125,70 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
                         getSchedulerIterations() * layerParams.getConv().getLookAhead());
 
             } else {
-                output_y[workerId] <== pixelWindow;
+                final int totalTransposer =
+                        ctr.getWeightIterations() / ctr.getConvolutionIterations();
+                final int totalTransposerIter =
+                        Utils.divCeil(getSchedulerIterations(), totalTransposer);
+                ArrayList<ArrayList<Integer>> choices =
+                        new ArrayList<ArrayList<Integer>>(totalTransposer);
+                ArrayList<DFEVector<DFEVar>> transposers =
+                        new ArrayList<DFEVector<DFEVar>>(totalTransposer);
 
+                DFEVar transposerId = control.count.makeCounter(
+                        control.count.makeParams(Utils.ceilLog2(totalTransposer))
+                        .withInitValue(0l)
+                        .withInc(1)
+                        .withMax(totalTransposer)
+                        .withReset(iter.eq(0))
+                    ).getCount();
+                DFEVar transposerIter = control.count.makeCounter(
+                        control.count.makeParams(Utils.ceilLog2(totalTransposerIter))
+                        .withInitValue(0l)
+                        .withInc(1)
+                        .withMax(totalTransposerIter)
+                        .withReset(iter.eq(0))
+                        .withEnable(transposerId.eq(totalTransposer - 1))
+                    ).getCount();
+
+                for (int i = 0 ; i < totalTransposer ; i++) {
+                    choices.add(new ArrayList<Integer>());
+                }
+
+                int k = 0;
+                for (int chan : channelList) {
+                    choices[k].add(chan);
+                    k = (k + 1) % totalTransposer;
+                }
+
+                for (int i = 0 ; i < totalTransposer ; i++) {
+                    transposers.set(
+                            i,
+                            Transpose.transpose(
+                                toMuxedPixel(transposerIter, choices[i]),
+                                choices[i].size(),
+                                layerParams.getConv().getLookAhead(),
+                                outputControlFlag & transposerId.eq(i)));
+                }
+
+                DFEVector<DFEVar> delayedOutput;
+                if (totalTransposer == 1) {
+                    delayedOutput = transposers[0];
+
+                } else {
+                    delayedOutput = control.mux(transposerId, transposers);
+
+                }
+                output_y[workerId] <== stream.offset(
+                        delayedOutput,
+                        getSchedulerIterations() * layerParams.getConv().getLookAhead());
             }
             io.output(getOutputName(workerId),
                       output_y[workerId],
                       outputVectorType,
                       outputControlFlag);
+
             lookAheadIter.simWatch("look_ahead");
             iter.simWatch("iter");
-            pixelWindow[0].simWatch("ori");
             output_y[workerId][0].simWatch("output");
         }
 
