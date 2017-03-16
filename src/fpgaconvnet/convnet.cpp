@@ -458,11 +458,6 @@ void allign_and_place_lmem_initialized_kernel_weights(
                         dest_base + addr,
                         tmp + offset,
                         sizeof(float) * layer.conv().kernel_folding_factor());
-                std::cout << "iter = " << iter
-                        << " worker = " << worker
-                        << " conv = " << conv
-                        << " offset = " << offset
-                        << std::endl;
                 addr += layer.conv().kernel_folding_factor();
             }
         }

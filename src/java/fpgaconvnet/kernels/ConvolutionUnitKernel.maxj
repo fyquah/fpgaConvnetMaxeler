@@ -114,13 +114,21 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
             }
 
             io.output(getOutputName(workerId), output, outputVectorType, outputControlFlag);
+
+
+            lookAheadCounter.getInputControlFlag().simWatch("input_control_flag");
+            lookAheadCounter.getWeightWriteEnable().simWatch("weight_write_enable");
+            lookAheadCounter.getPixelWriteEnable().simWatch("pixel_write_enable");
+            lookAheadCounter.getPixelAddress().simWatch("pixel_address");
+            lookAheadCounter.getChannelIter().simWatch("channelIter");
+            pixelVars[0].cast(GlobalConfig.cpuType).simWatch("pixel_0", DFEVar.Radix.DECIMAL, "%1.4f");
+            pixelVars[1].cast(GlobalConfig.cpuType).simWatch("pixel_1", DFEVar.Radix.DECIMAL, "%1.4f");
+            weightVars[0][0].cast(GlobalConfig.cpuType).simWatch("weightVars_0_0", DFEVar.Radix.DECIMAL, "%1.4f");
+            weightVars[0][1].cast(GlobalConfig.cpuType).simWatch("weightVars_0_1", DFEVar.Radix.DECIMAL, "%1.4f");
+            weightVars[1][0].cast(GlobalConfig.cpuType).simWatch("weightVars_1_0", DFEVar.Radix.DECIMAL, "%1.4f");
+            weightVars[1][1].cast(GlobalConfig.cpuType).simWatch("weightVars_1_1", DFEVar.Radix.DECIMAL, "%1.4f");
         }
 
-        lookAheadCounter.getInputControlFlag().simWatch("input_control_flag");
-        lookAheadCounter.getWeightWriteEnable().simWatch("weight_write_enable");
-        lookAheadCounter.getPixelWriteEnable().simWatch("pixel_write_enable");
-        lookAheadCounter.getPixelAddress().simWatch("pixel_address");
-        lookAheadCounter.getChannelIter().simWatch("channelIter");
     }
 
     /* initCycles used only in CPU initialization. */

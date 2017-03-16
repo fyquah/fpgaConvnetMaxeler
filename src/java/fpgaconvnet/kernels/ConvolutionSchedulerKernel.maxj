@@ -111,14 +111,19 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
 
         for (int workerId = 0 ; workerId < workerFactor ; workerId++) {
             List<Integer> channelList = getSchedulerChannels(workerId);
-            DFEVector<DFEVar>pixelWindow = toMuxedPixel(iter, channelList);
-            // output_y[workerId] <== pixelWindow;
-            output_y[workerId] <== stream.offset(Transpose.transpose(
-                        pixelWindow,
-                        getSchedulerIterations(),
-                        layerParams.getConv().getLookAhead(),
-                        outputControlFlag),
-                    getSchedulerIterations() * layerParams.getConv().getLookAhead());
+            DFEVector<DFEVar> pixelWindow = toMuxedPixel(iter, channelList);
+            if (layerParams.getConv().getLookAhead() > 1) {
+                output_y[workerId] <== stream.offset(Transpose.transpose(
+                            pixelWindow,
+                            getSchedulerIterations(),
+                            layerParams.getConv().getLookAhead(),
+                            outputControlFlag),
+                        getSchedulerIterations() * layerParams.getConv().getLookAhead());
+
+            } else {
+                output_y[workerId] <== pixelWindow;
+
+            }
             io.output(getOutputName(workerId),
                       output_y[workerId],
                       outputVectorType,

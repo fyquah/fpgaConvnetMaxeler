@@ -48,16 +48,19 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
         return control.count.simpleCounter(Utils.ceilLog2(x), x);
     }
 
-    private DFEVar getChannelIter(DFEVar enable, DFEVar lookAhead, DFEVar weightUsageIter, DFEVar kernelIter) {
+    private DFEVar getPixelIter(DFEVar enable, DFEVar lookAhead, DFEVar weightUsageIter, DFEVar kernelIter) {
         /* Number of iterations to spend per channel. */
-        final int channelIterations = ctr.getConvolutionIterations() * ctr.getKernelIterations();
+        final int pixelIterations =
+                ctr.getSchedulerIterations()
+                * ctr.getConvolutionIterations()
+                * ctr.getKernelIterations();
         final int weightsUsageCycles = ctr.getWeightIterations();
 
-        DFEVar channelIterBase = control.count.makeCounter(
-                control.count.makeParams(Utils.ceilLog2(channelIterations))
+        DFEVar pixelIterBase = control.count.makeCounter(
+                control.count.makeParams(Utils.ceilLog2(pixelIterations))
                 .withInitValue(0l)
                 .withInc(weightsUsageCycles * ctr.getKernelIterations())
-                .withMax(channelIterations)
+                .withMax(pixelIterations)
                 .withEnable(enable
                             & lookAhead.eq(layerParams.getConv().getLookAhead() - 1)
                             & weightUsageIter.eq(weightsUsageCycles - 1)
@@ -65,14 +68,14 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
             ).getCount();
 
         /* Defines the stage at which we are using a particular channel. */
-        DFEVar channelIter = dfeUInt(Utils.ceilLog2(channelIterations)).newInstance(this);
+        DFEVar pixelIter = dfeUInt(Utils.ceilLog2(pixelIterations)).newInstance(this);
         optimization.pushPipeliningFactor(0.0);
-        channelIter <== (weightUsageIter.eq(0) & kernelIter.eq(0)
-                         ? channelIterBase
-                         : Utils.modInc(stream.offset(channelIter, -1), channelIterations));
+        pixelIter <== (weightUsageIter.eq(0) & kernelIter.eq(0)
+                         ? pixelIterBase
+                         : Utils.modInc(stream.offset(pixelIter, -1), pixelIterations));
         optimization.popPipeliningFactor();
 
-        return channelIter;
+        return pixelIter;
     }
 
     private DFEVar getConvIter(DFEVar enable, DFEVar lookAheadIter, DFEVar weightUsageIter, DFEVar kernelIter) {
@@ -139,7 +142,7 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
         // Runtime Counters and loop variables
         DFEVar convIter;
         DFEVar lookAheadIter;
-        DFEVar channelIter;
+        DFEVar pixelIter;
         DFEVar outputControlFlag;
 
         if (convParams.getLookAhead() == 1) {
@@ -149,10 +152,10 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
             DFEVar schedulerIter = Utils.chainCounterOrZero(this, chain, getSchedulerIterations());
             convIter = Utils.chainCounterOrZero(this, chain, getConvolutionIterations());
             Utils.chainCounterOrZero(this, chain, getKernelIterations());
-            channelIter = control.count.simpleCounter(Utils.ceilLog2(totalIter), totalIter);
+            pixelIter = control.count.simpleCounter(Utils.ceilLog2(totalIter), totalIter);
 
             lookAheadIter = constant.var(dfeBool(), 0);
-            outputControlFlag = ~isInitializingWeights & channelIter.eq(totalIter - 1);
+            outputControlFlag = ~isInitializingWeights & pixelIter.eq(totalIter - 1);
 
         } else {
             CounterChain chain = control.count.makeCounterChain(~isInitializingWeights);
@@ -163,12 +166,9 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
 
             convIter = getConvIter(
                     ~isInitializingWeights, lookAheadIter, weightIter, kernelIter);
-            channelIter = getChannelIter(
+            pixelIter = getPixelIter(
                     ~isInitializingWeights, lookAheadIter, weightIter, kernelIter);
 
-            /* This is wrong - wouldn't work is the bram_factor numbers don't divide the
-             * n_scheduler * n_convolution nicely.
-             */
             outputControlFlag =
                     ~isInitializingWeights
                     & loopIter.eq(ctr.getRevisitIterations() - 1)
@@ -181,7 +181,7 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
             weightIter.simWatch("weightIter");
             kernelIter.simWatch("kernelIter");
             convIter.simWatch("convIter");
-            channelIter.simWatch("channelIter");
+            pixelIter.simWatch("pixelIter");
             outputControlFlag.simWatch("outputControlFlag");
         }
 
@@ -230,7 +230,7 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
                 DFEVar acc = GlobalConfig.dataType.newInstance(this);
                 DFEVar initFlag =
                         lookAheadIter.eq(lookAhead)
-                        & channelIter.eq(
+                        & pixelIter.eq(
                             (channel / layerParams.getConv().getConvFoldingFactor()));
                 DFEVar sumVars = Utils.treeReduceAdd(map(inputVectors, channel % convFoldingFactor));
                 DFEVar channelOutputFlag = (
