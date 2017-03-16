@@ -10,6 +10,7 @@ import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Count.Counter;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.CounterChain;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.memory.Memory;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEType;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVector;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVectorType;
 import com.maxeler.maxcompiler.v2.kernelcompiler.KernelParameters;
@@ -43,7 +44,8 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
         return (x > 0 ? x : 0);
     }
 
-    private DFEVar getPixelIter(DFEVar enable, DFEVar lookAhead, DFEVar weightUsageIter, DFEVar kernelIter) {
+    private DFEVar getPixelIter(
+            DFEVar enable, CounterChain chain, DFEVar lookAhead, DFEVar weightIter, DFEVar kernelIter) {
         /* Number of iterations to spend per channel. */
         final int pixelIterations =
                 ctr.getSchedulerIterations()
@@ -58,14 +60,14 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
                 .withMax(pixelIterations)
                 .withEnable(enable
                             & lookAhead.eq(layerParams.getConv().getLookAhead() - 1)
-                            & weightUsageIter.eq(weightsUsageCycles - 1)
+                            & chain.getCounterWrap(weightIter)
                             & kernelIter.eq(ctr.getKernelIterations() - 1))
             ).getCount();
 
         /* Defines the stage at which we are using a particular channel. */
         DFEVar pixelIter = dfeUInt(Utils.ceilLog2(pixelIterations)).newInstance(this);
         optimization.pushPipeliningFactor(0.0);
-        pixelIter <== (weightUsageIter.eq(0) & kernelIter.eq(0)
+        pixelIter <== (weightIter.eq(0) & kernelIter.eq(0)
                          ? pixelIterBase
                          : Utils.modInc(stream.offset(pixelIter, -1), pixelIterations));
         optimization.popPipeliningFactor();
@@ -73,7 +75,8 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
         return pixelIter;
     }
 
-    private DFEVar getConvIter(DFEVar enable, DFEVar lookAheadIter, DFEVar weightUsageIter, DFEVar kernelIter) {
+    private DFEVar getConvIter(
+            DFEVar enable, CounterChain chain, DFEVar lookAheadIter, DFEVar weightIter, DFEVar kernelIter) {
 
         /* The number of convIter that a weightIter yields. */
         DFEVar convIterBase = control.count.makeCounter(
@@ -83,7 +86,7 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
                 .withMax(getConvolutionIterations())
                 .withEnable(enable
                             & lookAheadIter.eq(layerParams.getConv().getLookAhead() - 1)
-                            & weightUsageIter.eq(ctr.getWeightIterations() - 1)
+                            & chain.getCounterWrap(weightIter)
                             & kernelIter.eq(ctr.getKernelIterations() - 1))
             ).getCount();
 
@@ -91,7 +94,7 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
                 Utils.ceilLog2(getConvolutionIterations())).newInstance(this);
         optimization.pushPipeliningFactor(0.0);
         convIter <== (kernelIter.eq(0)
-                      ? (weightUsageIter.eq(0)
+                      ? (weightIter.eq(0)
                          ? convIterBase
                          : Utils.modInc(stream.offset(convIter, -1), getConvolutionIterations()))
                       : stream.offset(convIter, -1));
@@ -153,51 +156,39 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
             outputControlFlag = ~isInitializingWeights & pixelIter.eq(totalIter - 1);
 
         } else {
-            DFEVar ctrEnable = dfeBool.newInstance(this);
-            CounterChain chain = control.count.makeCounterChain(~isInitializingWeights & ctrEnable);
-            DFEVar loopIter = Utils.chainCounterOrZero(this, chain, ctr.getRevisitIterations());
-            lookAheadIter = Utils.chainCounterOrZero(this, chain, convParams.getLookAhead());
 
+            CounterChain chain = control.count.makeCounterChain(~isInitializingWeights);
+            DFEVar loopIter = Utils.chainCounterOrZero(this, chain, ctr.getRevisitIterations());;
+            lookAheadIter = Utils.chainCounterOrZero(this, chain, convParams.getLookAhead());
             DFEVar weightIter;
-            DFEVar kernelIter;
 
             if (ctr.getLastWeightIterations() == ctr.getWeightIterations()) {
                 weightIter = Utils.chainCounterOrZero(this, chain, ctr.getWeightIterations());
-                kernelIter = Utils.chainCounterOrZero(this, chain, getKernelIterations());
-                ctrEnable <== constant.var(dfeBool(), 1);
 
             } else {
-                kernelIter = control.count.makeCounter(
-                        control.count.makeParams(Utils.ceilLog2(getKernelIterations()))
-                        .withInitValue(0l)
-                        .withInc(1)
-                        .withMax(getKernelIterations())
-                    ).getCount();
+                final int totalBeforeLastloopIterations =
+                        (ctr.getRevisitIterations() - 1)
+                        * ctr.getWeightIterations()
+                        * ctr.getKernelIterations()
+                        * convParams.getLookAhead();
+                DFEVar batchCounter = control.count.simpleCounter(
+                        Utils.ceilLog2(convParams.getLookAhead() * ctr.getTotalIterations()),
+                        convParams.getLookAhead() * ctr.getTotalIterations());
+                DFEType type = dfeUInt(1 + Utils.ceilLog2(ctr.getWeightIterations()));
+                DFEVar muxedWeightUsageCycles = (
+                        (batchCounter < totalBeforeLastloopIterations)
+                        ? constant.var(type, ctr.getWeightIterations())
+                        : constant.var(type, ctr.getLastWeightIterations()));
 
-                DFEVar weightIterReset = dfeBool().newInstance(this);
-                weightIter = control.count.makeCounter(
-                        control.count.makeParams(Utils.ceilLog2(ctr.getWeightIterations()))
-                        .withInitValue(0l)
-                        .withInc(1)
-                        .withMax(ctr.getWeightIterations())
-                        .withEnable(~weightIterReset & kernelIter.eq(getKernelIterations() - 1))
-                        .withReset(weightIterReset)
-                    ).getCount();
-                weightIterReset <==
-                        loopIter.eq(ctr.getRevisitIterations() - 1)
-                        & weightIter.eq(ctr.getLastWeightIterations());
-                ctrEnable <==
-                        kernelIter.eq(getKernelIterations() - 1) 
-                        & (loopIter.eq(ctr.getRevisitIterations() - 1)
-                           ? weightIter.eq(ctr.getLastWeightIterations() - 1)
-                           : weightiter.eq(ctr.getWeightIterations() - 1))
-
+                weightIter = chain.addCounter(muxedWeightUsageCycles, 1);
             }
 
+            DFEVar kernelIter = Utils.chainCounterOrZero(this, chain, getKernelIterations());
+
             convIter = getConvIter(
-                    ~isInitializingWeights, lookAheadIter, weightIter, kernelIter);
+                    ~isInitializingWeights, chain, lookAheadIter, weightIter, kernelIter);
             pixelIter = getPixelIter(
-                    ~isInitializingWeights, lookAheadIter, weightIter, kernelIter);
+                    ~isInitializingWeights, chain, lookAheadIter, weightIter, kernelIter);
 
             outputControlFlag =
                     ~isInitializingWeights

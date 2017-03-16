@@ -24,6 +24,7 @@ public class LookAheadCounter extends KernelLib {
     private final ConvolutionParameter convParams;
     private final DFEVar weightAddress;
     private final DFEVar pixelAddress;
+    private final CounterChain masterChain;
 
     public LookAheadCounter(ConvolutionUnitKernel kernel, LayerParameter argLayerParams) {
         super(kernel);
@@ -41,11 +42,11 @@ public class LookAheadCounter extends KernelLib {
                 * ctr.getWeightIterations()
                 * ctr.getKernelIterations()
                 * convParams.getLookAhead();
-        CounterChain chain = control.count.makeCounterChain();
+        masterChain = control.count.makeCounterChain();
         lookAhead = Utils.chainCounterOrZero(
-                this, chain, layerParams.getConv().getLookAhead());
+                this, masterChain, layerParams.getConv().getLookAhead());
         if (ctr.getWeightIterations() == ctr.getLastWeightIterations()) {
-            weightUsageIter = Utils.chainCounterOrZero(this, chain, ctr.getLastWeightIterations());
+            weightUsageIter = Utils.chainCounterOrZero(this, masterChain, ctr.getLastWeightIterations());
 
         } else {
             DFEType type = dfeUInt(1 + Utils.ceilLog2(ctr.getWeightIterations()));
@@ -53,13 +54,13 @@ public class LookAheadCounter extends KernelLib {
                     (batchCounter < totalBeforeLastloopIterations)
                     ? constant.var(type, ctr.getWeightIterations())
                     : constant.var(type, ctr.getLastWeightIterations()));
-            weightUsageIter = chain.addCounter(muxedWeightUsageCycles, 1);
+            weightUsageIter = masterChain.addCounter(muxedWeightUsageCycles, 1);
             batchCounter.simWatch("batch_counter");
             weightUsageIter.simWatch("weightUsageIter");
             muxedWeightUsageCycles.simWatch("muxed_weight");
 
         }
-        kernelIter = Utils.chainCounterOrZero(this, chain, ctr.getKernelIterations());
+        kernelIter = Utils.chainCounterOrZero(this, masterChain, ctr.getKernelIterations());
         totalPixelAddress = convParams.getLookAhead() * ctr.getKernelIterations();
 
         if (getTotalWeightAddress() <= 1) {
@@ -77,7 +78,7 @@ public class LookAheadCounter extends KernelLib {
                 .withInitValue(0l)
                 .withInc(ctr.getKernelIterations() % totalPixelAddress)
                 .withMax(totalPixelAddress)
-                .withEnable(weightUsageIter.eq(weightsUsageCycles - 1)
+                .withEnable(masterChain.getCounterWrap(weightUsageIter)
                             & kernelIter.eq(ctr.getKernelIterations() - 1))
             ).getCount();
         pixelAddress = pixelAddressBase + kernelIter.cast(
@@ -103,7 +104,7 @@ public class LookAheadCounter extends KernelLib {
                          % channelIterations)
                 .withMax(channelIterations)
                 .withEnable(lookAhead.eq(layerParams.getConv().getLookAhead() - 1)
-                            & weightUsageIter.eq(weightsUsageCycles - 1)
+                            & masterChain.getCounterWrap(weightUsageIter)
                             & kernelIter.eq(ctr.getKernelIterations() - 1))
             ).getCount();
 

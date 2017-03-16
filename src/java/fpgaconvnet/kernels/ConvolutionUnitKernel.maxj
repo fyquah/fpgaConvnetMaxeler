@@ -115,6 +115,7 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
             lookAheadCounter.getChannelIter().simWatch("channel_iter");
             lookAheadCounter.getKernelIter().simWatch("kernel_iter");
             lookAheadCounter.getLookAhead().simWatch("look_ahead");
+            lookAheadCounter.getPixelAddress().simWatch("pixel_address");
             lookAheadCounter.getInputControlFlag().simWatch("input_control_flag");
             lookAheadCounter.getPixelWriteEnable().simWatch("pixel_write_enable");
             lookAheadCounter.getWeightWriteEnable().simWatch("weight_write_enable");
