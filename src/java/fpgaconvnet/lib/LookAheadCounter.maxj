@@ -3,6 +3,7 @@ package fpgaconvnet.lib;
 import com.maxeler.maxcompiler.v2.kernelcompiler.KernelLib;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.CounterChain;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEType;
 
 import fpgaconvnet.IterationCounter;
 import fpgaconvnet.Utils;
@@ -32,10 +33,32 @@ public class LookAheadCounter extends KernelLib {
         ctr = new IterationCounter(layerParams);
         weightsUsageCycles = ctr.getWeightIterations();
 
+        DFEVar batchCounter = control.count.simpleCounter(
+                Utils.ceilLog2(convParams.getLookAhead() * ctr.getTotalIterations()),
+                convParams.getLookAhead() * ctr.getTotalIterations());
+        final int totalBeforeLastloopIterations =
+                (ctr.getRevisitIterations() - 1)
+                * ctr.getWeightIterations()
+                * ctr.getKernelIterations()
+                * convParams.getLookAhead();
         CounterChain chain = control.count.makeCounterChain();
         lookAhead = Utils.chainCounterOrZero(
                 this, chain, layerParams.getConv().getLookAhead());
-        weightUsageIter = Utils.chainCounterOrZero(this, chain, weightsUsageCycles);
+        if (ctr.getWeightIterations() == ctr.getLastWeightIterations()) {
+            weightUsageIter = Utils.chainCounterOrZero(this, chain, ctr.getLastWeightIterations());
+
+        } else {
+            DFEType type = dfeUInt(1 + Utils.ceilLog2(ctr.getWeightIterations()));
+            DFEVar muxedWeightUsageCycles = (
+                    (batchCounter < totalBeforeLastloopIterations)
+                    ? constant.var(type, ctr.getWeightIterations())
+                    : constant.var(type, ctr.getLastWeightIterations()));
+            weightUsageIter = chain.addCounter(muxedWeightUsageCycles, 1);
+            batchCounter.simWatch("batch_counter");
+            weightUsageIter.simWatch("weightUsageIter");
+            muxedWeightUsageCycles.simWatch("muxed_weight");
+
+        }
         kernelIter = Utils.chainCounterOrZero(this, chain, ctr.getKernelIterations());
         totalPixelAddress = convParams.getLookAhead() * ctr.getKernelIterations();
 
@@ -121,5 +144,9 @@ public class LookAheadCounter extends KernelLib {
 
     public int getTotalWeightAddress() {
         return ctr.getKernelIterations() * weightsUsageCycles;
+    }
+
+    public DFEVar getLookAhead() {
+        return lookAhead;
     }
 }
