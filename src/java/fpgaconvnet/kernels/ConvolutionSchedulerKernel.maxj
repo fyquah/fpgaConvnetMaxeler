@@ -235,11 +235,11 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
 
     protected class OffsetCounter {
         protected int getLastZMax() {
-            return ctr.getLastWeightIterations() / getConvolutionIterations();
+            return Math.max(1, ctr.getLastWeightIterations() / getConvolutionIterations());
         }
 
         protected int getNormalZMax() {
-            return ctr.getWeightIterations() / getConvolutionIterations();
+            return Math.max(1, ctr.getWeightIterations() / getConvolutionIterations());
         }
 
         protected int getYInc() {
@@ -255,7 +255,7 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
         }
 
         protected int getXInc() {
-            return ctr.getWeightIterations() / ctr.getConvolutionIterations();
+            return Math.max(1, ctr.getWeightIterations() / ctr.getConvolutionIterations());
         }
 
         protected Pair<Integer, Integer> computeOffsetMinMax() {
@@ -269,6 +269,7 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
 
                     for (int z = 0 ; z < zMax ; z += 1) {
                         int offset = (x + y + z) - ctr;
+                        System.out.println(x + " " + y + " " + z);
                         System.out.println("x + y + z = " + (x + y + z));
                         System.out.println("offset = " + offset);
 
