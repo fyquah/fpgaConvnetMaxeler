@@ -24,8 +24,11 @@ public class IterationCounter {
     }
 
     public int getWeightIterations() {
-        if (convParams.getBramFactor()
-                >= layerParams.getNumInputs() * layerParams.getNumOutputs()) {
+        final int totalRomSize =
+                getConvolutionIterations() * getSchedulerIterations()
+                * (convParams.getWorkerFactor() * convParams.getConvFoldingFactor());
+
+        if (convParams.getBramFactor() >= totalRomSize) {
             return getConvolutionIterations() * getSchedulerIterations();
 
         } else {

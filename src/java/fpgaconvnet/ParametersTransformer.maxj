@@ -236,11 +236,18 @@ public class ParametersTransformer {
             }
 
             IterationCounter ctr = new IterationCounter(layer);
-            if (layer.getConv().getBramFactor() % ctr.getConvolutionIterations() != 0) {
+            int bramPerConvolver = layer.getConv().getBramFactor()
+                    / (layer.getConv().getWorkerFactor() * layer.getConv().getConvFoldingFactor());
+            if (bramPerConvolver == 0 || layer.getConv().getBramFactor() % bramPerConvolver != 0) {
                 raiseError(layer.getLayerId(),
-                        "bram_factor in convolution layer must be a factor or a multiple of"
-                        + " ceil(num_outputs / conv_folding_factor) unless it is equal to"
-                        + " num_inputs * num_outputs");
+                        "bram_factor in convolution layer must be a multiple of"
+                        + " (worker_factor * conv_folding_factor)");
+            }
+            if (bramPerConvolver % ctr.getConvolutionIterations() != 0) {
+                raiseError(layer.getLayerId(),
+                        "bram_factor / (worker_factor * conv_folding_factor) in convolution "
+                        + " layer must be a factor or a multiple of"
+                        + " ceil(num_outputs / conv_folding_factor)");
             }
 
             int totalPixels = layer.getOutputHeight() * layer.getOutputWidth();
@@ -281,6 +288,7 @@ public class ParametersTransformer {
             raiseError(0, "Number of layers in networkParameters must be greater than 1");
         }
         LayerParameter previousLayer = parseLayer(0, networkParameters.getLayer(0), null);
+        verifyLayerParameters(previousLayer);
         networkBuilder.addLayer(previousLayer);
         for (int i = 1; i < layerCount ; i++) {
             previousLayer = parseLayer(i, networkParameters.getLayer(i), previousLayer);
