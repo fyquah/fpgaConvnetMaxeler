@@ -52,7 +52,7 @@ public class LookAheadCounter extends KernelLib {
         DFEVar pixelAddressBase = control.count.makeCounter(
                 control.count.makeParams(Utils.ceilLog2(totalPixelAddress))
                 .withInitValue(0l)
-                .withInc(ctr.getKernelIterations())
+                .withInc(ctr.getKernelIterations() % totalPixelAddress)
                 .withMax(totalPixelAddress)
                 .withEnable(weightUsageIter.eq(weightsUsageCycles - 1)
                             & kernelIter.eq(ctr.getKernelIterations() - 1))
@@ -76,7 +76,8 @@ public class LookAheadCounter extends KernelLib {
         DFEVar channelIterBase = control.count.makeCounter(
                 control.count.makeParams(Utils.ceilLog2(channelIterations))
                 .withInitValue(0l)
-                .withInc(weightsUsageCycles * ctr.getKernelIterations())
+                .withInc((weightsUsageCycles * ctr.getKernelIterations())
+                         % channelIterations)
                 .withMax(channelIterations)
                 .withEnable(lookAhead.eq(layerParams.getConv().getLookAhead() - 1)
                             & weightUsageIter.eq(weightsUsageCycles - 1)

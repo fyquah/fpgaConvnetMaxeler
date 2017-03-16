@@ -23,6 +23,27 @@ public class IterationCounter {
                 getConvolutionIterations() * getSchedulerIterations(), getWeightIterations());
     }
 
+    public int getLastWeightIterations() {
+        // This is definitely divisible.
+        int romPerConvolver =
+                convParams.getBramFactor()
+                / (convParams.getWorkerFactor() * convParams.getConvFoldingFactor());
+
+        if (romPerConvolver < getConvolutionIterations()) {
+            return getWeightIterations();
+
+        } else {
+            int ret = (
+                    getSchedulerIterations() * getConvolutionIterations()) % romPerConvolver;
+
+            if (ret == 0) {
+                return getWeightIterations();
+            } else {
+                return ret;
+            }
+        }
+    }
+
     public int getWeightIterations() {
         final int totalRomSize =
                 getConvolutionIterations() * getSchedulerIterations()

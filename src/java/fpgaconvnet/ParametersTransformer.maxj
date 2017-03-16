@@ -243,7 +243,13 @@ public class ParametersTransformer {
                         "bram_factor in convolution layer must be a multiple of"
                         + " (worker_factor * conv_folding_factor)");
             }
-            if (bramPerConvolver % ctr.getConvolutionIterations() != 0) {
+            boolean flag =
+                    (bramPerConvolver < ctr.getConvolutionIterations()
+                        && ctr.getConvolutionIterations() % bramPerConvolver != 0)
+                    || (bramPerConvolver > ctr.getConvolutionIterations()
+                        && bramPerConvolver % ctr.getConvolutionIterations() != 0);
+
+            if (flag) {
                 raiseError(layer.getLayerId(),
                         "bram_factor / (worker_factor * conv_folding_factor) in convolution "
                         + " layer must be a factor or a multiple of"
