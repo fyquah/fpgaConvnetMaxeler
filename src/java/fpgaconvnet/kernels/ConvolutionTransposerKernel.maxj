@@ -1,0 +1,166 @@
+package fpgaconvnet.kernels;
+
+import com.maxeler.maxcompiler.v2.kernelcompiler.KernelParameters;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEType;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVector;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVectorType;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.CounterChain;
+
+import fpgaconvnet.IterationCounter;
+import fpgaconvnet.GlobalConfig;
+import fpgaconvnet.Utils;
+import fpgaconvnet.Utils.Pair;
+import fpgaconvnet.kernels.ConvolutionKernelBase;
+import fpgaconvnet.protos.Parameters.LayerParameter;
+
+
+public class ConvolutionTransposerKernel extends ConvolutionKernelBase {
+
+    final OffsetCounter offsetCounter;
+    final IterationCounter ctr;
+    final LayerParameter layerParams;
+    final int workerFactor;
+    final DFEVectorType<DFEVar> ioVectorType;
+
+    public ConvolutionTransposerKernel(KernelParameters kp, LayerParameter argLayerParams) {
+        super(kp, argLayerParams);
+
+        offsetCounter = new OffsetCounter();
+        layerParams = argLayerParams;
+        ctr = new IterationCounter(layerParams);
+        workerFactor = layerParams.getConv().getWorkerFactor();
+        ioVectorType = new DFEVectorType<DFEVar>(
+                GlobalConfig.dataType,
+                layerParams.getConv().getKernelSize() * layerParams.getConv().getKernelSize());
+
+        for (int workerId = 0 ; workerId < workerFactor ; workerId++) {
+
+            DFEVector<DFEVar> pixelWindow = io.input(getInputName(workerId), ioVectorType);
+
+            if (layerParams.getConv().getLookAhead() == 1) {
+                throw new RuntimeException(
+                        "In lookAhead == 1, it is not necessary to create a "
+                        + "transposerKernel, which contributes to unnecessary additional resource"
+                        + "usage. This is a programming error.");
+
+            } 
+            DFEVar batchIter = control.count.simpleCounter(
+                    Utils.ceilLog2(
+                            getSchedulerIterations() * layerParams.getConv().getLookAhead()),
+                    getSchedulerIterations() * layerParams.getConv().getLookAhead());
+
+            CounterChain chain = control.count.makeCounterChain();
+            Pair<Integer, Integer> minmax = offsetCounter.computeOffsetMinMax();
+            DFEType thresholdType =
+                    dfeUInt(1 + Utils.ceilLog2(offsetCounter.getNormalZMax()));
+            DFEType offsetType = dfeInt(1 + Utils.ceilLog2(
+                getSchedulerIterations() * layerParams.getConv().getLookAhead()));
+
+            DFEVar x = Utils.chainCounterOrZero(
+                    this, chain, offsetCounter.getXMax(), offsetCounter.getXInc());
+            DFEVar y = Utils.chainCounterOrZero(
+                    this, chain, offsetCounter.getYMax(), offsetCounter.getYInc());
+            DFEVar z;
+
+            if (offsetCounter.getNormalZMax() == offsetCounter.getLastZMax()) {
+                z = Utils.chainCounterOrZero(
+                    this, chain, offsetCounter.getNormalZMax());
+
+            } else {
+                int threshold =
+                        layerParams.getConv().getLookAhead()
+                        * (ctr.getRevisitIterations() - 1)
+                        * offsetCounter.getNormalZMax();
+                z = chain.addCounter(
+                        (batchIter < threshold)
+                         ? constant.var(thresholdType, offsetCounter.getNormalZMax())
+                         : constant.var(thresholdType, offsetCounter.getLastZMax())
+                        , 1);
+
+            }
+
+            DFEVar offsetFromBeginning = x.cast(offsetType) + y.cast(offsetType) + z.cast(offsetType);
+            DFEVar offset = offsetFromBeginning - batchIter.cast(offsetType);
+
+            DFEVector<DFEVar> outputWindow = stream.offset(
+                    pixelWindow, offset, minmax.getFirst(), minmax.getSecond());
+
+            io.output(getOutputName(workerId),
+                      outputWindow,
+                      ioVectorType);
+        }
+    }
+
+    public String getOutputName(int workerId) {
+        return "output_" + workerId;
+    }
+
+    public String getInputName(int workerId) {
+        return "input_" + workerId;
+    }
+
+    public int cyclesPerImage() {
+        return layerParams.getOutputHeight()
+            * layerParams.getOutputWidth()
+            * getSchedulerIterations();
+    }
+
+    protected class OffsetCounter {
+        protected int getLastZMax() {
+            return Math.max(1, ctr.getLastWeightIterations() / getConvolutionIterations());
+        }
+
+        protected int getNormalZMax() {
+            return Math.max(1, ctr.getWeightIterations() / getConvolutionIterations());
+        }
+
+        protected int getYInc() {
+            return getSchedulerIterations();
+        }
+
+        protected int getYMax() {
+            return getYInc() * layerParams.getConv().getLookAhead();
+        }
+
+        protected int getXMax() {
+            return getXInc() * Utils.divCeil(getSchedulerIterations(), getXInc());
+        }
+
+        protected int getXInc() {
+            return Math.max(1, ctr.getWeightIterations() / ctr.getConvolutionIterations());
+        }
+
+        protected Pair<Integer, Integer> computeOffsetMinMax() {
+            int min = (1 << 29);
+            int max = -(1 << 29);
+            int ctr = 0;
+
+            for (int x = 0; x < getXMax() ; x += getXInc()) {
+                for (int y = 0 ; y < getYMax() ; y += getYInc()) {
+                    int zMax = (x == (getXMax() - getXInc())) ? getLastZMax() : getNormalZMax();
+
+                    for (int z = 0 ; z < zMax ; z += 1) {
+                        int offset = (x + y + z) - ctr;
+
+                        if (offset < min) {
+                            min = offset;
+                        }
+                        if (offset > max) {
+                            max = offset;
+                        }
+                        ctr++;
+                    }
+                }
+            }
+
+            System.out.println(String.format(
+                    "Layer %d min offset = %d", layerParams.getLayerId(), min));
+            System.out.println(String.format(
+                    "Layer %d max offset = %d", layerParams.getLayerId(), max));
+
+            return new Pair<Integer, Integer>(min, max);
+        }
+    }
+
+}

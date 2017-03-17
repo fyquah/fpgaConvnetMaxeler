@@ -5,17 +5,14 @@ import java.util.List;
 
 import com.maxeler.maxcompiler.v2.kernelcompiler.KernelParameters;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
-import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEType;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVector;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVectorType;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.CounterChain;
 
-import fpgaconvnet.IterationCounter;
 import fpgaconvnet.SlidingWindow;
 import fpgaconvnet.Dimension;
 import fpgaconvnet.GlobalConfig;
 import fpgaconvnet.Utils;
-import fpgaconvnet.Utils.Pair;
 import fpgaconvnet.kernels.ConvolutionKernelBase;
 import fpgaconvnet.lib.StrideCounter;
 import fpgaconvnet.protos.Parameters.LayerParameter;
@@ -45,15 +42,11 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
     private final DFEVar iter, row, col;
     private final CounterChain masterChain;
     private final LayerParameter layerParams;
-    private final IterationCounter ctr;
-    private final OffsetCounter offsetCounter;
 
     public ConvolutionSchedulerKernel(KernelParameters kp, LayerParameter argLayerParams) {
         super(kp, argLayerParams);
 
         layerParams = argLayerParams;
-        ctr = new IterationCounter(layerParams);
-        offsetCounter = new OffsetCounter();
         inputDimension = Utils.layerInputDimension(layerParams);
         kernelDim = layerParams.getConv().getKernelSize();
         workerFactor = layerParams.getConv().getWorkerFactor();
@@ -82,11 +75,6 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
         row = Utils.chainCounterOrZero(this, masterChain, inputDimension.height());
         col = Utils.chainCounterOrZero(this, masterChain, inputDimension.width());
         iter = Utils.chainCounterOrZero(this, masterChain, getSchedulerIterations());
-
-        CounterChain newChain = control.count.makeCounterChain();
-        DFEVar streamlookAheadIter = Utils.chainCounterOrZero(
-                this, newChain, layerParams.getConv().getLookAhead());
-        Utils.chainCounterOrZero(this, newChain, getSchedulerIterations());
 
         StrideCounter strideCounter = new StrideCounter(
                 this,
@@ -119,61 +107,7 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
             List<Integer> channelList = getSchedulerChannels(workerId);
             DFEVector<DFEVar> pixelWindow = toMuxedPixelChecked(iter, channelList);
 
-            if (layerParams.getConv().getLookAhead() == 1) {
-                output_y[workerId] <== pixelWindow;
-
-            } else {
-                DFEVar batchIter = control.count.simpleCounter(
-                        Utils.ceilLog2(
-                                getSchedulerIterations() * layerParams.getConv().getLookAhead()),
-                        getSchedulerIterations() * layerParams.getConv().getLookAhead());
-
-                CounterChain chain = control.count.makeCounterChain();
-                Pair<Integer, Integer> minmax = offsetCounter.computeOffsetMinMax();
-                DFEType thresholdType =
-                        dfeUInt(1 + Utils.ceilLog2(offsetCounter.getNormalZMax()));
-                DFEType offsetType = dfeInt(1 + Utils.ceilLog2(
-                    getSchedulerIterations() * layerParams.getConv().getLookAhead()));
-
-                DFEVar x = Utils.chainCounterOrZero(
-                        this, chain, offsetCounter.getXMax(), offsetCounter.getXInc());
-                DFEVar y = Utils.chainCounterOrZero(
-                        this, chain, offsetCounter.getYMax(), offsetCounter.getYInc());
-                DFEVar z;
-
-                if (offsetCounter.getNormalZMax() == offsetCounter.getLastZMax()) {
-                    z = Utils.chainCounterOrZero(
-                        this, chain, offsetCounter.getNormalZMax());
-
-                } else {
-                    int threshold =
-                            layerParams.getConv().getLookAhead()
-                            * (ctr.getRevisitIterations() - 1)
-                            * offsetCounter.getNormalZMax();
-                    z = chain.addCounter(
-                            (batchIter < threshold)
-                             ? constant.var(thresholdType, offsetCounter.getNormalZMax())
-                             : constant.var(thresholdType, offsetCounter.getLastZMax())
-                            , 1);
-
-                }
-                DFEVar offsetFromBeginning = x.cast(offsetType) + y.cast(offsetType) + z.cast(offsetType);
-                DFEVar offset = offsetFromBeginning - batchIter.cast(offsetType);
-
-                output_y[workerId] <== stream.offset(
-                        pixelWindow, offset, minmax.getFirst(), minmax.getSecond());
-            }
-
-            if (workerId == 0) {
-                streamlookAheadIter.simWatch("look_ahead");
-                iter.simWatch("iter");
-                output_y[workerId][0].simWatch("output_0");
-                pixelWindow[0].simWatch("ori_0");
-            }
-            io.output(getOutputName(workerId),
-                      output_y[workerId],
-                      outputVectorType,
-                      outputControlFlag);
+            io.output(getOutputName(workerId), pixelWindow, outputVectorType, outputControlFlag);
         }
     }
 
@@ -234,62 +168,4 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
     }
 
 
-    protected class OffsetCounter {
-        protected int getLastZMax() {
-            return Math.max(1, ctr.getLastWeightIterations() / getConvolutionIterations());
-        }
-
-        protected int getNormalZMax() {
-            return Math.max(1, ctr.getWeightIterations() / getConvolutionIterations());
-        }
-
-        protected int getYInc() {
-            return getSchedulerIterations();
-        }
-
-        protected int getYMax() {
-            return getYInc() * layerParams.getConv().getLookAhead();
-        }
-
-        protected int getXMax() {
-            return getXInc() * Utils.divCeil(getSchedulerIterations(), getXInc());
-        }
-
-        protected int getXInc() {
-            return Math.max(1, ctr.getWeightIterations() / ctr.getConvolutionIterations());
-        }
-
-        protected Pair<Integer, Integer> computeOffsetMinMax() {
-            int min = (1 << 29);
-            int max = -(1 << 29);
-            int ctr = 0;
-
-            for (int x = 0; x < getXMax() ; x += getXInc()) {
-                for (int y = 0 ; y < getYMax() ; y += getYInc()) {
-                    int zMax = (x == (getXMax() - getXInc())) ? getLastZMax() : getNormalZMax();
-
-                    for (int z = 0 ; z < zMax ; z += 1) {
-                        int offset = (x + y + z) - ctr;
-                        System.out.println(x + " " + y + " " + z);
-                        System.out.println("x + y + z = " + (x + y + z));
-                        System.out.println("offset = " + offset);
-
-                        if (offset < min) {
-                            min = offset;
-                        }
-                        if (offset > max) {
-                            max = offset;
-                        }
-                        ctr++;
-                    }
-                }
-            }
-
-            return new Pair<Integer, Integer>(min, max);
-        }
-    }
-
-    /* It should be possible to solve this using some kind of number theory magic. But I am no
-     * mathematician :/
-     */
 }

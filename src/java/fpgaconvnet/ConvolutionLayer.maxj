@@ -10,6 +10,7 @@ import com.maxeler.maxcompiler.v2.managers.engine_interfaces.InterfaceParam;
 
 import fpgaconvnet.protos.Parameters.LayerParameter;
 import fpgaconvnet.kernels.ConvolutionSchedulerKernel;
+import fpgaconvnet.kernels.ConvolutionTransposerKernel;
 import fpgaconvnet.kernels.ConvolutionAccumulatorKernel;
 import fpgaconvnet.kernels.ConvolutionUnitKernel;
 import fpgaconvnet.kernels.ConvolutionUnitKernel.WeightsLoadStrategy;
@@ -20,6 +21,7 @@ public class ConvolutionLayer implements ComputationChain {
     private final LayerParameter layer;
     private final CustomManager manager;
     private final BoxedKernelBlock<ConvolutionSchedulerKernel> scheduler;
+    private final BoxedKernelBlock<ConvolutionTransposerKernel> transposer;
     private final BoxedKernelBlock<ConvolutionUnitKernel> convolutionUnit;
     private final BoxedKernelBlock<ConvolutionAccumulatorKernel> accumulator;
     
@@ -32,6 +34,19 @@ public class ConvolutionLayer implements ComputationChain {
                 new ConvolutionSchedulerKernel(
                         manager.makeKernelParameters("ConvolutionScheduler_" + layer.getLayerId()),
                                                      layer));
+
+        if (layer.getConv().getLookAhead() > 1) {
+            transposer = new BoxedKernelBlock<ConvolutionTransposerKernel>(
+                manager,
+                new ConvolutionTransposerKernel(
+                        manager.makeKernelParameters("ConvolutionTransposer_" + layer.getLayerId()),
+                                                     layer));
+
+        } else {
+            transposer = null;
+
+        }
+
         accumulator = new BoxedKernelBlock<ConvolutionAccumulatorKernel>(
                 manager,
                 new ConvolutionAccumulatorKernel(
@@ -49,7 +64,7 @@ public class ConvolutionLayer implements ComputationChain {
         joinKernels();
 
         System.out.println(
-                "ConvolutionUnit Caching strategy = "
+                "Layer " + layer.getLayerId() + " | ConvolutionUnit Caching strategy = "
                 + convolutionUnit.getKernel().getWeightsLoadStrategy());
     }
 
@@ -65,6 +80,12 @@ public class ConvolutionLayer implements ComputationChain {
         /* Scheduler */
         ei.setTicks(scheduler.getKernel().getName(),
                     numberOfImages * scheduler.getKernel().cyclesPerImage());
+
+        /* transposer */
+        if (transposer != null) {
+            ei.setTicks(transposer.getKernel().getName(),
+                        numberOfImages * transposer.getKernel().cyclesPerImage());
+        }
 
         /* convolutionUnit */
         InterfaceParam convUnitTicks;
@@ -94,6 +115,16 @@ public class ConvolutionLayer implements ComputationChain {
         for (int i = 0 ; i < layer.getConv().getWorkerFactor() ; i++) {
             DFELink pixelsFrom = scheduler.getBlock().getOutput(
                         scheduler.getKernel().getOutputName(i));
+
+            if (transposer != null) {
+                DFELink pixelsTo = transposer.getBlock().getInput(
+                        transposer.getKernel().getInputName(i));
+                pixelsTo <== pixelsFrom;
+
+                pixelsFrom = transposer.getBlock().getOutput(
+                        transposer.getKernel().getOutputName(i));
+            }
+
             DFELink pixelsTo = convolutionUnit.getBlock().getInput(
                         convolutionUnit.getKernel().getInputName(i));
 
