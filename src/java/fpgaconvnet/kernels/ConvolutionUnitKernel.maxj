@@ -55,16 +55,6 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
         kernelFoldingFactor = layerParams.getConv().getKernelFoldingFactor();
         totalAddressCount = iterCounter.getWeightIterations() * getKernelIterations();
 
-        DFEVar address;
-        if (totalAddressCount <= 1) {
-            address = constant.var(dfeBool(), 0);
-
-        } else {
-            address = control.count.simpleCounter(
-                   Utils.ceilLog2(totalAddressCount), totalAddressCount);
-
-        }
-
         DFEVar inputControlFlag = null;
         DFEVar outputControlFlag = null;
 
@@ -104,7 +94,7 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
 
                     /* Determine the weight fetching strategy based on the foldingFactors. */
                     weightVars[convUnitIndex][multId] = getConvWeights(
-                            workerId, convUnitIndex, multId, address);
+                            workerId, convUnitIndex, multId);
 
                     convUnitOutput = convUnitOutput
                             + pixelVars[multId] * weightVars[convUnitIndex][multId];
@@ -114,6 +104,22 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
             }
 
             io.output(getOutputName(workerId), output, outputVectorType, outputControlFlag);
+
+            if (workerId == 0) {
+                if (cpuInitWeightsCounter != null) {
+                    cpuInitWeightsCounter.getWeightAddress().simWatch("weight_addr");
+                    cpuInitWeightsCounter.getWeightsInputFlag().simWatch("init_weights");
+                    cpuInitWeightsCounter.getConvIter().simWatch("conv_iter");
+                    cpuInitWeightsCounter.getKernelIter().simWatch("kernel_iter");
+                }
+                if (lookAheadCounter != null) {
+                    lookAheadCounter.getPixelAddress().simWatch("pixel_address");
+                    lookAheadCounter.getWeightAddress().simWatch("weight_address");
+                }
+                inputControlFlag.simWatch("input_control_flag");
+                weightVars[0][0].simWatch("weight");
+                pixelVars[0].simWatch("pixel");
+            }
         }
     }
 
@@ -209,6 +215,9 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
              * a multiple (the if-case) of convolutionIterations()
              */
             if (ctr.getWeightIterations() >= ctr.getConvolutionIterations()) {
+                if (pixelChoices.length == 1) {
+                    return pixelChoices[0];
+                }
                 return control.mux(lookAheadCounter.getKernelIter(), pixelChoices);
 
             } else {
@@ -296,7 +305,7 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
     }
 
     public DFEVar getConvWeights(
-            int workerId, int convUnitIndex, int multId, DFEVar address) {
+            int workerId, int convUnitIndex, int multId) {
         Memory<DFEVar> filtersRom = null;
         int idx;
 
@@ -305,10 +314,10 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
             filtersRom = mem.alloc(
                     GlobalConfig.dataType, totalAddressCount);
             filtersRom.write(
-                    address,
+                    cpuInitWeightsCounter.getWeightAddress(),
                     getCpuWeightsInput()[multId],
                     cpuInitWeightsCounter.getWriteEnable(workerId, convUnitIndex));
-            return filtersRom.read(address);
+            return filtersRom.read(cpuInitWeightsCounter.getWeightAddress());
 
         case STREAM_FROM_LMEM:
             idx = workerId;

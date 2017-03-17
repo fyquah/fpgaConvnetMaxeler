@@ -27,6 +27,7 @@ public class CpuInitWeightsCounter extends KernelLib {
     final DFEVar convIter;
     final DFEVar kernelIter;
     final int totalAddressCount;
+    final DFEVar weightAddress;
 
     public CpuInitWeightsCounter(ConvolutionUnitKernel kernel, LayerParameter argLayerParams) {
         super(kernel);
@@ -71,6 +72,16 @@ public class CpuInitWeightsCounter extends KernelLib {
         CounterChain chain = control.count.makeCounterChain(~isInitializingWeights);
         convIter = Utils.chainCounterOrZero(this, chain, iterCounter.getConvolutionIterations());
         kernelIter = Utils.chainCounterOrZero(this, chain, iterCounter.getKernelIterations());
+        weightAddress = control.count.makeCounter(
+                control.count.makeParams(Utils.ceilLog2(totalAddressCount))
+                .withInc(1)
+                .withMax(totalAddressCount)
+                .withEnable(~isPaddingInit | ~isInitializingWeights)
+            ).getCount();
+    }
+
+    public DFEVar getWeightAddress() {
+        return weightAddress;
     }
 
     public DFEVar getWriteEnable(int workerId, int convUnitIndex) {
