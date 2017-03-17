@@ -9,6 +9,7 @@ import com.maxeler.maxcompiler.v2.kernelcompiler.KernelParameters;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.memory.Memory;
 
 import fpgaconvnet.GlobalConfig;
+import fpgaconvnet.IterationCounter;
 import fpgaconvnet.Utils;
 import fpgaconvnet.protos.Parameters.LayerParameter;
 import fpgaconvnet.protos.Parameters.ConvolutionParameter;
@@ -32,6 +33,7 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
     private final int convFoldingFactor;
     private final int kernelFoldingFactor;
     private final int totalAddressCount;
+    private final IterationCounter ctr;
 
     private DFEVector<DFEVar> lmemWeightsInput = null;
     private DFEVector<DFEVar> cpuWeightsInput = null;
@@ -44,6 +46,7 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
         layerParams = params;
         kernelDim = params.getConv().getKernelSize();
 
+        ctr = new IterationCounter(layerParams);
         inputVectorType = new DFEVectorType<DFEVar>(GlobalConfig.dataType, kernelDim * kernelDim);
         outputVectorType = new DFEVectorType<DFEVar>(
                 GlobalConfig.dataType, layerParams.getConv().getConvFoldingFactor());
@@ -113,12 +116,9 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
             io.output(getOutputName(workerId), output, outputVectorType, outputControlFlag);
 
             lookAheadCounter.getChannelIter().simWatch("channel_iter");
-            lookAheadCounter.getKernelIter().simWatch("kernel_iter");
-            lookAheadCounter.getLookAhead().simWatch("look_ahead");
-            lookAheadCounter.getPixelAddress().simWatch("pixel_address");
             lookAheadCounter.getInputControlFlag().simWatch("input_control_flag");
-            lookAheadCounter.getPixelWriteEnable().simWatch("pixel_write_enable");
-            lookAheadCounter.getWeightWriteEnable().simWatch("weight_write_enable");
+            pixelVars[0].simWatch("pixel");
+            weightVars[0][0].simWatch("weight");
         }
 
     }
@@ -211,18 +211,27 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
 
         case STREAM_FROM_LMEM:
         case WITH_CACHE:
-            Memory<DFEVar> pixelsMem = mem.alloc(
-                    GlobalConfig.dataType,
-                    convParams.getLookAhead() * getKernelIterations());
-            DFEVar pixel = control.mux(lookAheadCounter.getKernelIter(), pixelChoices);
-            pixelsMem.write(
-                    lookAheadCounter.getPixelAddress(),
-                    pixel,
-                    lookAheadCounter.getPixelWriteEnable());
+            /* This is fine because weightIterations is constrainted to be either a factor or
+             * a multiple (the if-case) of convolutionIterations()
+             */
+            if (ctr.getWeightIterations() >= ctr.getConvolutionIterations()) {
+                return control.mux(lookAheadCounter.getKernelIter(), pixelChoices);
 
-            return (lookAheadCounter.getPixelWriteEnable()
-                    ? pixel
-                    : pixelsMem.read(lookAheadCounter.getPixelAddress()));
+            } else {
+                Memory<DFEVar> pixelsMem = mem.alloc(
+                        GlobalConfig.dataType,
+                        convParams.getLookAhead() * getKernelIterations());
+                DFEVar pixel = control.mux(lookAheadCounter.getKernelIter(), pixelChoices);
+                pixelsMem.write(
+                        lookAheadCounter.getPixelAddress(),
+                        pixel,
+                        lookAheadCounter.getPixelWriteEnable());
+
+                return (lookAheadCounter.getPixelWriteEnable()
+                        ? pixel
+                        : pixelsMem.read(lookAheadCounter.getPixelAddress()));
+
+            }
         }
 
         /* Makes compiler happy. */

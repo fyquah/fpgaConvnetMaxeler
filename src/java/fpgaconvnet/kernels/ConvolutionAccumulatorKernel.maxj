@@ -161,7 +161,13 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
             Utils.chainCounterOrZero(this, chain, getSchedulerIterations());
             convIter = Utils.chainCounterOrZero(this, chain, getConvolutionIterations());
             Utils.chainCounterOrZero(this, chain, getKernelIterations());
-            pixelIter = control.count.simpleCounter(Utils.ceilLog2(totalIter), totalIter);
+            pixelIter = control.count.makeCounter(
+                    control.count.makeParams(Utils.ceilLog2(totalIter))
+                    .withInitValue(0l)
+                    .withInc(1)
+                    .withMax(totalIter)
+                    .withEnable(~isInitializingWeights)
+                ).getCount();
 
             lookAheadIter = constant.var(dfeBool(), 0);
             outputControlFlag = ~isInitializingWeights & pixelIter.eq(totalIter - 1);
@@ -204,17 +210,13 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
                     & loopIter.eq(ctr.getRevisitIterations() - 1)
                     & weightIter.eq(ctr.getLastWeightIterations() - 1)
                     & kernelIter.eq(ctr.getKernelIterations() - 1);
-
-            batchCounter.simWatch("batchCounter");
-            isInitializingWeights.simWatch("initializingWeights");
-            loopIter.simWatch("loopIter");
-            lookAheadIter.simWatch("lookAheadIter");
-            weightIter.simWatch("weightIter");
-            kernelIter.simWatch("kernelIter");
-            convIter.simWatch("convIter");
-            pixelIter.simWatch("pixelIter");
-            outputControlFlag.simWatch("outputControlFlag");
         }
+
+        batchCounter.simWatch("batchCounter");
+        isInitializingWeights.simWatch("initializingWeights");
+        lookAheadIter.simWatch("lookAheadIter");
+        convIter.simWatch("convIter");
+        outputControlFlag.simWatch("outputControlFlag");
 
         // Kernel IO interfaces
         DFEVar rawBiasInput = io.input(getBiasInputName(),
@@ -279,6 +281,10 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
 
                 acc <== muxedSumVars + prevAcc;
                 lookAheadOutput[channel] <== acc;
+
+                if (channel == 0) {
+                    sumVars.simWatch("sumVars_" + lookAhead);
+                }
             }
 
             lookAheadOutputs.add(lookAheadOutput);

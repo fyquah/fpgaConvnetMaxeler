@@ -67,9 +67,13 @@ public class LookAheadCounter extends KernelLib {
             weightAddress = constant.var(dfeBool(), 0);
 
         } else {
-            weightAddress = control.count.simpleCounter(
-                    Utils.ceilLog2(getTotalWeightAddress()),
-                    getTotalWeightAddress());
+            int bits = Utils.ceilLog2(ctr.getWeightIterations() * ctr.getKernelIterations());
+            DFEType type = dfeUInt(bits);
+            DFEVar muxedTotalWeightAddress = (
+                    (batchCounter < totalBeforeLastloopIterations)
+                    ? constant.var(type, ctr.getWeightIterations() * ctr.getKernelIterations())
+                    : constant.var(type, ctr.getLastWeightIterations() * ctr.getKernelIterations()));
+            weightAddress = control.count.simpleCounter(bits, muxedTotalWeightAddress);
 
         }
 
