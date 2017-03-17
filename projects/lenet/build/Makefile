@@ -97,9 +97,9 @@ run_lenet_dfe: lenet_dfe $(LENET_DATA) $(LENET_DESCRIPTOR)
 
 # ---- Debug ----
 
-debug:
+debugsim:
 	maxdebug -v -g LENETGraph -s LENETGraph -c -d $(USER)a0:$(USER)a \
-	    LENET_SIM_MAXFILE
+	    $(LENET_SIM_MAXFILE)
 
 sim: lenet_sim
 
