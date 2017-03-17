@@ -117,9 +117,9 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
 
         for (int workerId = 0 ; workerId < workerFactor ; workerId++) {
             List<Integer> channelList = getSchedulerChannels(workerId);
+            DFEVector<DFEVar> pixelWindow = toMuxedPixelChecked(iter, channelList);
 
             if (layerParams.getConv().getLookAhead() == 1) {
-                DFEVector<DFEVar> pixelWindow = toMuxedPixelChecked(iter, channelList);
                 output_y[workerId] <== pixelWindow;
 
             } else {
@@ -128,7 +128,6 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
                                 getSchedulerIterations() * layerParams.getConv().getLookAhead()),
                         getSchedulerIterations() * layerParams.getConv().getLookAhead());
 
-                DFEVector<DFEVar> pixelWindow = toMuxedPixelChecked(iter, channelList);
                 CounterChain chain = control.count.makeCounterChain();
                 Pair<Integer, Integer> minmax = offsetCounter.computeOffsetMinMax();
                 DFEType thresholdType =
@@ -163,6 +162,13 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
 
                 output_y[workerId] <== stream.offset(
                         pixelWindow, offset, minmax.getFirst(), minmax.getSecond());
+            }
+
+            if (workerId == 0) {
+                streamlookAheadIter.simWatch("look_ahead");
+                iter.simWatch("iter");
+                output_y[workerId][0].simWatch("output_0");
+                pixelWindow[0].simWatch("ori_0");
             }
             io.output(getOutputName(workerId),
                       output_y[workerId],

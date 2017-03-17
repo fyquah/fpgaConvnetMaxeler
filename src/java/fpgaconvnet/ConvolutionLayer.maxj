@@ -151,7 +151,7 @@ public class ConvolutionLayer implements ComputationChain {
         }
 
         ret.add(new Tuple3<String, DFELink, Integer>(
-                    convolutionUnit.getKernel().getLMemWeightName(),
+                    String.format("weights_lmem_%d", layer.getLayerId()),
                     convolutionUnit.getBlock().getInput(
                         convolutionUnit.getKernel().getLMemWeightName()),
                     convolutionUnit.getKernel().lmemStreamSizePerPixel()));

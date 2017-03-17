@@ -134,7 +134,7 @@ std::vector<float> run_feature_extraction(
             network_parameters,
             N,
             &extracted_features[0],
-            "../test_data/conv1.bin",
+            "../test_data/pool3.bin",
             fpgaconvnet::FORMAT_BINARY);
 
     return extracted_features;

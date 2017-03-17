@@ -55,9 +55,6 @@ public class LookAheadCounter extends KernelLib {
                     ? constant.var(type, ctr.getWeightIterations())
                     : constant.var(type, ctr.getLastWeightIterations()));
             weightUsageIter = masterChain.addCounter(muxedWeightUsageCycles, 1);
-            batchCounter.simWatch("batch_counter");
-            weightUsageIter.simWatch("weightUsageIter");
-            muxedWeightUsageCycles.simWatch("muxed_weight");
 
         }
         kernelIter = Utils.chainCounterOrZero(this, masterChain, ctr.getKernelIterations());
@@ -69,24 +66,37 @@ public class LookAheadCounter extends KernelLib {
         } else {
             int bits = Utils.ceilLog2(ctr.getWeightIterations() * ctr.getKernelIterations());
             DFEType type = dfeUInt(bits);
-            DFEVar muxedTotalWeightAddress = (
-                    (batchCounter < totalBeforeLastloopIterations)
-                    ? constant.var(type, ctr.getWeightIterations() * ctr.getKernelIterations())
-                    : constant.var(type, ctr.getLastWeightIterations() * ctr.getKernelIterations()));
-            weightAddress = control.count.simpleCounter(bits, muxedTotalWeightAddress);
+
+            if (ctr.getWeightIterations() == ctr.getLastWeightIterations()) {
+                weightAddress = control.count.simpleCounter(
+                        bits, ctr.getWeightIterations() * ctr.getKernelIterations());
+
+            } else {
+                DFEVar muxedTotalWeightAddress = (
+                        (batchCounter < totalBeforeLastloopIterations)
+                        ? constant.var(type, ctr.getWeightIterations() * ctr.getKernelIterations())
+                        : constant.var(type, ctr.getLastWeightIterations() * ctr.getKernelIterations()));
+                weightAddress = control.count.simpleCounter(bits, muxedTotalWeightAddress);
+            }
 
         }
 
-        DFEVar pixelAddressBase = control.count.makeCounter(
-                control.count.makeParams(Utils.ceilLog2(totalPixelAddress))
-                .withInitValue(0l)
-                .withInc(ctr.getKernelIterations() % totalPixelAddress)
-                .withMax(totalPixelAddress)
-                .withEnable(masterChain.getCounterWrap(weightUsageIter)
-                            & kernelIter.eq(ctr.getKernelIterations() - 1))
-            ).getCount();
-        pixelAddress = pixelAddressBase + kernelIter.cast(
-                dfeUInt(Utils.ceilLog2(totalPixelAddress)));
+        if (totalPixelAddress == 1) {
+            pixelAddress = constant.var(dfeUInt(1), 0);
+
+        } else {
+            DFEVar pixelAddressBase = control.count.makeCounter(
+                    control.count.makeParams(Utils.ceilLog2(totalPixelAddress))
+                    .withInitValue(0l)
+                    .withInc(ctr.getKernelIterations() % totalPixelAddress)
+                    .withMax(totalPixelAddress)
+                    .withEnable(masterChain.getCounterWrap(weightUsageIter)
+                                & kernelIter.eq(ctr.getKernelIterations() - 1))
+                ).getCount();
+            pixelAddress = pixelAddressBase + kernelIter.cast(
+                    dfeUInt(Utils.ceilLog2(totalPixelAddress)));
+
+        }
     }
 
     public DFEVar getWeightsInputFlag() {

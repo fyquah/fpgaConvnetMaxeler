@@ -622,6 +622,7 @@ void Convnet::load_weights_from_files(std::vector<std::string> filenames, file_f
 void Convnet::max_init_weights()
 {
     uint64_t start = 0;
+    uint64_t address = 0;
     std::vector<int8_t*> buffer_ptrs;
 
     for (int i = 0; i < conv_layer_params.size() ; i++) {
@@ -637,7 +638,7 @@ void Convnet::max_init_weights()
                 * sizeof(float);
 
         log_stdout(INFO) << "Initializing weights in LMEM at layer " << i << std::endl;
-        max_set_param_uint64t(write_action, "start", 0);
+        max_set_param_uint64t(write_action, "start", address);
         max_set_param_uint64t(write_action, "size", stream_size);
         max_queue_input(
                 write_action,
@@ -647,6 +648,8 @@ void Convnet::max_init_weights()
         max_run(dfe, write_action);
         max_actions_free(write_action);
         log_stdout(INFO) << "Done!" << std::endl;
+
+        address += stream_size;
     }
 
 }
@@ -737,6 +740,7 @@ std::vector<float> Convnet::max_run_inference(
     if (benchmark) {
         report_conv_performance(network_params, N, t_begin, t_end);
     }
+    log_stdout(INFO) << "Done!" << std::endl;
 
     return ret;
 }
