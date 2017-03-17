@@ -163,11 +163,6 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
 
                 output_y[workerId] <== stream.offset(
                         pixelWindow, offset, minmax.getFirst(), minmax.getSecond());
-
-                streamlookAheadIter.simWatch("lookahead");
-                iter.simWatch("iter");
-                toMuxedPixel(iter, channelList)[0].simWatch("original");
-                output_y[workerId][0].simWatch("output");
             }
             io.output(getOutputName(workerId),
                       output_y[workerId],

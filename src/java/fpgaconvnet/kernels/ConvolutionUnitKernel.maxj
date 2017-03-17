@@ -114,13 +114,7 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
             }
 
             io.output(getOutputName(workerId), output, outputVectorType, outputControlFlag);
-
-            lookAheadCounter.getChannelIter().simWatch("channel_iter");
-            lookAheadCounter.getInputControlFlag().simWatch("input_control_flag");
-            pixelVars[0].simWatch("pixel");
-            weightVars[0][0].simWatch("weight");
         }
-
     }
 
     /* initCycles used only in CPU initialization. */
