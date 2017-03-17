@@ -34,6 +34,7 @@ std::vector<float> run_feature_extraction(
 
     /* TODO: load the weights from somewhere. */
     convnet.randomize_weights();
+    convnet.max_init_weights();
 
     /* warm up the DFE with the weights. */
     extracted_features = convnet.max_run_inference(N, images, false);
