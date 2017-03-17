@@ -264,6 +264,13 @@ public class ParametersTransformer {
                         "lookAhead must be > 1, a factor of total OUTPUT pixels and must be <="
                         + " the total number of pixels");
             }
+            if (bramPerConvolver >= ctr.getSchedulerIterations() * ctr.getConvolutionIterations()
+                    && layer.getConv().getLookAhead() != 1) {
+                raiseError(layer.getLayerId(),
+                        "lookAhead must be 1, when entier layer weights are stored on the"
+                        + " on-chip memory");
+
+            }
             break;
 
         case POOL:
