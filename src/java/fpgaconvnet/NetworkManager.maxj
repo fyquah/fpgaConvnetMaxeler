@@ -129,12 +129,6 @@ public class NetworkManager extends CustomManager {
 
     private void linkKernels() {
 
-        /* Weights initialization. */
-        DFELink cpu2lmem = lmem.addStreamToLMem(
-                "cpu2lmem", LMemCommandGroup.MemoryAccessPattern.LINEAR_1D);
-        DFELink weightsFromCpu = addStreamFromCPU("weights_in");
-        cpu2lmem <== weightsFromCpu;
-
         /* Data tranfer */
         DFELink fromCpu = addStreamFromCPU("fromcpu");
         DFELink toCpu = addStreamToCPU("tocpu");
@@ -156,11 +150,22 @@ public class NetworkManager extends CustomManager {
             }
 
             for (Tuple3<String, DFELink, Integer> link : computationChains[i].getLMemInputs()) {
+                if (lmem == null) {
+                    lmem = addLMemInterface();
+                }
                 DFELink dataStream = lmem.addStreamFromLMem(
                         link.getFirst(),
                         LMemCommandGroup.MemoryAccessPattern.LINEAR_1D);
                 link.getSecond() <== dataStream;
             }
+        }
+
+        /* Weights initialization. */
+        if (lmem != null) {
+            DFELink cpu2lmem = lmem.addStreamToLMem(
+                    "cpu2lmem", LMemCommandGroup.MemoryAccessPattern.LINEAR_1D);
+            DFELink weightsFromCpu = addStreamFromCPU("weights_in");
+            cpu2lmem <== weightsFromCpu;
         }
     }
 
@@ -168,7 +173,7 @@ public class NetworkManager extends CustomManager {
         super(engineParameters);
         networkParameters = networkParametersIn;
         computationChains = new ArrayList<ComputationChain>();
-        lmem = addLMemInterface();
+        lmem = null;
 
         config.setAllowNonMultipleTransitions(true);
         debug.setDebugLevel(new DebugLevel().setHasStreamStatus(true));
@@ -182,6 +187,8 @@ public class NetworkManager extends CustomManager {
 
         /* Interfaces */
         createSLiCinterface(interfaceDefault());
-        createSLiCinterface(interfaceWrite("writeLMem"));
+        if (lmem != null) {
+            createSLiCinterface(interfaceWrite("writeLMem"));
+        }
     }
 }
