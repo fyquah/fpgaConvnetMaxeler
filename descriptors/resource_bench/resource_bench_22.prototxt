@@ -1,11 +1,11 @@
 layer {
     input_height: 224
     input_width: 224
-    num_inputs: 3
-    num_outputs: 96
+    num_inputs: 96
+    num_outputs: 256
 
     conv: {
-        kernel_size: 11
+        kernel_size: 5
         pad: 1
 
         worker_factor: 1
