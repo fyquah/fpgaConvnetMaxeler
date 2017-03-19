@@ -95,6 +95,7 @@ public class ParametersTransformer {
 
         if (paramsCase.equals(LayerParameter.ParamsCase.CONV)) {
             ConvolutionParameter convParams = layerParameter.getConv();
+            int bramFactor = layerParameter.getConv().getBramFactor();
 
             if (!convParams.hasKernelSize() || convParams.getKernelSize() % 2 == 0) {
                 raiseError(layer_id, ("Missing /invalid conv kernel_size. Conv's Kernel size "
@@ -102,6 +103,15 @@ public class ParametersTransformer {
             }
             if (!layerParameter.hasNumOutputs() || layerParameter.getNumOutputs() == 0) {
                 raiseError(layer_id, "numOutputs must be a positive integer in conv layers!");
+            }
+            if (!layerParameter.getConv().hasBramFactor()) {
+                bramFactor =
+                        convParams.getWorkerFactor()
+                        * convParams.getConvFoldingFactor()
+                        * Utils.divCeil(layerParameter.getNumInputs(),
+                                        convParams.getWorkerFactor())
+                        * Utils.divCeil(layerParameter.getNumOutputs(),
+                                        convParams.getConvFoldingFactor());
             }
 
             stride = convParams.getStride();
@@ -114,6 +124,7 @@ public class ParametersTransformer {
                     ConvolutionParameter.newBuilder()
                     .mergeFrom(convParams)
                     .setStride(stride)
+                    .setBramFactor(bramFactor)
                     .build());
 
         } else if (paramsCase.equals(LayerParameter.ParamsCase.POOL)) {
@@ -238,6 +249,7 @@ public class ParametersTransformer {
             IterationCounter ctr = new IterationCounter(layer);
             int bramPerConvolver = layer.getConv().getBramFactor()
                     / (layer.getConv().getWorkerFactor() * layer.getConv().getConvFoldingFactor());
+
             if (bramPerConvolver == 0 || layer.getConv().getBramFactor() % bramPerConvolver != 0) {
                 raiseError(layer.getLayerId(),
                         "bram_factor in convolution layer must be a multiple of"

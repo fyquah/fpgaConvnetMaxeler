@@ -8,9 +8,9 @@ layer {
     conv: {
         kernel_size: 5
 
-        worker_factor: 5
-        conv_folding_factor: 8
-        kernel_folding_factor: 25
+        worker_factor: 15
+        conv_folding_factor: 7
+        kernel_folding_factor: 3
         look_ahead: 1
     }
 }

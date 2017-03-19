@@ -80,7 +80,7 @@ message ConvolutionParameter
      * means less frequent off-chip memory lookup, but higher on-chip memory
      * usage.
      */
-    optional uint32 bram_factor = 4;
+    optional uint32 bram_factor = 4;  /* Assigns to fully on-chip when this is not set. */
     optional uint32 look_ahead = 5 [default = 1]; /* Must be a factor of image size. */
 
     optional uint32 worker_factor = 1;         // 1 <= x <= num_inputs
