@@ -89,11 +89,6 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
                     & row.eq(inputDimension.height() - 1));
         DFEVar outputControlFlag = strideCounter.isOutputReady() & ~isBorder(row, col);
 
-        row.simWatch("row");
-        col.simWatch("col");
-        iter.simWatch("iter");
-        outputControlFlag.simWatch("outputControlFlag");
-
         if (layerParams.getIsFirstLayer()) {
             /* First layer - cast from dfefloat to fixed point. */
             DFEVectorType<DFEVar> rawInputVectorType = new DFEVectorType<DFEVar>(
@@ -110,11 +105,9 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
 
         for (int workerId = 0 ; workerId < workerFactor ; workerId++) {
             List<Integer> channelList = getSchedulerChannels(workerId);
-            output_y[workerId] <== toMuxedPixel(iter, channelList);
-            io.output(getOutputName(workerId),
-                      output_y[workerId],
-                      outputVectorType,
-                      outputControlFlag);
+            DFEVector<DFEVar> pixelWindow = toMuxedPixelChecked(iter, channelList);
+
+            io.output(getOutputName(workerId), pixelWindow, outputVectorType, outputControlFlag);
         }
     }
 
@@ -151,11 +144,15 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
         return newVector;
     }
 
-    protected DFEVector<DFEVar> toMuxedPixel(DFEVar iter, List<Integer> channels) {
+    protected DFEVector<DFEVar> toMuxedPixelChecked(DFEVar iter, List<Integer> channels) {
         Utils.assertTrue(channels.size() == getSchedulerIterations());
+        return toMuxedPixel(iter, channels);
+    }
 
-        if (getSchedulerIterations() == 1) {
-            Utils.assertTrue(channels.size() == 1);
+    protected DFEVector<DFEVar> toMuxedPixel(DFEVar iter, List<Integer> channels) {
+        Utils.assertTrue(channels.size() != 0);
+
+        if (channels.size() == 1) {
             return slidingWindows[channels[0]].output;
         }
 
@@ -169,4 +166,6 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
         }
         return control.mux(iter, arr);
     }
+
+
 }

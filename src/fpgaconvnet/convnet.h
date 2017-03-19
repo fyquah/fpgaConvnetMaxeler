@@ -65,6 +65,7 @@ void allign_and_place_kernel_weights(
 void set_log_prefix(const std::string & prefix);
 
 uint64_t calc_total_kernel_weights(const protos::LayerParameter & layer);
+uint64_t calc_conv_in_size(const protos::Network & network);
 
 
 class Exception : public std::exception {

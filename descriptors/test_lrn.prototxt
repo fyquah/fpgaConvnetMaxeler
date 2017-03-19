@@ -1,0 +1,13 @@
+layer {
+    input_height: 100
+    input_width: 100
+    num_inputs: 128
+    num_outputs: 128
+
+    lrn: {
+        local_size: 5
+        alpha: 0.0001
+        beta: 0.75
+        norm_region: ACROSS_CHANNELS
+    }
+}

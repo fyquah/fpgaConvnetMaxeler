@@ -12,4 +12,5 @@ PRJ=fpgaConvNetMaxeler
 include $(WHEREISROOT)/Makefile.Maia.hardware
 
 # Using common compillation targets and compiler settings
-include $(WHEREISROOT)/Makefile.common
+include $(WHEREISROOT)/Makefile.base
+include $(WHEREISROOT)/Makefile.resource.bench

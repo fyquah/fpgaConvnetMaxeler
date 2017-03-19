@@ -8,23 +8,29 @@ import java.util.ArrayList;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Count;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Count.Counter;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.CounterChain;
-import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Stream.OffsetExpr;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.memory.Memory;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEType;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVector;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVectorType;
 import com.maxeler.maxcompiler.v2.kernelcompiler.KernelParameters;
 
+import fpgaconvnet.IterationCounter;
 import fpgaconvnet.GlobalConfig;
 import fpgaconvnet.Utils;
 import fpgaconvnet.protos.Parameters.LayerParameter;
+import fpgaconvnet.protos.Parameters.ConvolutionParameter;
 
 
 public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
+
     private final List<Memory<DFEVar>> biasRoms;
     private final LayerParameter layerParams;
+    private final ConvolutionParameter convParams;
     private final DFEVectorType<DFEVar> inputVectorType;
     private final DFEVectorType<DFEVar> outputVectorType;
+    private final IterationCounter ctr;
+    private final DFEVar batchCounter;
 
     private List<DFEVar> map(List<DFEVector<DFEVar>> list, int index) {
         /* Gets the index-th element of every vector in list. */
@@ -39,10 +45,73 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
         return (x > 0 ? x : 0);
     }
 
+    private DFEVar getPixelIter(
+            DFEVar enable, CounterChain chain, DFEVar lookAhead, DFEVar weightIter, DFEVar kernelIter) {
+        /* Number of iterations to spend per channel. */
+        final int pixelIterations =
+                ctr.getSchedulerIterations()
+                * ctr.getConvolutionIterations()
+                * ctr.getKernelIterations();
+        final int weightsUsageCycles = ctr.getWeightIterations();
+
+        DFEVar pixelIterBase = control.count.makeCounter(
+                control.count.makeParams(Utils.ceilLog2(pixelIterations))
+                .withInitValue(0l)
+                .withInc((weightsUsageCycles * ctr.getKernelIterations()) % pixelIterations)
+                .withMax(pixelIterations)
+                .withEnable(enable
+                            & lookAhead.eq(layerParams.getConv().getLookAhead() - 1)
+                            & chain.getCounterWrap(weightIter)
+                            & kernelIter.eq(ctr.getKernelIterations() - 1))
+                .withReset(batchCounter.eq(0))
+            ).getCount();
+
+        /* Defines the stage at which we are using a particular channel. */
+        DFEVar pixelIter = dfeUInt(Utils.ceilLog2(pixelIterations)).newInstance(this);
+        optimization.pushPipeliningFactor(0.0);
+        pixelIter <== (weightIter.eq(0) & kernelIter.eq(0)
+                         ? pixelIterBase
+                         : Utils.modInc(stream.offset(pixelIter, -1), pixelIterations));
+        optimization.popPipeliningFactor();
+
+        return pixelIter;
+    }
+
+    private DFEVar getConvIter(
+            DFEVar enable, CounterChain chain, DFEVar lookAheadIter, DFEVar weightIter, DFEVar kernelIter) {
+
+        /* The number of convIter that a weightIter yields. */
+        DFEVar convIterBase = control.count.makeCounter(
+                control.count.makeParams(Utils.ceilLog2(getConvolutionIterations()))
+                .withInitValue(0)
+                .withInc(ctr.getWeightIterations() % getConvolutionIterations())
+                .withMax(getConvolutionIterations())
+                .withEnable(enable
+                            & lookAheadIter.eq(layerParams.getConv().getLookAhead() - 1)
+                            & chain.getCounterWrap(weightIter)
+                            & kernelIter.eq(ctr.getKernelIterations() - 1))
+                .withReset(batchCounter.eq(0))
+            ).getCount();
+
+        DFEVar convIter = dfeUInt(
+                Utils.ceilLog2(getConvolutionIterations())).newInstance(this);
+        optimization.pushPipeliningFactor(0.0);
+        convIter <== (kernelIter.eq(0)
+                      ? (weightIter.eq(0)
+                         ? convIterBase
+                         : Utils.modInc(stream.offset(convIter, -1), getConvolutionIterations()))
+                      : stream.offset(convIter, -1));
+        optimization.popPipeliningFactor();
+
+        return convIter;
+    }
+
     public ConvolutionAccumulatorKernel(KernelParameters kp, LayerParameter params) {
         super(kp, params);
 
+        ctr = new IterationCounter(params);
         layerParams = params;
+        convParams = params.getConv();
         inputVectorType = new DFEVectorType<DFEVar>(
                 GlobalConfig.dataType, layerParams.getConv().getConvFoldingFactor());
         outputVectorType = new DFEVectorType<DFEVar>(
@@ -72,14 +141,82 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
         DFEVar isInitializingWeights = initWeightsFlag & ~initializationComplete;
 
         // Runtime Counters and loop variables
-        OffsetExpr loopOffsetExpr = stream.makeOffsetAutoLoop(getOffsetExprName());
-        CounterChain chain = control.count.makeCounterChain(~isInitializingWeights);
-        DFEVar schedulerIter = Utils.chainCounterOrZero(this, chain, getSchedulerIterations());
-        DFEVar convIter = Utils.chainCounterOrZero(this, chain, getConvolutionIterations());
-        DFEVar kernelIter = Utils.chainCounterOrZero(this, chain, getKernelIterations());
-        DFEVar streamCounter = control.count.simpleCounter(
-                32,
-                getKernelIterations() * getConvolutionIterations() * getSchedulerIterations());
+        batchCounter = control.count.makeCounter(
+                control.count.makeParams(Utils.ceilLog2(
+                        convParams.getLookAhead() * ctr.getTotalIterations()))
+                .withInitValue(0l)
+                .withInc(1l)
+                .withMax(convParams.getLookAhead() * ctr.getTotalIterations())
+                .withEnable(~isInitializingWeights)
+            ).getCount();
+        DFEVar convIter;
+        DFEVar lookAheadIter;
+        DFEVar pixelIter;
+        DFEVar outputControlFlag;
+
+        if (convParams.getLookAhead() == 1) {
+            final int totalIter =
+                    getKernelIterations() * getConvolutionIterations() * getSchedulerIterations();
+            CounterChain chain = control.count.makeCounterChain(~isInitializingWeights);
+            Utils.chainCounterOrZero(this, chain, getSchedulerIterations());
+            convIter = Utils.chainCounterOrZero(this, chain, getConvolutionIterations());
+            Utils.chainCounterOrZero(this, chain, getKernelIterations());
+            pixelIter = control.count.makeCounter(
+                    control.count.makeParams(Utils.ceilLog2(totalIter))
+                    .withInitValue(0l)
+                    .withInc(1)
+                    .withMax(totalIter)
+                    .withEnable(~isInitializingWeights)
+                ).getCount();
+
+            lookAheadIter = constant.var(dfeBool(), 0);
+            outputControlFlag = ~isInitializingWeights & pixelIter.eq(totalIter - 1);
+
+        } else {
+
+            CounterChain chain = control.count.makeCounterChain(~isInitializingWeights);
+            DFEVar loopIter = Utils.chainCounterOrZero(this, chain, ctr.getRevisitIterations());;
+            lookAheadIter = Utils.chainCounterOrZero(this, chain, convParams.getLookAhead());
+            DFEVar weightIter;
+
+            if (ctr.getLastWeightIterations() == ctr.getWeightIterations()) {
+                weightIter = Utils.chainCounterOrZero(this, chain, ctr.getWeightIterations());
+
+            } else {
+                final int totalBeforeLastloopIterations =
+                        (ctr.getRevisitIterations() - 1)
+                        * ctr.getWeightIterations()
+                        * ctr.getKernelIterations()
+                        * convParams.getLookAhead();
+                DFEType type = dfeUInt(1 + Utils.ceilLog2(ctr.getWeightIterations()));
+                DFEVar muxedWeightUsageCycles = (
+                        (batchCounter < totalBeforeLastloopIterations)
+                        ? constant.var(type, ctr.getWeightIterations())
+                        : constant.var(type, ctr.getLastWeightIterations()));
+                System.out.println(totalBeforeLastloopIterations);
+                muxedWeightUsageCycles.simWatch("muxedWeightsCycles");
+                weightIter = chain.addCounter(muxedWeightUsageCycles, 1);
+            }
+
+            DFEVar kernelIter = Utils.chainCounterOrZero(this, chain, getKernelIterations());
+
+            convIter = getConvIter(
+                    ~isInitializingWeights, chain, lookAheadIter, weightIter, kernelIter);
+            pixelIter = getPixelIter(
+                    ~isInitializingWeights, chain, lookAheadIter, weightIter, kernelIter);
+
+            outputControlFlag =
+                    ~isInitializingWeights
+                    & loopIter.eq(ctr.getRevisitIterations() - 1)
+                    & weightIter.eq(ctr.getLastWeightIterations() - 1)
+                    & kernelIter.eq(ctr.getKernelIterations() - 1);
+        }
+
+        batchCounter.simWatch("batchCounter");
+        isInitializingWeights.simWatch("initializingWeights");
+        lookAheadIter.simWatch("lookAheadIter");
+        convIter.simWatch("convIter");
+        outputControlFlag.simWatch("outputControlFlag");
 
         // Kernel IO interfaces
         DFEVar rawBiasInput = io.input(getBiasInputName(),
@@ -87,15 +224,11 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
                                        isInitializingWeights);
         DFEVar biasInput = rawBiasInput.cast(GlobalConfig.dataType);
         DFEVar inputControlFlag = ~isInitializingWeights;
-        DFEVar outputControlFlag =
-                ~isInitializingWeights
-                & schedulerIter.eq(getSchedulerIterations() - 1)
-                & convIter.eq(getConvolutionIterations() - 1)
-                & kernelIter.eq(getKernelIterations() - 1);
 
         for (int i = 0 ; i < layerParams.getConv().getWorkerFactor() ; i++) {
             inputVectors.add(io.input(getInputName(i), inputVectorType, inputControlFlag));
         }
+
         if (layerParams.getIsLastLayer()) {
             /* Last layer - cast from fixed point to dfe float. */
             DFEVectorType<DFEVar> rawOutputVectorType = new DFEVectorType<DFEVar>(
@@ -111,13 +244,6 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
             io.output(getOutputName(), output, outputVectorType, outputControlFlag);
         }
 
-        // logic for initializing weights
-        debug.simPrintf(
-                isInitializingWeights & (initChannel < params.getNumOutputs()),
-                "AccumulatorInit | layer %d | Writing %.3f to %d\n",
-                params.getLayerId(),
-                biasInput,
-                initChannel.cast(dfeUInt(Utils.ceilLog2(params.getNumOutputs()))));
         for (int i = 0 ; i < params.getNumOutputs() ; i++) {
             biasRoms[i].write(
                     constant.var(dfeUInt(1), 0),
@@ -125,36 +251,64 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
                     isInitializingWeights & (initChannel.eq(i)));
         }
 
+        List<DFEVector<DFEVar>> lookAheadOutputs = new ArrayList<DFEVector<DFEVar>>();
+
         // logic for accumulating outputs
-        for (int channel = 0 ; channel < layerParams.getNumOutputs() ; channel++) {
-            final int convFoldingFactor = layerParams.getConv().getConvFoldingFactor();
-            DFEVar acc = GlobalConfig.dataType.newInstance(this);
-            DFEVar initFlag = streamCounter.eq(
-                    (channel / layerParams.getConv().getConvFoldingFactor()));
-            DFEVar sumVars = Utils.treeReduceAdd(map(inputVectors, channel % convFoldingFactor));
-            DFEVar channelOutputFlag = (
-                    convIter.eq(channel / layerParams.getConv().getConvFoldingFactor()));
-            DFEVar muxedSumVars = channelOutputFlag ? sumVars : 0.0;
-            DFEVar bias = biasRoms[channel].read(constant.var(dfeUInt(1), 0));
-            DFEVar carriedSum = stream.offset(acc, -loopOffsetExpr);
+        for (int lookAhead = 0; lookAhead < convParams.getLookAhead() ; lookAhead++) {
+            DFEVector<DFEVar> lookAheadOutput = outputVectorType.newInstance(this);
 
-            // push and pop pipelining factor required to make sure this accumulator runs at
-            // 0-tick latency (i.e: stream.offset(-1) works)
-            optimization.pushPipeliningFactor(0);
-            DFEVar prevAcc = initFlag ? bias : carriedSum;
-            optimization.popPipeliningFactor();
+            for (int channel = 0 ; channel < layerParams.getNumOutputs() ; channel++) {
 
-            acc <== muxedSumVars + prevAcc;
+                final int convFoldingFactor = layerParams.getConv().getConvFoldingFactor();
+                DFEVar acc = GlobalConfig.dataType.newInstance(this);
+                DFEVar initFlag =
+                        lookAheadIter.eq(lookAhead)
+                        & pixelIter.eq(
+                            (channel / layerParams.getConv().getConvFoldingFactor()));
+                DFEVar sumVars = Utils.treeReduceAdd(map(inputVectors, channel % convFoldingFactor));
+                DFEVar channelOutputFlag = (
+                        lookAheadIter.eq(lookAhead)
+                        & convIter.eq(channel / layerParams.getConv().getConvFoldingFactor()));
+                DFEVar muxedSumVars = channelOutputFlag ? sumVars : 0.0;
+                DFEVar bias = biasRoms[channel].read(constant.var(dfeUInt(1), 0));
+                DFEVar carriedSum = stream.offset(acc, -1);
 
-            if (layerParams.getActivation() == LayerParameter.Activation.None) {
-                output[channel] <== acc;
+                // push and pop pipelining factor required to make sure this accumulator runs at
+                // 0-tick latency (i.e: stream.offset(-1) works)
+                optimization.pushPipeliningFactor(0);
+                DFEVar prevAcc = initFlag ? bias : carriedSum;
+                optimization.popPipeliningFactor();
 
-            } else if (layerParams.getActivation() == LayerParameter.Activation.Relu) {
-                output[channel] <== relu(acc);
+                acc <== muxedSumVars + prevAcc;
+                lookAheadOutput[channel] <== acc;
 
-            } else {
-                throw new RuntimeException("Unsupported activation type");
+                if (channel == 0) {
+                    sumVars.simWatch("sumVars_" + lookAhead);
+                }
             }
+
+            lookAheadOutputs.add(lookAheadOutput);
+        }
+
+        DFEVector<DFEVar> chosen;
+        if (convParams.getLookAhead() == 1) {
+            chosen = lookAheadOutputs[0];
+
+        } else {
+            chosen = control.mux(lookAheadIter, lookAheadOutputs);
+
+        }
+
+        if (layerParams.getActivation() == LayerParameter.Activation.None) {
+            output <== chosen;
+
+        } else if (layerParams.getActivation() == LayerParameter.Activation.Relu) {
+            for (int i = 0 ; i < layerParams.getNumOutputs() ; i++) {
+                output[i] <== relu(chosen[i]);
+            }
+
+        } else {
+            throw new RuntimeException("Unsupported activation type");
         }
 
         // debugging output

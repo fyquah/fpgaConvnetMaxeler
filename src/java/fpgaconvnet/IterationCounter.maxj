@@ -1,18 +1,62 @@
 package fpgaconvnet;
 
-import fpgaconvnet.protos.Parameters;
+import fpgaconvnet.protos.Parameters.LayerParameter;
+import fpgaconvnet.protos.Parameters.ConvolutionParameter;
 
 
 public class IterationCounter {
 
-    private final Parameters.LayerParameter layerParams;
+    private final LayerParameter layerParams;
+    private final ConvolutionParameter convParams;
 
-    public IterationCounter(Parameters.LayerParameter argLayerParams) {
+    public IterationCounter(LayerParameter argLayerParams) {
         layerParams = argLayerParams;
+        convParams = layerParams.getConv();
     }
 
     public int getTotalIterations() {
         return getKernelIterations() * getConvolutionIterations() * getSchedulerIterations();
+    }
+
+    public int getRevisitIterations() {
+        return Utils.divCeil(
+                getConvolutionIterations() * getSchedulerIterations(), getWeightIterations());
+    }
+
+    public int getLastWeightIterations() {
+        // This is definitely divisible.
+        int romPerConvolver =
+                convParams.getBramFactor()
+                / (convParams.getWorkerFactor() * convParams.getConvFoldingFactor());
+
+        if (romPerConvolver < getConvolutionIterations()) {
+            return getWeightIterations();
+
+        } else {
+            int ret = (
+                    getSchedulerIterations() * getConvolutionIterations()) % romPerConvolver;
+
+            if (ret == 0) {
+                return getWeightIterations();
+            } else {
+                return ret;
+            }
+        }
+    }
+
+    public int getWeightIterations() {
+        final int totalRomSize =
+                getConvolutionIterations() * getSchedulerIterations()
+                * (convParams.getWorkerFactor() * convParams.getConvFoldingFactor());
+
+        if (convParams.getBramFactor() >= totalRomSize) {
+            return getConvolutionIterations() * getSchedulerIterations();
+
+        } else {
+            return convParams.getBramFactor()
+                    / (convParams.getWorkerFactor() * convParams.getConvFoldingFactor());
+
+        }
     }
 
     /* The number of cycles to perform _one_ convolution */
@@ -33,5 +77,4 @@ public class IterationCounter {
     public int getSchedulerIterations() {
         return Utils.divCeil(layerParams.getNumInputs(), layerParams.getConv().getWorkerFactor());
     }
-
 }

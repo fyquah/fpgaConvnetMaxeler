@@ -352,14 +352,20 @@ public class Utils {
     public static DFEVar chainCounterOrZero(
             KernelLib kernel,
             CounterChain chain,
-            int total) {
-        final int inc = 1;
-
+            int total,
+            int inc) {
         if (total != 1) {
             return chain.addCounter(total, inc);
         }
 
         return kernel.constant.var(Kernel.dfeUInt(1), 0);
+    }
+
+    public static DFEVar chainCounterOrZero(
+            KernelLib kernel,
+            CounterChain chain,
+            int total) {
+        return chainCounterOrZero(kernel, chain, total, 1);
     }
 
     public static DFEVar simpleCounter(KernelLib k, DFEVar x, int inc) {
@@ -402,6 +408,24 @@ public class Utils {
         return new Dimension(layer.getInputHeight(), layer.getInputWidth(), layer.getNumInputs());
     }
 
+    public static class Pair<P, Q> {
+        final private P first;
+        final private Q second;
+
+        public Pair(P a, Q b) {
+            first = a;
+            second = b;
+        }
+
+        public P getFirst() {
+            return first;
+        }
+
+        public Q getSecond() {
+            return second;
+        }
+    }
+
     public static class Tuple3<P, Q, R> {
         final private P first;
         final private Q second;
@@ -424,5 +448,9 @@ public class Utils {
         public R getThird() {
             return third;
         }
+    }
+
+    public static DFEVar modInc(DFEVar x, int cap) {
+        return (x.eq(cap - 1) ? 0 : x + 1);
     }
 }

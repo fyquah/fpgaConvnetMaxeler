@@ -10,8 +10,10 @@ import com.maxeler.maxcompiler.v2.managers.engine_interfaces.InterfaceParam;
 
 import fpgaconvnet.protos.Parameters.LayerParameter;
 import fpgaconvnet.kernels.ConvolutionSchedulerKernel;
+import fpgaconvnet.kernels.ConvolutionTransposerKernel;
 import fpgaconvnet.kernels.ConvolutionAccumulatorKernel;
 import fpgaconvnet.kernels.ConvolutionUnitKernel;
+import fpgaconvnet.kernels.ConvolutionUnitKernel.WeightsLoadStrategy;
 import fpgaconvnet.Utils.Tuple3;
 
 
@@ -19,6 +21,7 @@ public class ConvolutionLayer implements ComputationChain {
     private final LayerParameter layer;
     private final CustomManager manager;
     private final BoxedKernelBlock<ConvolutionSchedulerKernel> scheduler;
+    private final BoxedKernelBlock<ConvolutionTransposerKernel> transposer;
     private final BoxedKernelBlock<ConvolutionUnitKernel> convolutionUnit;
     private final BoxedKernelBlock<ConvolutionAccumulatorKernel> accumulator;
     
@@ -31,6 +34,19 @@ public class ConvolutionLayer implements ComputationChain {
                 new ConvolutionSchedulerKernel(
                         manager.makeKernelParameters("ConvolutionScheduler_" + layer.getLayerId()),
                                                      layer));
+
+        if (layer.getConv().getLookAhead() > 1) {
+            transposer = new BoxedKernelBlock<ConvolutionTransposerKernel>(
+                manager,
+                new ConvolutionTransposerKernel(
+                        manager.makeKernelParameters("ConvolutionTransposer_" + layer.getLayerId()),
+                                                     layer));
+
+        } else {
+            transposer = null;
+
+        }
+
         accumulator = new BoxedKernelBlock<ConvolutionAccumulatorKernel>(
                 manager,
                 new ConvolutionAccumulatorKernel(
@@ -46,6 +62,10 @@ public class ConvolutionLayer implements ComputationChain {
                         layer));
 
         joinKernels();
+
+        System.out.println(
+                "Layer " + layer.getLayerId() + " | ConvolutionUnit Caching strategy = "
+                + convolutionUnit.getKernel().getWeightsLoadStrategy());
     }
 
     public DFELink getInput() {
@@ -57,25 +77,32 @@ public class ConvolutionLayer implements ComputationChain {
     }
 
     public void setKernelTimings(EngineInterface ei, InterfaceParam numberOfImages, InterfaceParam init) {
-        /*
-         * scheduler and convolution units do not have a loop offset, so we will not
-         * need to deal with ei.getAutoLoopOffset.
-         */
+        /* Scheduler */
         ei.setTicks(scheduler.getKernel().getName(),
                     numberOfImages * scheduler.getKernel().cyclesPerImage());
 
-        ei.setTicks(convolutionUnit.getKernel().getName(),
+        /* transposer */
+        if (transposer != null) {
+            ei.setTicks(transposer.getKernel().getName(),
+                        numberOfImages * transposer.getKernel().cyclesPerImage());
+        }
+
+        /* convolutionUnit */
+        InterfaceParam convUnitTicks;
+        if (convolutionUnit.getKernel().getWeightsLoadStrategy()
+                    == WeightsLoadStrategy.INIT_FROM_CPU) {
+            int initCycles = convolutionUnit.getKernel().initCycles();
+            convUnitTicks =
                     numberOfImages * convolutionUnit.getKernel().cyclesPerImage()
-                    + (init ? convolutionUnit.getKernel().initCycles() : 0));
+                    + (init ? initCycles : 0);
+        } else {
+            convUnitTicks = numberOfImages * convolutionUnit.getKernel().cyclesPerImage();
+        }
+        ei.setTicks(convolutionUnit.getKernel().getName(), convUnitTicks);
 
         /* Accumulator */
-        InterfaceParam latency = ei.getAutoLoopOffset(
-                accumulator.getKernel().getName(),
-                accumulator.getKernel().getOffsetExprName());
-        ei.ignoreAutoLoopOffset(accumulator.getKernel().getName(),
-                                accumulator.getKernel().getOffsetExprName());
         ei.setTicks(accumulator.getKernel().getName(),
-                    numberOfImages * accumulator.getKernel().cyclesPerImage() * latency
+                    numberOfImages * accumulator.getKernel().cyclesPerImage()
                     + (init ? accumulator.getKernel().initCycles() : 0));
     }
 
@@ -88,6 +115,16 @@ public class ConvolutionLayer implements ComputationChain {
         for (int i = 0 ; i < layer.getConv().getWorkerFactor() ; i++) {
             DFELink pixelsFrom = scheduler.getBlock().getOutput(
                         scheduler.getKernel().getOutputName(i));
+
+            if (transposer != null) {
+                DFELink pixelsTo = transposer.getBlock().getInput(
+                        transposer.getKernel().getInputName(i));
+                pixelsTo <== pixelsFrom;
+
+                pixelsFrom = transposer.getBlock().getOutput(
+                        transposer.getKernel().getOutputName(i));
+            }
+
             DFELink pixelsTo = convolutionUnit.getBlock().getInput(
                         convolutionUnit.getKernel().getInputName(i));
 
@@ -106,22 +143,50 @@ public class ConvolutionLayer implements ComputationChain {
     }
 
     public void setScalar(EngineInterface ei, String name, InterfaceParam param) {
-        ei.setScalar(convolutionUnit.getKernel().getName(), name, param);
+        if (name.equals("init")) {
+            if (convolutionUnit.getKernel().getWeightsLoadStrategy()
+                    == WeightsLoadStrategy.INIT_FROM_CPU) {
+                ei.setScalar(convolutionUnit.getKernel().getName(), "init", param);
+            }
+        } else {
+            ei.setScalar(convolutionUnit.getKernel().getName(), name, param);
+        }
         ei.setScalar(accumulator.getKernel().getName(), name, param);
     }
 
     public List<Tuple3<String, DFELink, Integer>> getInitializerInputs() {
         ArrayList<Tuple3<String, DFELink, Integer>> ret = new ArrayList<Tuple3<String, DFELink, Integer>>();
-        ret.add(new Tuple3<String, DFELink, Integer>(
-                String.format("kernel_%d", layer.getLayerId()),
-                convolutionUnit.getBlock().getInput(
-                    convolutionUnit.getKernel().getWeightsInputName()),
-                convolutionUnit.getKernel().initStreamSize()));
+        if (convolutionUnit.getKernel().getWeightsLoadStrategy()
+                == WeightsLoadStrategy.INIT_FROM_CPU) {
+            ret.add(new Tuple3<String, DFELink, Integer>(
+                    String.format("kernel_%d", layer.getLayerId()),
+                    convolutionUnit.getBlock().getInput(
+                        convolutionUnit.getKernel().getCpuWeightsInputName()),
+                    convolutionUnit.getKernel().initStreamSize()));
+        }
         ret.add(new Tuple3<String, DFELink, Integer>(
                 String.format("bias_%d", layer.getLayerId()),
                 accumulator.getBlock().getInput(
                     accumulator.getKernel().getBiasInputName()),
                 accumulator.getKernel().initCycles()));
+        return ret;
+    }
+
+    public List<Tuple3<String, DFELink, Integer>> getLMemInputs() {
+        ArrayList<Tuple3<String, DFELink, Integer>> ret =
+                new ArrayList<Tuple3<String, DFELink, Integer>>();
+
+        if (convolutionUnit.getKernel().getWeightsLoadStrategy()
+                == WeightsLoadStrategy.INIT_FROM_CPU) {
+            return ret;
+        }
+
+        ret.add(new Tuple3<String, DFELink, Integer>(
+                    String.format("weights_lmem_%d", layer.getLayerId()),
+                    convolutionUnit.getBlock().getInput(
+                        convolutionUnit.getKernel().getLMemWeightName()),
+                    convolutionUnit.getKernel().lmemStreamSizePerPixel()));
+
         return ret;
     }
 

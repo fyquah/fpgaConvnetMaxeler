@@ -1,0 +1,217 @@
+package fpgaconvnet.kernels;
+
+import java.util.List;
+import java.util.ArrayList;
+
+import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
+import com.maxeler.maxcompiler.v2.kernelcompiler.KernelParameters;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVector;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVectorType;
+
+import fpgaconvnet.GlobalConfig;
+import fpgaconvnet.Utils;
+import fpgaconvnet.protos.Parameters.LayerParameter;
+import fpgaconvnet.protos.Parameters.LrnParameter;
+
+
+public class LrnLayerKernel extends Kernel {
+
+    private final DFEVector<DFEVar> input;
+    private final DFEVector<DFEVar> output;
+    private final DFEVectorType<DFEVar> ioType;
+    private final DFEVectorType<DFEVar> rawIoType;
+    private final DFEVar approxFactor;
+    private final DFEVar iter;
+    private final LayerParameter layerParams;
+    private final LrnParameter lrnParams;
+    private final int channelFoldingFactor;
+
+    public int getIterations() {
+        return Utils.divCeil(layerParams.getNumInputs(),
+                             layerParams.getLrn().getChannelFoldingFactor());
+    }
+
+    public LrnLayerKernel(KernelParameters kp, LayerParameter argLayerParams) {
+        super(kp);
+
+        layerParams = argLayerParams;
+        lrnParams = layerParams.getLrn();
+        if (getIterations() == 1) {
+            iter = constant.var(dfeUInt(1), 0);
+        } else {
+            iter = control.count.simpleCounter(Utils.ceilLog2(getIterations()), getIterations());
+        }
+        channelFoldingFactor = layerParams.getLrn().getChannelFoldingFactor();
+        ioType = new DFEVectorType<DFEVar>(GlobalConfig.dataType, layerParams.getNumOutputs());
+        rawIoType = new DFEVectorType<DFEVar>(GlobalConfig.cpuType, layerParams.getNumOutputs());
+        input = ioType.newInstance(this);
+        output = ioType.newInstance(this);
+
+        if (layerParams.getLrn().getApproxMethod() == LrnParameter.ApproxMethod.BINOMIAL) {
+            approxFactor = io.scalarInput("approx_factor", GlobalConfig.cpuType).cast(
+                    GlobalConfig.dataType);
+        } else {
+            approxFactor = null;
+        }
+
+        List<DFEVar> workerOutput = new ArrayList<DFEVar>();
+
+        for (int worker = 0 ; worker < lrnParams.getChannelFoldingFactor() ; worker++) {
+            /* Get workers to calculate the LRN for every channel.
+             *
+             * The complex logic below is simply a transpose operation, i.e:
+             * [(4, 3, 0, 1, 2),
+             *  (4, 0, 1, 2, 3),
+             *  (0, 1, 2, 3, 4),
+             *  (1, 2, 3, 4, 5),
+             *  ....
+             * ]
+             *
+             * ->
+             *
+             * [control.mux(iter, input[4], input[4], input[0], input[1], ...),
+             *  control.mux(iter, input[3], input[0], input[1], input[2], ...),
+             *  control.mux(iter, input[0], input[1], input[2], input[3], ...),
+             *  control.mux(iter, input[1], input[2], input[3], input[4], ...),
+             *  control.mux(iter, input[2], input[3], input[4], input[5], ...),
+             * ]
+             *
+             */
+            List<int[]> localRegions = calcAcrossChannelLocalRegion(worker);
+            List<DFEVar> localRegionVars = new ArrayList<DFEVar>();
+
+            for (int j = 0 ; j < lrnParams.getLocalSize() ; j++) {
+                List<DFEVar> pixelLocalRegionVars = new ArrayList<DFEVar>();
+
+                for (int i = 0 ; i < localRegions.size() ; i++) {
+                    pixelLocalRegionVars.add(input[localRegions[i][j]]);
+                }
+
+                if (pixelLocalRegionVars.size() == 1) {
+                    localRegionVars.add(pixelLocalRegionVars[0]);
+                } else {
+                    localRegionVars.add(control.mux(iter.cast(dfeUInt(Utils.ceilLog2(pixelLocalRegionVars.size()))),
+                                        pixelLocalRegionVars));
+                }
+            }
+
+            workerOutput.add(computeAcrossChannel(localRegionVars));
+        }
+
+        /* Accumulate output to the relevant channels. This accumulation is similat to those
+         * in pooling layer.
+         */
+        for (int channel = 0 ; channel < layerParams.getNumOutputs() ; channel++) {
+            DFEVar acc = GlobalConfig.dataType.newInstance(this);
+            DFEVar initFlag = iter.eq(channel / channelFoldingFactor);
+            DFEVar prevAcc = stream.offset(acc, -1);
+
+            // push and pop pipelining factor required to make sure this accumulator runs at
+            // 0-tick latency (i.e: stream.offset(-1) works)
+            optimization.pushPipeliningFactor(0);
+            acc <== initFlag ? workerOutput[channel % channelFoldingFactor] : prevAcc;
+            optimization.popPipeliningFactor();
+
+            output[channel] <== acc;
+            output[channel].simWatch("output_" + channel);
+        }
+
+
+        /* Set IO interface. */
+        if (layerParams.getIsFirstLayer()) {
+            input <== io.input(getInputName(), rawIoType, iter.eq(0)).cast(ioType);
+
+        } else {
+            input <== io.input(getInputName(), ioType, iter.eq(0));
+
+        }
+
+        if (layerParams.getIsLastLayer()) {
+            io.output(getOutputName(), output.cast(rawIoType), rawIoType,
+                    iter.eq(getIterations() - 1));
+
+        } else {
+            io.output(getOutputName(), output, ioType, iter.eq(getIterations() - 1));
+
+        }
+    }
+
+    public String getInputName() {
+        return "x";
+    }
+
+    public String getOutputName() {
+        return "y";
+    }
+
+    private List<int[]> calcAcrossChannelLocalRegion(int worker) {
+        List<Integer> channelChoices = new ArrayList<Integer>();
+        List<int[]> localChannels = new ArrayList<int[]>();
+
+        for (int i = 0 ; i < getIterations() ; i++) {
+            int channel = worker + i * lrnParams.getChannelFoldingFactor();
+
+            if (channel >= layerParams.getNumOutputs()) {
+                break;
+            }
+
+            channelChoices.add(channel);
+        }
+
+        for (int i = 0 ; i < channelChoices.size() ; i++) {
+            int[] local = new int[lrnParams.getLocalSize()];
+
+            /* Works only for add localSize. */
+            for (int j = -(lrnParams.getLocalSize() / 2)
+                    ; j <= lrnParams.getLocalSize() / 2
+                    ; j++) {
+                int channel = channelChoices[i] + j;
+
+                if (channel < 0) {
+                    channel = lrnParams.getLocalSize() / 2 - j;
+                } else if (channel >= layerParams.getNumInputs()) {
+                    channel = layerParams.getNumInputs() - lrnParams.getLocalSize() / 2
+                                - (j + 1);
+                }
+
+                local[j + lrnParams.getLocalSize() / 2] = channel;
+            }
+
+            localChannels.add(local);
+        }
+
+        return localChannels;
+    }
+
+    /* TODO(fyq14): It should be, in principle, possible to precompute the squared numbers.
+     *              the resource savings will not be too significant in multiple FPGA cases,
+     *              because devices with LrnLayers as such would not have used up many multipliers.
+     *              besides, LrnLayers as such will use up at most 384 multipliers - which is rather
+     *              insignificant compared to the amount of multipliers available on chip.
+     */
+    private DFEVar computeAcrossChannel(List<DFEVar> localRegion) {
+        Utils.assertTrue(localRegion.size() == lrnParams.getLocalSize());
+
+        List<DFEVar> squaredLocalRegion = new ArrayList<DFEVar>();
+        for (int i = 0; i < localRegion.size() ; i++) {
+            squaredLocalRegion.add(localRegion[i]);
+        }
+
+        if (layerParams.getLrn().getApproxMethod() == LrnParameter.ApproxMethod.BINOMIAL) {
+            return localRegion[lrnParams.getLocalSize() / 2] * (1 + approxFactor * Utils.treeReduceAdd(squaredLocalRegion));
+
+        } else if (layerParams.getLrn().getApproxMethod() == LrnParameter.ApproxMethod.LUT) {
+            /* TODO(fyq14): Complete this. */
+            return null;
+
+        } else {
+            throw new RuntimeException("Unknown approximation method!");
+
+        }
+    }
+
+    public int cyclesPerImage() {
+        return getIterations() * layerParams.getInputHeight() * layerParams.getInputWidth();
+    }
+}

@@ -32,4 +32,7 @@ interface ComputationChain {
 
     /* List of name of output and input link */
     List<Tuple3<String, DFELink, Integer>> getInitializerInputs();
+
+    /* List of name of output and input link */
+    List<Tuple3<String, DFELink, Integer>> getLMemInputs();
 }

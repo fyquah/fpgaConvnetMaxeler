@@ -1,0 +1,86 @@
+layer {
+    input_height: 32
+    input_width: 32
+    num_inputs: 3
+
+    num_outputs: 32
+
+    conv: {
+        pad: 2
+        kernel_size: 5
+
+        worker_factor: 3
+        conv_folding_factor: 7
+        kernel_folding_factor: 13
+        bram_factor: 96
+        look_ahead: 1
+    }
+}
+
+layer {
+    pool: {
+        type: Max
+        dim: 3
+        stride: 2
+
+        channel_folding_factor: 32
+    }
+    activation: Relu
+}
+
+
+layer {
+    num_outputs: 32
+
+    conv: {
+        stride: 1
+        pad: 2
+        kernel_size: 5
+
+        worker_factor: 7
+        conv_folding_factor: 4
+        kernel_folding_factor: 25
+        bram_factor: 1024
+        look_ahead: 1
+    }
+
+    activation: Relu
+}
+
+layer {
+    pool: {
+        type: Average
+        dim: 3
+        stride: 2
+
+        channel_folding_factor: 32
+    }
+}
+
+layer {
+    num_outputs: 64
+
+    conv: {
+        pad: 2
+        kernel_size: 5
+        stride: 1
+
+        worker_factor: 7
+        conv_folding_factor: 11
+        kernel_folding_factor: 5
+        bram_factor: 2048
+        look_ahead: 1
+    }
+
+    activation: Relu
+}
+
+layer {
+    pool: {
+        type: Average
+        dim: 3
+        stride: 2
+
+        channel_folding_factor: 64
+    }
+}

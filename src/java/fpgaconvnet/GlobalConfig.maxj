@@ -10,4 +10,6 @@ public class GlobalConfig {
     public static final int fracBits = 14;
     public static final DFEType dataType = Kernel.dfeFix(intBits, fracBits, SignMode.TWOSCOMPLEMENT);
     public static final DFEType cpuType = Kernel.dfeFloat(8, 24);
+
+    public static int burstSizeBytes = 384; // in bytes
 }

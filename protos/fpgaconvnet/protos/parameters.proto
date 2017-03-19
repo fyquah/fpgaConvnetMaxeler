@@ -26,6 +26,7 @@ message LayerParameter
     oneof params {
         ConvolutionParameter conv = 1;
         PoolingParameter pool = 2;
+        LrnParameter lrn = 14;
     }
 
     /* Used internally - users of this function are _not_ expected to complete this,
@@ -41,12 +42,54 @@ message LayerParameter
 
 message ConvolutionParameter
 {
+    /*
+     * conv_folding_factor * worker_factor <= bram_factor <= num_inputs * num_outputs
+     * 1 (no lookahead) <= look_ahead <= input_height * input_width (full lookahead)
+     *
+     * Consequently, the amount of BRAM used by each multiplier would be
+     * proportional to:
+     * 
+     * `(bram_factor / (worker_factor * conv_folding_factor))
+     *   * ceil(kernel_size^2 / kernel_folding_factor)`.
+     * 
+     * The total amount of blockram required will then be:
+     * 
+     * `bram_factor * kernel_size * kernel_size`
+     *
+     * The number of kernels to be stored in BRAM at any point in time.
+     * if bram_input_factor == num_inputs and bram_output_factor == num_outputs,
+     * that means all the weights stored in BRAM and no off-chip RAM reads
+     * will not be required. fpgaConvNet will generate a graph that reads
+     * the weights directly from the host to the FPGA.
+     *
+     * bram_factor has to be at least as large as `worker_factor * conv_folding_factor`
+     * simply because setting them to be lower values makes unnecessary stalls
+     * the extra (wasted) memory cycles.
+     *
+     * They should also, ideally, be a multiples of `worker_factor * conv_folding_factor`
+     * fpgaConvNet is not smart enough to optimize non-
+     * alligned memory access (yet). There isn't much reason to optimize
+     * non-multiple memory accesses cases - the total amount of iterations
+     * will not improve (and might even degrade due to unncessary off-chip
+     * memory accesses!)
+     *
+     * bram_input_factor and bram_output_factor do not affect how bias are
+     * alligned. Those are stored in BRam in all cases.
+     * 
+     * look_ahead affects the frequency of memory lookups. Higher lookahead
+     * means less frequent off-chip memory lookup, but higher on-chip memory
+     * usage.
+     */
+    optional uint32 bram_factor = 4;
+    optional uint32 look_ahead = 5 [default = 1]; /* Must be a factor of image size. */
+
     optional uint32 worker_factor = 1;         // 1 <= x <= num_inputs
     optional uint32 conv_folding_factor = 2;    // 1 <= x <= num_outputs
                                               // - number of convoluters per worker.
     optional uint32 kernel_folding_factor = 3;  // 1 <= x <= kernel_dim * kernel_dim
                                               // - number of multipliers per convoluter.
                                               // - must be a factor of kernelDim * kernelDim
+
     /* input_height, input_width and num_inputs must be provided at the input layer and are
      * optional at subsequent layers. They will be used for checking if they are provided.
      */
@@ -81,9 +124,19 @@ message LrnParameter
         WITHIN_CHANNEL = 1;
         ACROSS_CHANNELS = 2;
     }
+    enum ApproxMethod
+    {
+        BINOMIAL = 1;
+        LUT = 2;
+    }
 
     optional uint32 local_size = 1;
     optional float alpha = 2;
     optional float beta = 3;
-    optional LrnRegion norm_region = 4;
+    optional LrnRegion norm_region = 4 [default = ACROSS_CHANNELS];
+    optional ApproxMethod approx_method = 5 [default = BINOMIAL];
+    optional uint32 approx_degree = 6 [default = 1];  /* How many powers to approximate. */
+
+    /* Determines parallelism - channel_folding_factor == num_inputs means fully unrolled. */
+    optional uint32 channel_folding_factor = 7;
 }

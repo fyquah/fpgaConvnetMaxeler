@@ -8,6 +8,7 @@ import fpgaconvnet.protos.Parameters;
 import fpgaconvnet.protos.Parameters.LayerParameter;
 import fpgaconvnet.protos.Parameters.ConvolutionParameter;
 import fpgaconvnet.protos.Parameters.PoolingParameter;
+import fpgaconvnet.protos.Parameters.LrnParameter;
 
 
 public class ParametersTransformer {
@@ -135,6 +136,22 @@ public class ParametersTransformer {
                     .setStride(stride)
                     .build());
 
+        } else if (paramsCase.equals(LayerParameter.ParamsCase.LRN)) {
+            LrnParameter lrnParams = layerParameter.getLrn();
+
+            numOutputs = numInputs;
+            pad = 0;
+            kernelSize = 1;
+            stride = 1;
+
+            if (layerParameter.hasNumOutputs() &&
+                    layerParameter.getNumOutputs() != numInputs) {
+                    raiseError(layer_id,
+                               "num_inputs and num_outputs for LRN layer should be the same");
+            }
+
+            builder.setLrn(lrnParams);
+
         } else {
             raiseError(layer_id, "Either pool of conv has to be set!");
 
@@ -191,6 +208,92 @@ public class ParametersTransformer {
         return builder.build();
     }
 
+    private boolean checkOutOfRange(int x, int max) {
+        return x < 1 || x > max;
+    }
+
+    public void verifyLayerParameters(LayerParameter layer) {
+        LayerParameter.ParamsCase paramsCase = layer.getParamsCase();
+
+        switch (paramsCase) {
+        case CONV:
+            int totalKernelSize = layer.getConv().getKernelSize() * layer.getConv().getKernelSize();
+
+            if (checkOutOfRange(layer.getConv().getKernelFoldingFactor(), totalKernelSize)) {
+                raiseError(layer.getLayerId(),
+                        "kernel folding factor in convolution layer must be strictly between "
+                        + "inclusive 1 and kernel_size * kernel_size");
+            }
+            if (checkOutOfRange(layer.getConv().getWorkerFactor(), layer.getNumInputs())) {
+                raiseError(layer.getLayerId(),
+                        "Worker factor in convolution layer must be strictly between "
+                        + "inclusive 1 and num_inputs");
+            }
+            if (checkOutOfRange(layer.getConv().getConvFoldingFactor(), layer.getNumOutputs())) {
+                raiseError(layer.getLayerId(),
+                        "Conv folding factor in convolution layer must be strictly between "
+                        + "inclusive 1 and num_outputs");
+            }
+
+            IterationCounter ctr = new IterationCounter(layer);
+            int bramPerConvolver = layer.getConv().getBramFactor()
+                    / (layer.getConv().getWorkerFactor() * layer.getConv().getConvFoldingFactor());
+            if (bramPerConvolver == 0 || layer.getConv().getBramFactor() % bramPerConvolver != 0) {
+                raiseError(layer.getLayerId(),
+                        "bram_factor in convolution layer must be a multiple of"
+                        + " (worker_factor * conv_folding_factor)");
+            }
+            boolean flag =
+                    (bramPerConvolver < ctr.getConvolutionIterations()
+                        && ctr.getConvolutionIterations() % bramPerConvolver != 0)
+                    || (bramPerConvolver > ctr.getConvolutionIterations()
+                        && bramPerConvolver % ctr.getConvolutionIterations() != 0);
+
+            if (flag) {
+                raiseError(layer.getLayerId(),
+                        "bram_factor / (worker_factor * conv_folding_factor) in convolution "
+                        + " layer must be a factor or a multiple of"
+                        + " ceil(num_outputs / conv_folding_factor)");
+            }
+
+            int totalPixels = layer.getOutputHeight() * layer.getOutputWidth();
+            if (layer.getConv().getLookAhead() < 1
+                    || totalPixels % layer.getConv().getLookAhead() != 0
+                    || layer.getConv().getLookAhead() > totalPixels) {
+                raiseError(layer.getLayerId(),
+                        "lookAhead must be > 1, a factor of total OUTPUT pixels and must be <="
+                        + " the total number of pixels");
+            }
+            if (bramPerConvolver >= ctr.getSchedulerIterations() * ctr.getConvolutionIterations()
+                    && layer.getConv().getLookAhead() != 1) {
+                raiseError(layer.getLayerId(),
+                        "lookAhead must be 1, when entier layer weights are stored on the"
+                        + " on-chip memory");
+
+            }
+            break;
+
+        case POOL:
+            if (layer.getPool().getChannelFoldingFactor() < 1
+                    || layer.getPool().getChannelFoldingFactor() > layer.getNumInputs()) {
+                raiseError(layer.getLayerId(),
+                        "Channel folding factor in pooling layer must be strictly between "
+                        + "inclusive 1 and number of input channels");
+            }
+            break;
+
+        case LRN:
+            if (layer.getLrn().getChannelFoldingFactor() < 1
+                    || layer.getLrn().getChannelFoldingFactor() > layer.getNumInputs()) {
+                raiseError(layer.getLayerId(),
+                        "Channel folding factor in LRN layer must be strictly between "
+                        + "inclusive 1 and number of input channels");
+            }
+            break;
+
+        }
+    }
+
     public Parameters.Network transform() throws RuntimeException {
         Parameters.Network.Builder networkBuilder = Parameters.Network.newBuilder();
         int layerCount = networkParameters.getLayerCount();
@@ -198,9 +301,11 @@ public class ParametersTransformer {
             raiseError(0, "Number of layers in networkParameters must be greater than 1");
         }
         LayerParameter previousLayer = parseLayer(0, networkParameters.getLayer(0), null);
+        verifyLayerParameters(previousLayer);
         networkBuilder.addLayer(previousLayer);
         for (int i = 1; i < layerCount ; i++) {
             previousLayer = parseLayer(i, networkParameters.getLayer(i), previousLayer);
+            verifyLayerParameters(previousLayer);
             networkBuilder.addLayer(previousLayer);
         }
 

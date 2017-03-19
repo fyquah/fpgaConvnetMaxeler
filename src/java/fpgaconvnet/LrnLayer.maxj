@@ -8,47 +8,49 @@ import com.maxeler.maxcompiler.v2.managers.custom.CustomManager;
 import com.maxeler.maxcompiler.v2.managers.engine_interfaces.EngineInterface;
 import com.maxeler.maxcompiler.v2.managers.engine_interfaces.InterfaceParam;
 
-import fpgaconvnet.kernels.PoolingLayerKernel;
+import fpgaconvnet.kernels.LrnLayerKernel;
 import fpgaconvnet.protos.Parameters.LayerParameter;
 import fpgaconvnet.Utils.Tuple3;
 
 
-public class PoolingLayer implements ComputationChain {
+public class LrnLayer implements ComputationChain {
 
-    private final BoxedKernelBlock<PoolingLayerKernel> poolingKernel;
+    private final BoxedKernelBlock<LrnLayerKernel> lrnKernel;
 
-    public PoolingLayer(LayerParameter layer, CustomManager manager) {
-        poolingKernel = new BoxedKernelBlock<PoolingLayerKernel>(
+    public LrnLayer(LayerParameter layer, CustomManager manager) {
+        lrnKernel = new BoxedKernelBlock<LrnLayerKernel>(
                 manager,
-                new PoolingLayerKernel(
-                        manager.makeKernelParameters("PoolingLayerKernel" + layer.getLayerId()),
+                new LrnLayerKernel(
+                        manager.makeKernelParameters("LrnLayer" + layer.getLayerId()),
                                                      layer));
     }
 
     public DFELink getInput() {
-        return poolingKernel.getBlock().getInput("x");
+        return lrnKernel.getBlock().getInput("x");
     }
 
     public DFELink getOutput() {
-        return poolingKernel.getBlock().getOutput("y");
+        return lrnKernel.getBlock().getOutput("y");
     }
 
     public void setKernelTimings(EngineInterface ei, InterfaceParam numberOfImages, InterfaceParam init) {
-        ei.setTicks(poolingKernel.getKernel().getName(),
-                    numberOfImages * poolingKernel.getKernel().cyclesPerImage());
+        ei.setTicks(lrnKernel.getKernel().getName(),
+                    numberOfImages * lrnKernel.getKernel().cyclesPerImage());
     }
 
     public void setScalar(EngineInterface ei, String name, InterfaceParam param) {
-        /* There's no scalar that needs to be set in a pooling layer. */
+        if (name.equals("approx_factor")) {
+            ei.setScalar(lrnKernel.getKernel().getName(), "approx_factor", param);
+        }
     }
 
     public List<Tuple3<String, DFELink, Integer>> getInitializerInputs() {
-        /* There's no initializers in a pooling layer. */
+        /* There's no initializers in a lrn layer. */
         return new ArrayList<Tuple3<String, DFELink, Integer>>();
     }
 
     public List<Tuple3<String, DFELink, Integer>> getLMemInputs() {
-        /* There's no LMem inputs in a pooling layer. */
+        /* There's no initializers in a lrn layer. */
         return new ArrayList<Tuple3<String, DFELink, Integer>>();
     }
 }

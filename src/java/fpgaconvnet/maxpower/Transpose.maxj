@@ -1,0 +1,316 @@
+package fpgaconvnet.maxpower;
+
+import static com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFETypeFactory.dfeUInt;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import fpgaconvnet.maxpower.ConstDenominator;
+import fpgaconvnet.maxpower.ConstDenominator.ConstDivModResult;
+
+import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
+import com.maxeler.maxcompiler.v2.kernelcompiler.Optimization;
+import com.maxeler.maxcompiler.v2.kernelcompiler.op_management.MathOps;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.CounterChain;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Stream.OffsetExpr;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.memory.Memory;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.KernelObjectVectorizable;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEType;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVector;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVectorType;
+import com.maxeler.maxcompiler.v2.utils.MathUtils;
+
+/**
+ * Use single buffer to transpose matrices.
+ *
+ * @author Stephen Girdlestone
+ * @author Nils Voss
+ */
+public class Transpose {
+
+	private static int offsetCounter = 0;
+
+	/**
+	 * Multi pipe version of the 2D transpose function. Note that hight and width have to be multiples of
+	 * the number of pipes
+	 *
+	 * Example:
+	 * Assume width of 4 and height of 3, with values
+	 *
+	 * <table>
+	 *   <col width="25%"/>
+	 *   <col width="25%"/>
+	 *   <col width="25%"/>
+	 *   <col width="25%"/>
+	 *   <tbody>
+	 *     <tr><td>0</td><td>1</td><td>2</td><td>3</td></tr>
+	 *     <tr><td>4</td><td>5</td><td>6</td><td>7</td></tr>
+	 *     <tr><td>8</td><td>9</td><td>10</td><td>11</td></tr>
+	 *   </tbody>
+	 * </table>
+	 *
+	 *	Then the output will return (after 12 cycles since the output does not hide the latency)
+	 *		0, 4, 8, 1, 5, 9, 2, 6, 10, 3, 7, 11
+	 *
+	 * @param width fast dimension
+	 * @param height slow dimension
+	 **/
+	public static <T extends KernelObjectVectorizable<T,?>>
+	DFEVector<T> transposeElementWise(DFEVector<T> in, int width, int height) {
+		return in.getKernel().stream.offset(transposeElementWise(in, width, height, in.getKernel().constant.var(true)),
+				width * height / in.getSize());
+	}
+
+	/**
+	 * Multi pipe version of the 2D transpose function. Note that hight and width have to be multiples of
+	 * the number of pipes
+	 *
+	 * Example:
+	 * Assume width of 4 and height of 3, with values
+	 *
+	 * <table>
+	 *   <col width="25%"/>
+	 *   <col width="25%"/>
+	 *   <col width="25%"/>
+	 *   <col width="25%"/>
+	 *   <tbody>
+	 *     <tr><td>0</td><td>1</td><td>2</td><td>3</td></tr>
+	 *     <tr><td>4</td><td>5</td><td>6</td><td>7</td></tr>
+	 *     <tr><td>8</td><td>9</td><td>10</td><td>11</td></tr>
+	 *   </tbody>
+	 * </table>
+	 *
+	 *	Then the output will return (after 12 cycles since the output does not hide the latency)
+	 *		0, 4, 8, 1, 5, 9, 2, 6, 10, 3, 7, 11
+	 *
+	 * @param width fast dimension
+	 * @param height slow dimension
+	 **/
+	public static <T extends KernelObjectVectorizable<T,?>>
+	DFEVector<T> transposeElementWise(DFEVector<T> in, int width, int height, DFEVar enable) {
+		Kernel owner = in.getKernel();
+
+		final int pipes = in.getSize();
+		if (!MathUtils.integerMultiple(width, pipes) || !MathUtils.integerMultiple(height, pipes)) {
+			throw new RuntimeException("Width and height have to be a multiple of the number of pipes.");
+		}
+		if (pipes == 1) { // Use more efficient single buffered version
+			return in.getType().newInstance(owner, transpose(in[0], width, height, enable));
+		}
+
+		if (height == width && height >= 2 * pipes && height % pipes == 0 && MathUtils.isPowerOf2(pipes)) {
+			return transposePowerOf2Quadratic(in, width, height, enable);
+		} else {
+			return transposeFallBack(in, width, height, enable);
+		}
+	}
+
+	private static <T extends KernelObjectVectorizable<T,?>>
+	DFEVector<T> transposePowerOf2Quadratic(DFEVector<T> in, int width,  int height, DFEVar enable) {
+		Kernel owner = in.getKernel();
+
+		final int N = width * height;
+		final int pipes = in.getSize();
+
+		// Single buffered implementation for special case
+		int ramSize = N / pipes;
+
+		int nByPipes = width / pipes;
+		DFEVectorType<T> vectorType = new DFEVectorType<T>(in[0].getType(), pipes);
+		DFEVectorType<T> bufferOutVectorType = new DFEVectorType<T>(in[0].getType(), pipes);
+		DFEVectorType<DFEVar> addressType =
+			new DFEVectorType<DFEVar>(dfeUInt(MathUtils.bitsToAddress(ramSize)), pipes);
+		DFEVector<DFEVar> ramReadAddress = addressType.newInstance(owner);
+
+		CounterChain counterChainRow = owner.control.count.makeCounterChain(enable);
+		CounterChain counterChainCol = owner.control.count.makeCounterChain(enable);
+
+		DFEVar state = counterChainRow.addCounter(2, 1);
+		DFEVar rowJ = counterChainRow.addCounter(height, 1);
+		DFEVar rowI = counterChainRow.addCounter(width / pipes, 1);
+		DFEVar colJ = counterChainCol.addCounter(width, 1);
+		DFEVar colI = counterChainCol.addCounter(height, pipes);
+
+		int bitsToAddressPipes = MathUtils.bitsToAddress(pipes);
+		DFEVar shift_write = rowJ.cast(dfeUInt(bitsToAddressPipes));
+		DFEVar shift_read  = colJ.cast(dfeUInt(bitsToAddressPipes));
+
+		owner.optimization.pushFixOpMode(Optimization.bitSizeExact(MathUtils.bitsToAddress(ramSize)),
+				Optimization.offsetExact(0), MathOps.ALL);
+		DFEVar ramWriteAddress = rowJ * nByPipes + rowI.cast(rowJ.getType());
+		for(int i = 0; i < pipes; i++){
+			ramReadAddress[i] <== (colI + i) * nByPipes + (colJ >> bitsToAddressPipes);
+		}
+		owner.optimization.popFixOpMode(MathOps.ALL);
+
+		DFEVector<T> inputRotated =
+			in.rotateElementsLeft(shift_write.cast(dfeUInt(bitsToAddressPipes)));
+		DFEVector<DFEVar> readAddrRotated = ramReadAddress.rotateElementsLeft(shift_read);
+
+		DFEVector<T> bufferOutput = bufferOutVectorType.newInstance(owner);
+		for(int i = 0; i < pipes; i++){
+			Memory<T> buffer = owner.mem.alloc(vectorType.getContainedType(), ramSize);
+			DFEVar address = state ? readAddrRotated[i] : ramWriteAddress;
+			bufferOutput[i] <== buffer.read(address);
+			buffer.write(address, inputRotated[i], enable);
+		}
+		return bufferOutput.rotateElementsRight(shift_read);
+	}
+
+	private static <T extends KernelObjectVectorizable<T,?>>
+	DFEVector<T> transposeFallBack(DFEVector<T> in, int width, int height, DFEVar enable) {
+		Kernel owner = in.getKernel();
+
+		final int N = width * height;
+		final int pipes = in.getSize();
+
+		// double buffered implementation
+		final int ramSize = 2 * N / pipes;
+
+		DFEType addressType = dfeUInt(MathUtils.bitsToAddress(ramSize));
+		CounterChain readCounter = owner.control.count.makeCounterChain(enable);
+		CounterChain writeCounter = owner.control.count.makeCounterChain(enable);
+
+		DFEVar state    = readCounter.addCounter(2, 1);
+		DFEVar slowRead = readCounter.addCounter(width, 1).cast(addressType);
+		DFEVar fastRead = readCounter.addCounter(height / pipes, 1).cast(addressType);
+
+		DFEVar slowWrite = writeCounter.addCounter(height, 1).cast(addressType);
+		                   writeCounter.addCounter(width / pipes, 1).setReportOnUnused(false);
+
+		DFEVar writeAddress = owner.control.count.simpleCounter(MathUtils.bitsToAddress(ramSize), N / pipes);
+
+		ConstDivModResult readRotateDivMod = ConstDenominator.divMod(slowRead, pipes);
+		DFEVar group = readRotateDivMod.getQuotient();
+		DFEVar readRotate = readRotateDivMod.getRemainder();
+		DFEVar writeRotate;
+		if (width != height) {
+			ConstDivModResult writeRotateDivMod = ConstDenominator.divMod(slowWrite, pipes);
+			writeRotateDivMod.getQuotient().setReportOnUnused(false);
+			writeRotate = writeRotateDivMod.getRemainder();
+		} else {
+			slowWrite.setReportOnUnused(false);
+			writeRotate = readRotate;
+		}
+
+		writeAddress = state ? writeAddress : (writeAddress + (N / pipes));
+
+		DFEVector<DFEVar> readAddresses = new DFEVectorType<DFEVar>(addressType, pipes).newInstance(owner);
+		DFEVar readAddressOffset = fastRead.cast(addressType) * width + group.cast(addressType);
+		for (int i = 0; i < pipes; i++) {
+			DFEVar readAddress = readAddressOffset + i * (width / pipes);
+			readAddresses[i] <== state ? readAddress + N / pipes : readAddress;
+		}
+		readAddresses = readAddresses.rotateElementsLeft(readRotate);
+
+		DFEVector<T> inRotated = in.rotateElementsLeft(writeRotate);
+
+		List<T> lookupResults = new ArrayList<T>();
+		for (int i = 0; i < in.getSize(); i++) {
+			Memory<T> buffer = owner.mem.alloc(inRotated[i].getType(), ramSize);
+			buffer.write(writeAddress, inRotated[i], enable);
+			lookupResults.add(buffer.read(readAddresses[i]));
+		}
+
+		return DFEVectorType.newInstance(lookupResults).rotateElementsRight(readRotate);
+	}
+
+	/**
+	 * For minimal resource usage, choose width and height such that
+	 * (width*height-1) is an exact power of two.
+	 *
+	 * Note that you must have width*height>=17
+	 *
+	 * Example:
+	 * Assume width of 4 and height of 3, with values
+	 *
+	 * <table>
+	 *   <col width="25%"/>
+	 *   <col width="25%"/>
+	 *   <col width="25%"/>
+	 *   <col width="25%"/>
+	 *   <tbody>
+	 *     <tr><td>0</td><td>1</td><td>2</td><td>3</td></tr>
+	 *     <tr><td>4</td><td>5</td><td>6</td><td>7</td></tr>
+	 *     <tr><td>8</td><td>9</td><td>10</td><td>11</td></tr>
+	 *   </tbody>
+	 * </table>
+	 *
+	 *	Then the output will return (after 12 cycles since the output does not hide the latency)
+	 *		0, 4, 8, 1, 5, 9, 2, 6, 10, 3, 7, 11
+	 *
+	 * @param width fast dimension
+	 * @param height slow dimension
+	 **/
+	public static <T extends KernelObjectVectorizable<T,?>>
+	T transpose(T in, int width, int height) {
+		return in.getKernel().stream.offset(
+				transpose(in, width, height, in.getKernel().constant.var(true)), width * height);
+	}
+
+	/**
+	 * For minimal resource usage, choose width and height such that
+	 * (width*height-1) is an exact power of two.
+	 *
+	 * Note that you must have width*height>=17
+	 *
+	 * Example:
+	 * Assume width of 4 and height of 3, with values
+	 *
+	 * <table>
+	 *   <col width="25%"/>
+	 *   <col width="25%"/>
+	 *   <col width="25%"/>
+	 *   <col width="25%"/>
+	 *   <tbody>
+	 *     <tr><td>0</td><td>1</td><td>2</td><td>3</td></tr>
+	 *     <tr><td>4</td><td>5</td><td>6</td><td>7</td></tr>
+	 *     <tr><td>8</td><td>9</td><td>10</td><td>11</td></tr>
+	 *   </tbody>
+	 * </table>
+	 *
+	 *	Then the output will return (after 12 cycles since the output does not hide the latency)
+	 *		0, 4, 8, 1, 5, 9, 2, 6, 10, 3, 7, 11
+	 *
+	 * @param width fast dimension
+	 * @param height slow dimension
+	 **/
+	public static <T extends KernelObjectVectorizable<T,?>>
+	T transpose(T in, int width, int height, DFEVar enable) {
+		Kernel owner = in.getKernel();
+
+		int N = width * height;
+
+		int Nm = N - 1;
+		int nBits = MathUtils.bitsToAddress(N);
+
+		DFEVar isFirst = owner.control.count.pulse(1);
+
+		DFEVar i = owner.control.count.makeCounter(
+				owner.control.count.makeParams(nBits).withEnable(enable).withMax(N)).getCount();
+		DFEVar mul = dfeUInt(nBits).newInstance(owner);
+		owner.optimization.pushEnableBitGrowth(true);
+		ConstDivModResult addressDivMod = ConstDenominator.divMod(i * mul, Nm, nBits);
+		addressDivMod.getQuotient().setReportOnUnused(false);
+		DFEVar address = i === Nm ? Nm : addressDivMod.getRemainder();
+
+		DFEVar nextMul = mul * dfeUInt(MathUtils.bitsToRepresent(width)).newInstance(owner, width);
+		owner.optimization.popEnableBitGrowth();
+
+		ConstDivModResult nextMulDivMod = ConstDenominator.divMod(nextMul, Nm, nBits);
+		nextMulDivMod.getQuotient().setReportOnUnused(false);
+		nextMul = nextMulDivMod.getRemainder();
+
+		OffsetExpr offset = owner.stream.makeOffsetAutoLoop("transposerOffset" + offsetCounter++, 0, N);
+		mul <== owner.control.mux(isFirst#(i===0), owner.stream.offset(mul, -1),
+				owner.stream.offset(nextMul, -offset), owner.constant.var(1), owner.constant.var(1));
+
+		owner.getManager().logInfo("Depth of RAM in Transposer = " + N);
+
+		Memory<T> buffer = owner.mem.alloc(in.getType(), N);
+		buffer.write(address, in, enable);
+
+		return buffer.read(address);
+	}
+}

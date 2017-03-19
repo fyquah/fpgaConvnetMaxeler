@@ -1,0 +1,167 @@
+package fpgaconvnet.lib;
+
+import com.maxeler.maxcompiler.v2.kernelcompiler.KernelLib;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.CounterChain;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEType;
+
+import fpgaconvnet.IterationCounter;
+import fpgaconvnet.Utils;
+import fpgaconvnet.kernels.ConvolutionUnitKernel;
+import fpgaconvnet.protos.Parameters.LayerParameter;
+import fpgaconvnet.protos.Parameters.ConvolutionParameter;
+
+
+public class LookAheadCounter extends KernelLib {
+
+    private final IterationCounter ctr;
+    private final DFEVar lookAhead;
+    private final DFEVar weightUsageIter;
+    private final DFEVar kernelIter;
+    private final int totalPixelAddress;
+    private final int weightsUsageCycles;
+    private final LayerParameter layerParams;
+    private final ConvolutionParameter convParams;
+    private final DFEVar weightAddress;
+    private final DFEVar pixelAddress;
+    private final CounterChain masterChain;
+
+    public LookAheadCounter(ConvolutionUnitKernel kernel, LayerParameter argLayerParams) {
+        super(kernel);
+      
+        layerParams = argLayerParams;
+        convParams = layerParams.getConv();
+        ctr = new IterationCounter(layerParams);
+        weightsUsageCycles = ctr.getWeightIterations();
+
+        DFEVar batchCounter = control.count.simpleCounter(
+                Utils.ceilLog2(convParams.getLookAhead() * ctr.getTotalIterations()),
+                convParams.getLookAhead() * ctr.getTotalIterations());
+        final int totalBeforeLastloopIterations =
+                (ctr.getRevisitIterations() - 1)
+                * ctr.getWeightIterations()
+                * ctr.getKernelIterations()
+                * convParams.getLookAhead();
+        masterChain = control.count.makeCounterChain();
+        lookAhead = Utils.chainCounterOrZero(
+                this, masterChain, layerParams.getConv().getLookAhead());
+        if (ctr.getWeightIterations() == ctr.getLastWeightIterations()) {
+            weightUsageIter = Utils.chainCounterOrZero(this, masterChain, ctr.getLastWeightIterations());
+
+        } else {
+            DFEType type = dfeUInt(1 + Utils.ceilLog2(ctr.getWeightIterations()));
+            DFEVar muxedWeightUsageCycles = (
+                    (batchCounter < totalBeforeLastloopIterations)
+                    ? constant.var(type, ctr.getWeightIterations())
+                    : constant.var(type, ctr.getLastWeightIterations()));
+            weightUsageIter = masterChain.addCounter(muxedWeightUsageCycles, 1);
+
+        }
+        kernelIter = Utils.chainCounterOrZero(this, masterChain, ctr.getKernelIterations());
+        totalPixelAddress = convParams.getLookAhead() * ctr.getKernelIterations();
+
+        if (getTotalWeightAddress() <= 1) {
+            weightAddress = constant.var(dfeBool(), 0);
+
+        } else {
+            int bits = Utils.ceilLog2(ctr.getWeightIterations() * ctr.getKernelIterations());
+            DFEType type = dfeUInt(bits);
+
+            if (ctr.getWeightIterations() == ctr.getLastWeightIterations()) {
+                weightAddress = control.count.simpleCounter(
+                        bits, ctr.getWeightIterations() * ctr.getKernelIterations());
+
+            } else {
+                DFEVar muxedTotalWeightAddress = (
+                        (batchCounter < totalBeforeLastloopIterations)
+                        ? constant.var(type, ctr.getWeightIterations() * ctr.getKernelIterations())
+                        : constant.var(type, ctr.getLastWeightIterations() * ctr.getKernelIterations()));
+                weightAddress = control.count.simpleCounter(bits, muxedTotalWeightAddress);
+            }
+
+        }
+
+        if (totalPixelAddress == 1) {
+            pixelAddress = constant.var(dfeUInt(1), 0);
+
+        } else {
+            DFEVar pixelAddressBase = control.count.makeCounter(
+                    control.count.makeParams(Utils.ceilLog2(totalPixelAddress))
+                    .withInitValue(0l)
+                    .withInc(ctr.getKernelIterations() % totalPixelAddress)
+                    .withMax(totalPixelAddress)
+                    .withEnable(masterChain.getCounterWrap(weightUsageIter)
+                                & kernelIter.eq(ctr.getKernelIterations() - 1))
+                ).getCount();
+            pixelAddress = pixelAddressBase + kernelIter.cast(
+                    dfeUInt(Utils.ceilLog2(totalPixelAddress)));
+
+        }
+    }
+
+    public DFEVar getWeightsInputFlag() {
+        return lookAhead.eq(0);
+    }
+
+    public DFEVar getWeightWriteEnable() {
+        return lookAhead.eq(0);
+    }
+
+    public DFEVar getChannelIter() {
+        /* Number of iterations to spend per channel. */
+        final int channelIterations = ctr.getConvolutionIterations() * ctr.getKernelIterations();
+
+        DFEVar channelIterBase = control.count.makeCounter(
+                control.count.makeParams(Utils.ceilLog2(channelIterations))
+                .withInitValue(0l)
+                .withInc((weightsUsageCycles * ctr.getKernelIterations())
+                         % channelIterations)
+                .withMax(channelIterations)
+                .withEnable(lookAhead.eq(layerParams.getConv().getLookAhead() - 1)
+                            & masterChain.getCounterWrap(weightUsageIter)
+                            & kernelIter.eq(ctr.getKernelIterations() - 1))
+            ).getCount();
+
+        /* Defines the stage at which we are using a particular channel. */
+        DFEVar channelIter = dfeUInt(Utils.ceilLog2(channelIterations)).newInstance(this);
+        optimization.pushPipeliningFactor(0.0);
+        channelIter <== (weightUsageIter.eq(0) & kernelIter.eq(0)
+                         ? channelIterBase
+                         : Utils.modInc(stream.offset(channelIter, -1), channelIterations));
+        optimization.popPipeliningFactor();
+
+        return channelIter;
+    }
+
+    public DFEVar getInputControlFlag() {
+        return getChannelIter().eq(0);
+    }
+
+    public DFEVar getOutputControlFlag() {
+        return constant.var(dfeBool(), 1);
+    }
+
+    public DFEVar getPixelWriteEnable() {
+        return getChannelIter() < ctr.getKernelIterations();
+    }
+
+    public DFEVar getKernelIter() {
+        return kernelIter;
+    }
+
+    public DFEVar getPixelAddress() {
+        return pixelAddress;
+    }
+
+    public DFEVar getWeightAddress() {
+        return weightAddress;
+    }
+
+    public int getTotalWeightAddress() {
+        return ctr.getKernelIterations() * weightsUsageCycles;
+    }
+
+    public DFEVar getLookAhead() {
+        return lookAhead;
+    }
+}
