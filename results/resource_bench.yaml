@@ -306,3 +306,83 @@ data:
     multiplier: 2016
     dsp_block: 1120
     block_memory: 2332
+- commit_hash: 0a7266b87e93d38a9687447a38b18f6bce38f9d9
+  layer:
+    input_height: 28
+    input_width: 28
+    kernel_size: 5
+    num_inputs: 30
+    num_outputs: 32
+  name: resource_bench_30_MAIA_DFE
+  params:
+    conv_folding_factor: 11
+    kernel_folding_factor: 13
+    worker_factor: 10
+  time: '2017-03-20 03:37:40.894533'
+  usage:
+    logic_utilization: 118845
+    primary_ff: 182080
+    seconday_ff: 8089
+    multiplier: 2750
+    dsp_block: 1430
+    block_memory: 2173
+- commit_hash: 0a7266b87e93d38a9687447a38b18f6bce38f9d9
+  layer:
+    input_height: 28
+    input_width: 28
+    kernel_size: 5
+    num_inputs: 30
+    num_outputs: 32
+  name: resource_bench_31_MAIA_DFE
+  params:
+    conv_folding_factor: 7
+    kernel_folding_factor: 3
+    worker_factor: 15
+  time: '2017-03-20 03:36:15.227236'
+  usage:
+    logic_utilization: 93558
+    primary_ff: 155904
+    seconday_ff: 5114
+    multiplier: 525
+    dsp_block: 315
+    block_memory: 855
+- commit_hash: 0a7266b87e93d38a9687447a38b18f6bce38f9d9
+  layer:
+    input_height: 28
+    input_width: 28
+    kernel_size: 5
+    num_inputs: 30
+    num_outputs: 32
+  name: resource_bench_32_MAIA_DFE
+  params:
+    conv_folding_factor: 3
+    kernel_folding_factor: 3
+    worker_factor: 30
+  time: '2017-03-20 05:11:00.216127'
+  usage:
+    logic_utilization: 106972
+    primary_ff: 174890
+    seconday_ff: 6866
+    multiplier: 450
+    dsp_block: 270
+    block_memory: 1054
+- commit_hash: 0a7266b87e93d38a9687447a38b18f6bce38f9d9
+  layer:
+    input_height: 28
+    input_width: 28
+    kernel_size: 5
+    num_inputs: 30
+    num_outputs: 32
+  name: resource_bench_33_MAIA_DFE
+  params:
+    conv_folding_factor: 11
+    kernel_folding_factor: 9
+    worker_factor: 8
+  time: '2017-03-20 07:00:19.522158'
+  usage:
+    logic_utilization: 80592
+    primary_ff: 151196
+    seconday_ff: 9633
+    multiplier: 1496
+    dsp_block: 792
+    block_memory: 1568
