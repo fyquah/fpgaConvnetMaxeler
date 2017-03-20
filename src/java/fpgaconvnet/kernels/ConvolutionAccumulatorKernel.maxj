@@ -45,6 +45,14 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
         return (x > 0 ? x : 0);
     }
 
+    public DFEVar checkWeightIterWrap(CounterChain chain, DFEVar weightIter) {
+        if (ctr.getLastWeightIterations() == 1 && ctr.getWeightIterations() == 1) {
+            return constant.var(dfeBool(), 1);
+        } else {
+            return chain.getCounterWrap(weightIter);
+        }
+    }
+
     private DFEVar getPixelIter(
             DFEVar enable, CounterChain chain, DFEVar lookAhead, DFEVar weightIter, DFEVar kernelIter) {
         /* Number of iterations to spend per channel. */
@@ -61,7 +69,7 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
                 .withMax(pixelIterations)
                 .withEnable(enable
                             & lookAhead.eq(layerParams.getConv().getLookAhead() - 1)
-                            & chain.getCounterWrap(weightIter)
+                            & checkWeightIterWrap(chain, weightIter)
                             & kernelIter.eq(ctr.getKernelIterations() - 1))
                 .withReset(batchCounter.eq(0))
             ).getCount();
@@ -88,7 +96,7 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
                 .withMax(getConvolutionIterations())
                 .withEnable(enable
                             & lookAheadIter.eq(layerParams.getConv().getLookAhead() - 1)
-                            & chain.getCounterWrap(weightIter)
+                            & checkWeightIterWrap(chain, weightIter)
                             & kernelIter.eq(ctr.getKernelIterations() - 1))
                 .withReset(batchCounter.eq(0))
             ).getCount();

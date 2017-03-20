@@ -90,12 +90,20 @@ public class LookAheadCounter extends KernelLib {
                     .withInitValue(0l)
                     .withInc(ctr.getKernelIterations() % totalPixelAddress)
                     .withMax(totalPixelAddress)
-                    .withEnable(masterChain.getCounterWrap(weightUsageIter)
+                    .withEnable(getWeightCounterWrap(masterChain, weightUsageIter)
                                 & kernelIter.eq(ctr.getKernelIterations() - 1))
                 ).getCount();
             pixelAddress = pixelAddressBase + kernelIter.cast(
                     dfeUInt(Utils.ceilLog2(totalPixelAddress)));
 
+        }
+    }
+
+    private DFEVar getWeightCounterWrap(CounterChain chain, DFEVar weightIter) {
+        if (ctr.getLastWeightIterations() == 1 && ctr.getWeightIterations() == 1) {
+            return constant.var(dfeBool(), 1);
+        } else {
+            return chain.getCounterWrap(weightIter);
         }
     }
 
@@ -118,7 +126,7 @@ public class LookAheadCounter extends KernelLib {
                          % channelIterations)
                 .withMax(channelIterations)
                 .withEnable(lookAhead.eq(layerParams.getConv().getLookAhead() - 1)
-                            & masterChain.getCounterWrap(weightUsageIter)
+                            & getWeightCounterWrap(masterChain, weightUsageIter)
                             & kernelIter.eq(ctr.getKernelIterations() - 1))
             ).getCount();
 
