@@ -4,12 +4,14 @@ layer {
     num_inputs: 30
     num_outputs: 32
 
+    activation: Relu
+
     conv: {
-        activation: Relu
         kernel_size: 5
 
         worker_factor: 10
         conv_folding_factor: 13
         kernel_folding_factor: 13
+        look_ahead: 1
     }
 }
