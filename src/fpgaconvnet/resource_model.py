@@ -19,8 +19,14 @@ NUM_BITS = 18
 DEFAULT_FIFO_SIZE = 512
 M20K_SIZE = 20480
 
-Resource = collections.namedtuple("Resource", ["flip_flop", "lut", "bram"])
+# Resource constraints
+MAX_DSP = 1963
+MAX_BRAM = 2567
+MAX_LUT = 524800
+MAX_FF = 1049600
 
+
+Resource = collections.namedtuple("Resource", ["flip_flop", "lut", "bram", "dsp"])
 
 def div_ceil(a, b):
     if a % b == 0:
@@ -49,6 +55,10 @@ def is_cpu_init(layer):
             div_ceil(layer.num_inputs, layer.conv.worker_factor)
             * div_ceil(layer.num_outputs, layer.conv.conv_folding_factor));
     return total_iters == layer.conv.bram_factor
+
+
+def is_compatible_streams(a, b):
+    return (a < b and b % a == 0) or (a >= b and a % b == 0)
 
 
 def conv_layer_dsp(layer):
@@ -275,12 +285,7 @@ def project(network):
         bram += math.ceil(
             DEFAULT_FIFO_DEPTH * lcm(width, 128) / M20K_SIZE)
 
-    return Resource(bram=bram, flip_flop=flip_flop, lut=lut)
-
-
-def is_compatible_streams(a, b):
-    return (a < b and b % a == 0) or (a >= b and a % b == 0)
-
+    return Resource(bram=bram, flip_flop=flip_flop, lut=lut, dsp=dsp)
 
 
 def main():

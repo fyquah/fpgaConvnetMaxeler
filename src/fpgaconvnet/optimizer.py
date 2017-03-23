@@ -5,9 +5,6 @@ import bisect
 import sys
 import random
 
-# import GPy
-# from mpl_toolkits import mplot3d
-# from matplotlib import pyplot as plt
 import numpy as np
 from scipy import optimize
 from sklearn import linear_model
@@ -15,6 +12,7 @@ import yaml
 import simanneal
 
 from google.protobuf import text_format
+from fpgaconvnet import resource_model
 from fpgaconvnet.protos import parameters_pb2
 
 
@@ -69,62 +67,62 @@ def scale_x(x_new):
     return [(x_new[i], x_new[i+1], x_new[i+2])
             for i in range(0, len(x_new), 3)]
 
+def sample_array(arr):
+    idx = random.randint(0, len(arr) - 1)
+    return arr[idx]
+
 
 class OptimizationProblem(simanneal.Annealer):
 
-    def __init__(self, network, models, constraints, x0):
-        super(OptimizationProblem, self).__init__(x0)
+    def __init__(self, network, constraints):
+        initial_state = parameters_pb2.Network()
+        initial_state.CopyFrom(network)
+        super(OptimizationProblem, self).__init__(initial_state)
         self.gops_fn = make_gops_fn(network)
         self.valid_values = []
         self.constraints = constraints
-        self.models = models
-        self.base_bram_usage = 0.0
 
         for layer in network.layer:
             if layer.HasField("conv"):
-                self.valid_values.append(compute_valid_values(layer.num_inputs))
-                self.valid_values.append(compute_valid_values(layer.num_outputs))
-                self.valid_values.append(compute_valid_values(
-                    layer.conv.kernel_size * layer.conv.kernel_size))
-                total_weights = (layer.num_inputs * layer.num_outputs
-                                 * layer.conv.kernel_size * layer.conv.kernel_size
-                                 + layer.num_outputs)
-                total_fifo = layer.conv.kernel_size * layer.input_width * layer.num_inputs
-                self.base_bram_usage += (total_weights + total_fifo) * BASE_M20K_FACTOR
+                self.valid_values.append(("conv", {
+                        "worker_factor": compute_valid_values(layer.num_inputs),
+                        "conv_folding_factor": compute_valid_values(layer.num_outputs),
+                        "kernel_folding_factor": compute_valid_values(
+                            layer.conv.kernel_size * layer.conv.kernel_size)
+                }))
 
             elif layer.HasField("pool"):
-                total_fifo = layer.pool.dim * layer.input_width * layer.num_inputs
-                self.base_bram_usage += total_fifo * BASE_M20K_FACTOR
+                self.valid_values.append(("pool", {
+                        "channel_folding_factor": compute_valid_values(layer.num_inputs)
+                }))
 
-    def logic_utilization_constraint(self, x_new):
-        logic_utilization = sum(
-                self.models["conv"]["residual_logic"](x) for x in scale_x(x_new)) \
-                + self.models["conv"]["base_logic"](x_new)
-        return self.constraints["logic_utilization"] - logic_utilization
+            elif layer.HasField("lrn"):
+                self.valid_values.append(("lrn", {
+                        "channel_folding_factor": compute_valid_values(layer.num_inputs)
+                }))
 
-    def multiplier_constraint(self, x_new):
-        multiplier = sum(
-            self.models["conv"]["multiplier"](x) for x in scale_x(x_new))
-        return 0.7 * self.constraints["multiplier"] - multiplier
+            else:
+                raise RuntimeError("Unknown layer type.")
 
-    def bram_constraint(self, x_new):
-        block_memory = sum(self.models["conv"]["residual_block_memory"](x)
-                           for x in scale_x(x_new)) \
-                       + self.base_bram_usage
-        return self.constraints["block_memory"] - block_memory
 
     def move(self):
         while True:
-            a = random.randint(0, len(self.state) - 1)
-            value_index = random.randint(0, len(self.valid_values[a]) - 1)
-            original = self.state[a]
-            self.state[a] = self.valid_values[a][value_index]
+            layer_id = random.randint(0, len(self.state.layer) - 1)
+            layer_type = self.valid_values[layer_id][0]
+            field_name = sample_array(self.valid_values[layer_id][1].keys())
+            new_value = sample_array(self.valid_values[layer_id][field_name])
+            original = getattr(getattr(self.state.layer[layer_id], layer_type), field_name)
+            setattr(getattr(self.state.layer[layer_id], layer_type), new_value)
 
-            if (self.multiplier_constraint(self.state) >= 0
-                    and self.logic_utilization_constraint(self.state) >= 0):
+            resources = resource_model.project(self.state)
+
+            if (resources.bram <= MAX_DSP
+                    and resources.lut <= MAX_LUT
+                    and resources.flip_flop <= MAX_FF
+                    and resources.dsp <= MAX_DSP):
                 break
             else:
-                self.state[a] = original
+                setattr(getattr(self.state.layer[layer_id], layer_type), original)
 
     def energy(self):
         return -self.gops_fn(self.state)
@@ -148,7 +146,7 @@ def make_presence_constraint(idx, values):
     return {"type": "eq", "fun": fn}
 
 
-def run_optimizer(network, models, constraints):
+def run_optimizer(network, constraints):
     num_conv_layers = 0
     for layer in network.layer:
         if layer.HasField("conv"):
@@ -156,8 +154,7 @@ def run_optimizer(network, models, constraints):
 
     minimized_states = []
     for i in range(1):
-        problem = OptimizationProblem(network, models, constraints,
-                                      num_conv_layers * 3 * [1])
+        problem = OptimizationProblem(network, constraints)
         problem.copy_strategy = "slice"  
         state, e = problem.anneal()
         total_logic_used = constraints["logic_utilization"] \
@@ -260,14 +257,18 @@ def make_gops_fn(network):
         acc_pipeline_length = 1
 
         # At our clock rate, it is safe to assume that LMem can produce
-        # pixel a cycle. The maximum bandwidth of LMem is around 38.4GBps (
+        # pixel a cycle. The maximum bandwidth of PCI is around 0.5GBps (
         # according to a post in mdx) - which translates to:
-        #   - 19.2 GBps in a direction
-        #   - 153.6 Gbps in a direction
-        #   - 8.53 giga words/s in a direction (a number is 18 bits)
-        #   - maximum of (8.53 * 1e9 / num_inputs) inputs per second in the
+        #   - 0.25 GBps in a direction
+        #   - 2.0 Gbps in a direction
+        #   - 0.1111 giga words/s in a direction (a number is 18 bits)
+        #   - maximum of (1.111 * 1e8 / num_inputs) inputs per second in the
         #     first layer.
-        #   - This is the bottle neck imposed by LMem transfers.
+        #   - This is the bottle neck imposed by PCIe transfers transfers.
+
+        # Similarly:
+        # If all the memory are connected to the same
+
         # In the case of reading / writing from the PC, that would be 0.5 Gbps
         # and similar maths follows.
         prev_cycles = float(clock_rate
@@ -281,6 +282,7 @@ def make_gops_fn(network):
         ops_per_cycle = 0
 
         factors_ptr = 0
+        kernel_input_cycles = []
 
         for layer in network.layer:
             if layer.HasField("conv"):
@@ -320,6 +322,9 @@ def make_gops_fn(network):
                         * acc_pipeline_length
                         * conv_unit_cycles)
 
+                kernel_input_cycles.append(
+                    (prev_cycles, scheduler_cycles, conv_unit_cycles))
+
                 prev_cycles = acc_cycles
                 ops_per_cycle += calc_total_ops(layer) / acc_cycles
 
@@ -330,14 +335,49 @@ def make_gops_fn(network):
                         minimum_cycles])
 
             elif layer.HasField("pool"):
-                prev_cycles = prev_cycles * layer.pool.dim * layer.pool.dim
+                kernel_input_cycles.append((prev_cycles,)) 
+                prev_cycles = (
+                    prev_cycles
+                    * layer.pool.stride
+                    * layer.pool.stride
+                    * layer.pool.channel_folding_factor)
+
+            elif layer.HasField("lrn"):
+                kernel_input_cycles.append((prev_cycles,)) 
+                prev_cycles = (
+                    prev_cycles
+                    * layer.lrn.stride
+                    * layer.lrn.stride
+                    * layer.lrn.channel_folding_factor)
 
             else:
                 raise RuntimeError("Unknown layer %d." % (layer.layer_id))
 
+        # Resolving the actual number of cycles is a linear programming cycles
+        # if we account for the number of cycles which is relatively slow
+        # to compute and might disrupt simulated annaeling optimization.
+        #
+        # The heriustic that we will use to compute the post-memory frequency
+        # is to take the sum of memory accesses and scale down by the amount
+        # it has surpass the memory bandwidth.
+        memory_access_per_cycle = 0.0
+        for i, layer in enumerate(network.layer):
+            if layer.HasField("conv") and not resource_model.is_cpu_init(layer):
+                width = div_ceil(
+                        layer.conv.worker_factor
+                        * layer.conv.conv_folding_factor
+                        * layer.conv.kernel_folding_factor, 96) * 96 * 32.
+                memory_access_per_cycle += (
+                    width * clock_rate * minimum_cycles
+                    / (kernel_input_cycles[i][1] * layer.conv.look_ahaed)
+
+        memory_access_per_cycle = clock_rate * minimum_cycles
+        memory_access_scale_factor = min(1, 38.4 * 1e9 / memory_access_per_cycle)
+
         # Multiply by minimum_cycles at the end so that none of the kernels
         # in the pipeline is running faster than the given clock rate.
-        return 1e-9 * ops_per_cycle * clock_rate * minimum_cycles
+        return 1e-9 * ops_per_cycle * clock_rate * minimum_cycles \
+                * memory_access_scale_factor
 
     return fn
 
@@ -351,99 +391,8 @@ def main():
     max_block_memory = resource_bench["resources"]["block_memory"]
     # Each M20k block contains 20k bits
 
-    X = []
-    Y = []
-
-
-    for datum in resource_bench["data"]:
-        # We do not attempt to model everything automatically, somethings are
-        # simple to model:
-        #
-        #   1. number_of_multipliers - upper bounded by `kernel_size *
-        #      kernel_size`. In some cases the multiplication tree will be
-        #      optimized by Maxeler and uses less resources, but this is
-        #      a good general rule of thumb.
-        #   2. base_number_of_block_memory - At the bare minimum, the layer
-        #      requires `B = (total_weights + total_bias) * bits_per_weight`
-        #      bits of FMem, which translates to at least `B / (20,480)`
-        #      M20 blocks.
-        #
-        # That said, what we try to model with our training data:
-        #   1. logic_utilization
-        #   2. residual_block_memory
-
-        params = datum["params"]
-        layer = datum["layer"]
-        usage = datum["usage"]
-        total_weights = ((
-                layer["num_inputs"] * layer["num_outputs"]
-                    * layer["kernel_size"] * layer["kernel_size"])
-                + layer["num_outputs"])
-        total_fifo = ((layer["kernel_size"] - 1) * layer["input_width"] * layer["num_inputs"]
-                      + layer["kernel_size"])
-        base_m20k = (total_weights + total_fifo) * BASE_M20K_FACTOR
-
-        wf = float(params["worker_factor"])
-        cff = float(params["conv_folding_factor"])
-        kff = float(params["kernel_folding_factor"])
-        X.append([wf, cff, kff])
-        Y.append([usage["logic_utilization"],
-                  float(usage["block_memory"] - base_m20k)])
-
-    X = np.array(X)
-    Y = np.array(Y)
-
-    logic_utilization_model = linear_model.LinearRegression(
-            normalize=True, fit_intercept=True)
-    logic_utilization_model.fit(X, Y[:, 0])
-    residual_block_memory_model = linear_model.LinearRegression(
-            normalize=True, fit_intercept=True)
-    residual_block_memory_model.fit(X, Y[:, 1])
-    base_logic = logic_utilization_model.predict([0, 0, 0])
-
-    logic_utilization_model = make_model_from_lm(logic_utilization_model)
-    base_logic_model = lambda x: base_logic
-    residual_logic_model = lambda x: logic_utilization_model(x) - base_logic
-    residual_block_memory_model = make_model_from_lm(residual_block_memory_model)
-
-    with open(FLAGS.design, "r") as f:
-        network = text_format.Parse(f.read(), parameters_pb2.Network())
-
-    for i, layer in enumerate(network.layer):
-        if i != 0:
-            layer.input_height = network.layer[i - 1].output_height
-            layer.input_width = network.layer[i - 1].output_width
-            layer.num_inputs = network.layer[i - 1].num_outputs
-
-        if layer.HasField("conv"):
-            layer.output_height = (
-                    (layer.input_height + 2 * layer.conv.pad - layer.conv.kernel_size)
-                     / layer.conv.stride + 1)
-            layer.output_width = (
-                    (layer.input_width + 2 * layer.conv.pad - layer.conv.kernel_size)
-                     / layer.conv.stride + 1)
-
-        elif layer.HasField("pool"):
-            layer.num_outputs = layer.num_inputs
-            stride = layer.pool.stride or layer.pool.dim
-            layer.output_height = div_ceil(layer.input_height, stride)
-            layer.output_width =  div_ceil(layer.input_width, stride)
-
-        else:
-            raise RuntimeError("Unknown layer!")
-
-    print network
-
     optimized_params = run_optimizer(
             network=network,
-            models={
-                "conv": {
-                    "base_logic": base_logic_model,
-                    "residual_logic": residual_logic_model,
-                    "residual_block_memory": residual_block_memory_model,
-                    "multiplier": lambda a: a[0] * a[1] * a[2] * 2
-                }
-            },
             constraints=resource_bench["resources"])
 
     # Write the results to a new protobuf and flush it to FLAGS.output
@@ -456,17 +405,17 @@ def main():
             layer.conv.conv_folding_factor = cff
             layer.conv.kernel_folding_factor = kff
 
+            if not layer.HasField("bram_factor"):
+                layer.conv.bram_factor = (
+                    div_ceil(layer.conv.num_inputs, wf) * wf
+                    * div_ceil(layer.conv.num_outputs, cff) * cff)
+
+        elif layer.HasField("pool"):
+            if not layer.pool.HasField("stride"):
+                layer.pool.stride = layer.pool.dim
+
     with open(FLAGS.output, "w") as f:
         f.write(text_format.MessageToString(optimized_network))
-
-    # GP Model - not very useful unless we have a lot of data.
-    # ker = GPy.kern.Poly(input_dim=X.shape[1])
-    # model = GPy.models.GPRegression(X, Y[:, 0:1], ker)
-    # model.optimize(messages=1)
-    # print(model)
-    # print(model.param_array)
-    # _  = model.plot()
-    # plt.show()
 
 
 if __name__ == "__main__":
