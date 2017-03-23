@@ -24,6 +24,11 @@ parser.add_argument("--nets", type=str, nargs="+",
 		    required=True)
 parser.add_argument("--dir", type=str, required=True,
 		    help="directory of the project")
+parser.add_argument("--max-ring",
+                    dest="max_ring",
+                    action="store_true",
+                    help=("Generate a max ring project that optimizes over"
+                          " multiple FPGA."))
 
 
 def slurp(filename):
@@ -57,15 +62,19 @@ def main(argv):
 
     mkdir_if_not_exist(os.path.join(FLAGS.dir, "build"))
     with open(os.path.join(FLAGS.dir, "build/Makefile"), "w") as f:
-	contents = slurp(
-		os.path.join(TEMPLATES_DIR, "Makefile.template")).format(
-		    prj=FLAGS.name,
-		    PRJ=FLAGS.name.upper(),
-		    WHEREISROOT=os.path.relpath(
-			BASE_DIR,
-			os.path.join(FLAGS.dir, "build")))
+        if FLAGS.max_ring:
+            template_file_name = "Makefile.multi.fpga.template"
+        else:
+            template_file_name = "Makefile.template"
+
+        contents = slurp(
+                os.path.join(TEMPLATES_DIR, template_file_name)).format(
+                    prj=FLAGS.name,
+                    PRJ=FLAGS.name.upper(),
+                    WHEREISROOT=os.path.relpath(
+                        BASE_DIR,
+                        os.path.join(FLAGS.dir, "build")))
 	f.write(contents)
-    
 
 
 if __name__ == "__main__":
