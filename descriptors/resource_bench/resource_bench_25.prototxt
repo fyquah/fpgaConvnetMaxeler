@@ -1,0 +1,14 @@
+layer {
+    input_height: 224
+    input_width: 224
+    num_inputs: 384
+    num_outputs: 384
+
+    pool: {
+        channel_folding_factor: 192
+
+        type: Max
+        dim: 3
+        stride: 2
+    }
+}
