@@ -9,6 +9,7 @@ Convention:
 """
 from __future__ import absolute_import
 
+import collections
 import math
 import sys
 
@@ -16,17 +17,18 @@ from google.protobuf import text_format
 from fpgaconvnet.protos import parameters_pb2
 
 NUM_BITS = 18
-DEFAULT_FIFO_SIZE = 512
+DEFAULT_FIFO_DEPTH = 512
 M20K_SIZE = 20480
 
 # Resource constraints
-MAX_DSP = 1963
-MAX_BRAM = 2567
-MAX_LUT = 524800
-MAX_FF = 1049600
+MAX_DSP = 1963.
+MAX_BRAM = 2567.
+MAX_LUT = 524800.
+MAX_FF = 1049600.
 
 
-Resource = collections.namedtuple("Resource", ["flip_flop", "lut", "bram", "dsp"])
+Resource = collections.namedtuple(
+    "Resource", ["flip_flop", "lut", "bram", "dsp"])
 
 def div_ceil(a, b):
     if a % b == 0:
@@ -68,18 +70,16 @@ def conv_layer_dsp(layer):
 
 
 def conv_layer_lut(layer):
-    wf = layer.conv.worker_facrtor
+    wf = layer.conv.worker_factor
     cff = layer.conv.conv_folding_factor
     kff = layer.conv.kernel_folding_factor
     scheduler = (
-            4718 * float(layer.num_inputs) / layer.conv.wokrer_factor
-            + 621.66 * layer.conv.worker_factor
+            4718 * float(layer.num_inputs) / wf
+            + 621.66 * wf
             - 3575.2)
     unit = (
-            0.26559 * layer.conv.worker_factor * (layer.conv.kernel_size ** 2)
-            + 24.505 * layer.conv.worker_factor
-                * layer.conv.conv_folding_factor
-                * layer.conv.kernel_folding_factor
+            0.26559 * wf * (layer.conv.kernel_size ** 2)
+            + 24.505 * wf * cff * kff
             + 3754.3)
     acc = (
         + 49.874 * wf * cff
@@ -102,18 +102,18 @@ def conv_layer_lut(layer):
 
 
 def conv_layer_flip_flop(layer):
-    wf = layer.conv.worker_facrtor
+    wf = layer.conv.worker_factor
     cff = layer.conv.conv_folding_factor
     kff = layer.conv.kernel_folding_factor
     scheduler = (
             layer.num_inputs * (layer.conv.kernel_size ** 2)
-            + math.abs(layer.num_inputs - wf))
+            + abs(layer.num_inputs - wf))
     unit = (
             -38.779 * wf * cff
             + 39.529 * wf * cff * kff
             + 6272.7)
     acc = (
-            layer.num_outputs * layer.conv.look_ahaed * NUM_BITS
+            layer.num_outputs * layer.conv.look_ahead * NUM_BITS
             + 49.874 * wf * cff
             - 456.46 * cff
             + 7595.4)
@@ -142,7 +142,7 @@ def conv_layer_bram(layer):
     scheduler = -238.3 * log2(layer.conv.worker_factor) \
                 + 70 + 960 / 30 * layer.num_inputs
     unit = (layer.conv.bram_factor
-            + max(0, 0.0.9187 * kff - 5.8784)
+            + max(0, 0.09187 * kff - 5.8784)
             + layer.conv.kernel_size ** 2)
     accumulator = 2
     streams = (
@@ -184,7 +184,7 @@ def pool_layer_bram(layer):
     channel_folding_factor = layer.pool.channel_folding_factor
     return (
             layer.input_width * 20.0 * layer.num_inputs / 20480.0
-                * math.log2(channel_folding_factor)
+                * log2(channel_folding_factor)
             - 11.2)
 
 
@@ -208,7 +208,7 @@ def project(network):
 
     per_fpga_constants = [
         # CheckSumMappedDRP
-        (40, 37, 1)
+        (40, 37, 1),
 
         # Max4Pcie
         (833, 1000, 2),
@@ -230,34 +230,35 @@ def project(network):
 
     # If any of the layer uses off-chip weight transfer, then only we need this.
     for layer in network.layer:
-        if not is_cpu_init(layer):
-            off_chip_constants = [
-                # MemoryControllerPro
-                (6797, 2830, 95),
+        if layer.HasField("conv"):
+            if not is_cpu_init(layer):
+                off_chip_constants = [
+                    # MemoryControllerPro
+                    (6797, 2830, 95),
 
-                # MemoryController
-                (11203, 11805, 30)
-            ]
+                    # MemoryController
+                    (11203, 11805, 30)
+                ]
 
-            for a, b, c in off_chip_constants:
-                lut += a
-                flip_flop += b
-                bram += c
-            break
+                for a, b, c in off_chip_constants:
+                    lut += a
+                    flip_flop += b
+                    bram += c
+                break
 
     # fromcpu
-    width = network.layers[0].num_inputs * 32
+    width = network.layer[0].num_inputs * 32
     lut += 400
     flip_flop += 502
-    bram += wf * math.ceil(DEFAULT_FIFO_DEPTH * width / M20K_SIZE)
-    if not is_compatible_streams(128, network.layers[0].num_inputs * 32):
+    bram += math.ceil(DEFAULT_FIFO_DEPTH * width / M20K_SIZE)
+    if not is_compatible_streams(128, width):
         lut += 400
         flip_flop += 502
         bram += math.ceil(
             DEFAULT_FIFO_DEPTH * lcm(width, 128) / M20K_SIZE)
 
     # Kernel streaming and actual computation work.
-    for layer in network.layers:
+    for layer in network.layer:
         if layer.HasField("conv"):
             lut += conv_layer_lut(layer)
             flip_flop += conv_layer_flip_flop(layer)
@@ -275,7 +276,7 @@ def project(network):
             bram += lrn_layer_bram(layer)
 
     # tocpu
-    width = network.layers[-1].num_outputs * 32
+    width = network.layer[-1].num_outputs * 32
     lut += 400
     flip_flop += 502
     bram += math.ceil(DEFAULT_FIFO_DEPTH * width / M20K_SIZE)
@@ -286,10 +287,6 @@ def project(network):
             DEFAULT_FIFO_DEPTH * lcm(width, 128) / M20K_SIZE)
 
     return Resource(bram=bram, flip_flop=flip_flop, lut=lut, dsp=dsp)
-
-
-def main():
-    pass
 
 
 if __name__ == "__main__":
