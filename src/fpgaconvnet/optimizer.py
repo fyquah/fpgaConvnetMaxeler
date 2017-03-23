@@ -2,6 +2,7 @@ from __future__ import absolute_import
 
 import argparse
 import bisect
+import logging
 import sys
 import random
 
@@ -362,6 +363,8 @@ def main():
             layer.input_width = network.layer[i - 1].output_width
             layer.num_inputs = network.layer[i - 1].num_outputs
 
+        layer.layer_id = i
+
         if layer.HasField("conv"):
             layer.output_height = (
                     (layer.input_height + 2 * layer.conv.pad - layer.conv.kernel_size)
@@ -387,11 +390,15 @@ def main():
         else:
             raise RuntimeError("Unknown layer!")
 
+    network.layer[0].is_first_layer = True
+    network.layer[-1].is_last_layer = True
     print network
-    optimized_network = run_optimizer(network)
+    logging.getLogger().setLevel(logging.DEBUG)
+    print resource_model.project(network)
+    # optimized_network = run_optimizer(network)
 
-    with open(FLAGS.output, "w") as f:
-        f.write(text_format.MessageToString(optimized_network))
+    # with open(FLAGS.output, "w") as f:
+    #     f.write(text_format.MessageToString(optimized_network))
 
 
 if __name__ == "__main__":

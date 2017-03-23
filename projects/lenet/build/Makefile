@@ -18,8 +18,9 @@ $(LENET_DATA):
 	gzip -d $@.gz
 
 
-$(LENET_OPTIMIZED_DESCRIPTOR): fpgaconvnet/optimizer.py $(LENET_DESCRIPTOR) $(PYTHON_PROTOS)
-	python $< --resource-bench $(WHEREISROOT)/results/resource_bench.yaml --output $@ \
+$(LENET_OPTIMIZED_DESCRIPTOR): $(LENET_DESCRIPTOR) $(PYTHON_PROTOS) sync_py_srcs 
+	# python fpgaconvnet/resource_model.py
+	python fpgaconvnet/optimizer.py --resource-bench $(WHEREISROOT)/results/resource_bench.yaml --output $@ \
 	    $(LENET_DESCRIPTOR)
 
 

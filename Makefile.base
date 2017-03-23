@@ -113,3 +113,7 @@ fpgaconvnet/convnet.o: fpgaconvnet
 FPGACONVNET_OBJ_FILES=fpgaconvnet/protos/parameters.pb.o \
 		      fpgaconvnet/feedforward.o fpgaconvnet/convnet.o \
 		      fpgaconvnet/mnist.o
+
+sync_py_srcs:
+	mkdir -p fpgaconvnet/
+	cp $(WHEREISROOT)/src/fpgaconvnet/*.py ./fpgaconvnet/

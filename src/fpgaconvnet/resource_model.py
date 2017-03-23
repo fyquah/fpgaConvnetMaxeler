@@ -10,15 +10,17 @@ Convention:
 from __future__ import absolute_import
 
 import collections
+import logging
 import math
 import sys
 
 from google.protobuf import text_format
 from fpgaconvnet.protos import parameters_pb2
 
-NUM_BITS = 18
-DEFAULT_FIFO_DEPTH = 512
-M20K_SIZE = 20480
+ACTUAL_BITS = 18.
+NUM_BITS = 18.
+DEFAULT_FIFO_DEPTH = 512.
+M20K_SIZE = 20480.
 
 # Resource constraints
 MAX_DSP = 1963.
@@ -30,6 +32,7 @@ MAX_FF = 1049600.
 Resource = collections.namedtuple(
     "Resource", ["flip_flop", "lut", "bram", "dsp"])
 
+
 def div_ceil(a, b):
     if a % b == 0:
         return a / b
@@ -38,7 +41,7 @@ def div_ceil(a, b):
 
 
 def gcd(a, b):
-    if a % b == 0:
+    if b == 0:
         return a
     else:
         return gcd(b, a % b)
@@ -54,8 +57,8 @@ def log2(a):
 
 def is_cpu_init(layer):
     total_iters = (
-            div_ceil(layer.num_inputs, layer.conv.worker_factor)
-            * div_ceil(layer.num_outputs, layer.conv.conv_folding_factor));
+            layer.conv.worker_factor * div_ceil(layer.num_inputs, layer.conv.worker_factor)
+            * layer.conv.conv_folding_factor * div_ceil(layer.num_outputs, layer.conv.conv_folding_factor));
     return total_iters == layer.conv.bram_factor
 
 
@@ -67,6 +70,13 @@ def conv_layer_dsp(layer):
     return (layer.conv.worker_factor
             * layer.conv.conv_folding_factor
             * layer.conv.kernel_folding_factor)
+
+
+def calc_total_iters(layer):
+    return (div_ceil(layer.num_inputs, layer.conv.worker_factor)
+            * div_ceil(layer.num_outputs, layer.conv.conv_folding_factor)
+            * div_ceil(layer.conv.kernel_size * layer.conv.kernel_size,
+                       layer.conv.kernel_folding_factor))
 
 
 def conv_layer_lut(layer):
@@ -106,8 +116,8 @@ def conv_layer_flip_flop(layer):
     cff = layer.conv.conv_folding_factor
     kff = layer.conv.kernel_folding_factor
     scheduler = (
-            layer.num_inputs * (layer.conv.kernel_size ** 2)
-            + abs(layer.num_inputs - wf))
+            95.65 * layer.num_inputs * (layer.conv.kernel_size ** 2)
+            + 40.61 * abs(layer.num_inputs - wf))
     unit = (
             -38.779 * wf * cff
             + 39.529 * wf * cff * kff
@@ -141,31 +151,45 @@ def conv_layer_bram(layer):
     num_outputs = layer.num_outputs
     scheduler = -238.3 * log2(layer.conv.worker_factor) \
                 + 70 + 960 / 30 * layer.num_inputs
+    weight_bits_per_multiplier = (
+            div_ceil(layer.conv.kernel_size * layer.conv.kernel_size,
+                     layer.conv.kernel_folding_factor)
+            * layer.conv.bram_factor / (wf * cff))
     unit = (layer.conv.bram_factor
             + max(0, 0.09187 * kff - 5.8784)
-            + layer.conv.kernel_size ** 2)
-    accumulator = 2
+            + (7.0248 * (layer.conv.kernel_size ** 2))
+            + wf * cff * kff * math.ceil(weight_bits_per_multiplier / 20480))
+    accumulator = 2 + layer.num_outputs
+    scheduler_unit_fifo_bram = math.ceil(
+            DEFAULT_FIFO_DEPTH * (kernel_size ** 2) * NUM_BITS / M20K_SIZE)
+    unit_acc_fifo_bram = math.ceil(
+            DEFAULT_FIFO_DEPTH * cff * NUM_BITS / M20K_SIZE)
+    acc_next = math.ceil(DEFAULT_FIFO_DEPTH * num_outputs * NUM_BITS / M20K_SIZE)
     streams = (
             # from scheduler -> unit
-            wf * math.ceil(DEFAULT_FIFO_DEPTH * (kernel_size ** 2) * NUM_BITS
-                           / M20K_SIZE)
+            wf * scheduler_unit_fifo_bram
 
             # from unit -> acc
-            + wf * math.ceil(DEFAULT_FIFO_DEPTH * cff * NUM_BITS / M20K_SIZE)
+            + wf * unit_acc_fifo_bram
 
             # from acc -> <next>
-            + wf * math.ceil(DEFAULT_FIFO_DEPTH * num_outputs * NUM_BITS
-                              / M20K_SIZE))
+            + acc_next)
+
     if is_cpu_init(layer):
         streams += math.ceil(DEFAULT_FIFO_DEPTH * kff * 32 / M20K_SIZE)
         streams += math.ceil(DEFAULT_FIFO_DEPTH * 128 / M20K_SIZE)
         width = kff * 32
 
-        if is_compatible_streams(width, 128):
+        if not is_compatible_streams(width, 128):
             # Fifo between DualAspectReg and DualAspectMux
             dual_aspect_width = lcm(width, 128)
-            streams += math.ceil(
-                DEFAULT_FIFO_DEPTH * dual_aspect_width / M20K_SIZE)
+            logging.debug("layer %d dual aspect width = %.3f" %
+                          (layer.layer_id, dual_aspect_width))
+            fifo_dual_aspect_width = math.ceil(
+                    DEFAULT_FIFO_DEPTH * dual_aspect_width / M20K_SIZE)
+            logging.debug("Layer %d weights dual aspect fifo = %.3f"
+                          % (layer.layer_id, fifo_dual_aspect_width))
+            streams += fifo_dual_aspect_width
 
     else:
         # The LMem Stream Size for our target FPGA is 384 bytes
@@ -175,6 +199,19 @@ def conv_layer_bram(layer):
         # TODO(fyq14): Model FIFO right after LMEM.
         streams += math.ceil(DEFAULT_FIFO_DEPTH * lmem_stream_size / M20K_SIZE)
 
+    logging.debug("Layer %d BRAM scheduler: %.3f" % (layer.layer_id, scheduler))
+    logging.debug("Layer %d BRAM convolution unit: %.3f" % (layer.layer_id, unit))
+    logging.debug("Layer %d BRAM accumulator: %.3f" % (layer.layer_id, accumulator))
+    logging.debug("Layer %d BRAM used by kernels: %.3f"
+                  % (layer.layer_id, scheduler + unit + accumulator))
+    logging.debug("Layer %d BRAM streams: %.3f" % (layer.layer_id, streams))
+    logging.debug("Layer %d BRAM scheduler -> convUnit: %.3f"
+                  % (layer.layer_id, scheduler_unit_fifo_bram))
+    logging.debug("Layer %d BRAM convUnit -> accumulator: %.3f"
+                  % (layer.layer_id, unit_acc_fifo_bram))
+    logging.debug("Layer %d BRAM accumulator -> <next>: %.3f"
+                  % (layer.layer_id, acc_next))
+
     return scheduler + unit + accumulator + streams
 
 
@@ -182,10 +219,20 @@ def conv_layer_bram(layer):
 #              but I have no idea how to model that point.
 def pool_layer_bram(layer):
     channel_folding_factor = layer.pool.channel_folding_factor
-    return (
-            layer.input_width * 20.0 * layer.num_inputs / 20480.0
-                * log2(channel_folding_factor)
-            - 11.2)
+    kernel_bram = (
+        layer.input_width * 20.0
+            * layer.num_inputs / 20480.0 * log2(channel_folding_factor)
+        - 11.2)
+    if layer.is_last_layer:
+        bits = 32
+    else:
+        bits = NUM_BITS
+
+    stream_bram = math.ceil(
+            DEFAULT_FIFO_DEPTH * layer.num_inputs * bits / M20K_SIZE)
+    logging.debug("Layer %d pooling stream_bram = %.3f" %
+                  (layer.layer_id, stream_bram))
+    return kernel_bram + stream_bram
 
 
 def pool_layer_lut(layer):
@@ -248,17 +295,29 @@ def project(network):
 
     # fromcpu
     width = network.layer[0].num_inputs * 32
+    stream_input_fifo = math.ceil(DEFAULT_FIFO_DEPTH * width / M20K_SIZE)
+
     lut += 400
     flip_flop += 502
-    bram += math.ceil(DEFAULT_FIFO_DEPTH * width / M20K_SIZE)
+    bram += math.ceil(DEFAULT_FIFO_DEPTH * 128 / M20K_SIZE)
+    bram += stream_input_fifo
+
+    logging.debug("Stream input fifo BRAM = %.3f" % stream_input_fifo)
+
     if not is_compatible_streams(128, width):
         lut += 400
         flip_flop += 502
-        bram += math.ceil(
+        non_multiple_transition_fifo = math.ceil(
             DEFAULT_FIFO_DEPTH * lcm(width, 128) / M20K_SIZE)
+        bram += non_multiple_transition_fifo
+        logging.debug("Input non multiple transition fifo BRAM = %.3f"
+                      % non_multiple_transition_fifo)
 
     # Kernel streaming and actual computation work.
     for layer in network.layer:
+
+        logging.debug("-----------------")
+
         if layer.HasField("conv"):
             lut += conv_layer_lut(layer)
             flip_flop += conv_layer_flip_flop(layer)
@@ -275,16 +334,30 @@ def project(network):
             flip_flop += lrn_layer_flip_flop(layer)
             bram += lrn_layer_bram(layer)
 
+        logging.debug("-----------------")
+
     # tocpu
     width = network.layer[-1].num_outputs * 32
     lut += 400
     flip_flop += 502
-    bram += math.ceil(DEFAULT_FIFO_DEPTH * width / M20K_SIZE)
+    stream_output_fifo = math.ceil(DEFAULT_FIFO_DEPTH * width / M20K_SIZE)
+    bram += stream_output_fifo
+    bram += math.ceil(DEFAULT_FIFO_DEPTH * 128 / M20K_SIZE)  # Final connection via PCIe
+    logging.debug("Stream output width = %.3f" % width)
+    logging.debug("Stream output fifo BRAM = %.3f" % stream_output_fifo)
+
     if not is_compatible_streams(128, width):
         lut += 400
         flip_flop += 502
-        bram += math.ceil(
-            DEFAULT_FIFO_DEPTH * lcm(width, 128) / M20K_SIZE)
+        dual_aspect_width = lcm(width, 128)
+        non_multiple_transition_fifo = math.ceil(
+            DEFAULT_FIFO_DEPTH * dual_aspect_width / M20K_SIZE)
+        logging.debug("Stream output dual aspect width = %.3f"
+                       % dual_aspect_width);
+        logging.debug("Stream output non multiple transition fifo BRAM = %.3f"
+                      % non_multiple_transition_fifo)
+        bram += non_multiple_transition_fifo
+
 
     return Resource(bram=bram, flip_flop=flip_flop, lut=lut, dsp=dsp)
 
