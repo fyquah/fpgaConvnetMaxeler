@@ -111,7 +111,7 @@ class OptimizationProblem(simanneal.Annealer):
 
             resources = resource_model.project(self.state)
 
-            if (resources.bram <= resource_model.MAX_DSP
+            if (resources.bram <= resource_model.MAX_BRAM
                     and resources.lut <= resource_model.MAX_LUT
                     and resources.flip_flop <= resource_model.MAX_FF
                     and resources.dsp <= resource_model.MAX_DSP):
@@ -160,7 +160,7 @@ def run_optimizer(network):
         total_lut_used = resource.lut
         total_ff_used = resource.flip_flop
         total_dsp_used = resource.dsp
-        total_m20k = resource.bram
+        total_m20k_used = resource.bram
 
         print "=> Attempt", i
         print "Estimated total LUT used: %d (%.3f) " % \
@@ -170,11 +170,11 @@ def run_optimizer(network):
                 (total_ff_used,
                  float(total_ff_used) / resource_model.MAX_FF)
         print "Estimated total DSP used: %d (%.3f)" % \
-                (total_dsp,
-                 float(total_dsp) / resource_model.MAX_DSP)
+                (total_dsp_used,
+                 float(total_dsp_used) / resource_model.MAX_DSP)
         print "Estimaed M20k used: %d (%.3f)" % \
-                (total_m20k,
-                 float(total_m20k) / resource_model.MAX_BRAM)
+                (total_m20k_used,
+                 float(total_m20k_used) / resource_model.MAX_BRAM)
         print "Estimated GOps:", estimate_gops(state), "\n"
         minimized_states.append(state)
 
@@ -393,12 +393,12 @@ def main():
     network.layer[0].is_first_layer = True
     network.layer[-1].is_last_layer = True
     print network
-    logging.getLogger().setLevel(logging.DEBUG)
-    print resource_model.project(network)
-    # optimized_network = run_optimizer(network)
+    # logging.getLogger().setLevel(logging.DEBUG)
+    # print resource_model.project(network)
+    optimized_network = run_optimizer(network)
 
-    # with open(FLAGS.output, "w") as f:
-    #     f.write(text_format.MessageToString(optimized_network))
+    with open(FLAGS.output, "w") as f:
+        f.write(text_format.MessageToString(optimized_network))
 
 
 if __name__ == "__main__":
