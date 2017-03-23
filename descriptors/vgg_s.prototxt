@@ -29,7 +29,7 @@ layer {
     }
 }
 layer {
-    num_output: 256
+    num_outputs: 256
 
     conv {
         kernel_size: 5
@@ -42,7 +42,7 @@ layer {
     pool {
         dim: 2
         stride: 2
-        type: MAX
+        type: Max
     }
 }
 
@@ -77,6 +77,6 @@ layer {
     pool {
         dim: 3
         stride: 3
-        type: MAX
+        type: Max
     }
 }
