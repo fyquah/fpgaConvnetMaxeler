@@ -25,27 +25,10 @@ parser.add_argument("design", type=str,
                     help="Path to the protos with the design. *_folding_factor"
                          " fields in the proto will be ignored.")
 parser.add_argument("--resource-bench", dest="resource_bench", type=str,
-                    help=("Path to yaml file with the results from running "
-                          " resource benches."),
-                    required=True)
+                    help="Not used - please remove.")
 parser.add_argument("--output", dest="output", type=str,
                     help="Path to the protos with the optimized output.",
                     required=True)
-
-# The amount of M20k used per 18-bit fixed point word.
-BASE_M20K_FACTOR = 18.0 / 20480.0
-
-
-def make_model_from_lm(lm):
-    def fn(data):
-        return lm.predict(np.reshape(data, (1, -1)))[0]
-    return fn
-
-
-def make_negate_fn(fn):
-    def new_fn(*args, **kwargs):
-        return -fn(*args, **kwargs)
-    return new_fn
 
 
 def compute_valid_values(N):

@@ -39,6 +39,7 @@ message LayerParameter
     optional uint32 layer_id = 11;
     optional bool is_first_layer = 12 [default = false];
     optional bool is_last_layer = 13 [default = false];
+    optional uint32 fpga_id = 14;
 }
 
 
