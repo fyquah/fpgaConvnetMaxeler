@@ -136,7 +136,7 @@ def run_optimizer(network):
             num_conv_layers += 1
 
     minimized_states = []
-    for i in range(1):
+    for i in range(1, network.num_fpga_available + 1):
         problem = OptimizationProblem(network)
         state, e = problem.anneal()
         resource = resource_model.project(state)
@@ -356,12 +356,12 @@ def main():
                     (layer.input_width + 2 * layer.conv.pad - layer.conv.kernel_size)
                      / layer.conv.stride + 1)
 
-            if not layer.conv.HasField("bram_factor"):
-                wf = layer.conv.worker_factor
-                cff = layer.conv.conv_folding_factor
-                layer.conv.bram_factor = (
-                    div_ceil(layer.num_inputs, wf) * wf
-                    * div_ceil(layer.num_outputs, cff) * cff)
+            # Default parameters
+            layer.conv.look_ahead = 1
+            layer.conv.worker_factor = 1
+            layer.conv.kernel_folding_factor = 1
+            layer.conv.conv_folding_factor = 1
+            layer.conv.bram_factor = layer.num_inputs * layer.num_outputs
 
         elif layer.HasField("pool"):
             layer.num_outputs = layer.num_inputs
@@ -369,6 +369,17 @@ def main():
             layer.pool.stride = stride
             layer.output_height = div_ceil(layer.input_height, stride)
             layer.output_width =  div_ceil(layer.input_width, stride)
+
+            # Default parameters
+            layer.pool.channel_folding_factor = layer.num_outputs
+
+        elif layer.HasField("lrn"):
+            layer.num_outputs = layer.num_inputs
+            layer.output_height = layer.input_height
+            layer.output_width =  layer.input_width
+
+            # Default parameters
+            layer.lrn.channel_folding_factor = layer.num_outputs
 
         else:
             raise RuntimeError("Unknown layer!")
