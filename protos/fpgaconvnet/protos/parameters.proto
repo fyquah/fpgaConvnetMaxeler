@@ -3,9 +3,11 @@ package fpgaconvnet.protos;
 
 message Network
 {
+    repeated LayerParameter layer = 1;
+
     /* Frequency of design in MHz. Note that all kernels will run at the same frequency. */
     optional uint32 frequency = 2 [default = 100];
-    repeated LayerParameter layer = 1;
+    optional uint32 num_fpga_available = 3 [default = 1];
 }
 
 
@@ -133,6 +135,7 @@ message LrnParameter
     optional uint32 local_size = 1;
     optional float alpha = 2;
     optional float beta = 3;
+    optional float k = 7;
     optional LrnRegion norm_region = 4 [default = ACROSS_CHANNELS];
     optional ApproxMethod approx_method = 5 [default = BINOMIAL];
     optional uint32 approx_degree = 6 [default = 1];  /* How many powers to approximate. */
