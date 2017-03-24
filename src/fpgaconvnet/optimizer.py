@@ -32,6 +32,15 @@ parser.add_argument("--output", dest="output", type=str,
                     required=True)
 
 
+def satisfies_resource_constraints(resources):
+
+    return all(r.bram <= 0.8 * resource_model.MAX_BRAM
+                and r.lut <= 0.8 * resource_model.MAX_LUT
+                and r.flip_flop <= 0.8 * resource_model.MAX_FF
+                and r.dsp <= resource_model.MAX_DSP
+               for r in resources)
+
+
 def compute_valid_values(N):
     ret = [1]
     for i in range(2, N + 1):
@@ -71,6 +80,60 @@ def sample_array(arr):
     return arr[idx]
 
 
+def pertubate(state):
+    while True:
+        layer_id = random.randint(0, len(state.layer) - 1)
+        layer_type = self.valid_values[layer_id][0]
+        field_name = sample_array(self.valid_values[layer_id][1].keys())
+        new_network = parameters_pb2.Network()
+        new_network.CopyFrom(state)
+
+        if field_name == "bram_factor":
+            if new_network.layer[layer_id].conv.should_fit_on_chip:
+                continue
+            layer = new_network.layer[layer_id]
+            scheduler_iters = div_ceil(
+                    layer.num_inputs, layer.conv.worker_factor)
+            conv_iters = div_ceil(
+                    layer.num_outputs, layer.conv.conv_folding_factor)
+            new_value = sample_array(
+                compute_factors(conv_iters)
+                + compute_multiples(conv_iters, scheduler_iters * conv_iters))
+        elif (new_network.layer[layer_id].conv.should_fit_on_chip
+                    and field_name == "look_ahead"):
+            continue
+        else:
+            new_value = sample_array(self.valid_values[layer_id][1][field_name])
+
+        setattr(getattr(new_network.layer[layer_id], layer_type), field_name, new_value)
+
+        # Special case: synchronize changes to bram_factor
+        if field_name == "worker_factor" or field_name == "conv_folding_factor":
+            layer = new_network.layer[layer_id]
+            layer.conv.bram_factor = layer.conv.conv_folding_factor * layer.conv.worker_factor
+
+            # Select the largest layer.layer_id that satisfies the new
+            # constraints imposed.
+            # while True:
+            #     total_convolvers = (layer.conv.conv_folding_factor
+            #                         * layer.conv.worker_factor)
+
+            #     if layer.conv.bram_factor % total_convolvers == 0:
+            #         size = layer.conv.bram_factor / total
+            #         conv_iters = div_ceil(layer.num_outputs, layer.conv.conv_folding_factor)
+            #         if (size < conv_iters and conv_iters % size == 0
+            #                 or size >= conv_iters and size % conv_iters):
+            #             break
+            #         layer.conv.bram_factor -= 1
+
+        resources = resource_model.project(new_network)
+
+        if satisfies_resource_constraints(resources):
+            return state
+
+    return None
+
+
 class OptimizationProblem(simanneal.Annealer):
 
     def __init__(self, network):
@@ -108,60 +171,7 @@ class OptimizationProblem(simanneal.Annealer):
 
     def move(self):
         # TODO(fyq14): Decide if it is time to shift left or shift right.
-
-        while True:
-            layer_id = random.randint(0, len(self.state.layer) - 1)
-            layer_type = self.valid_values[layer_id][0]
-            field_name = sample_array(self.valid_values[layer_id][1].keys())
-            new_network = parameters_pb2.Network()
-            new_network.CopyFrom(self.state)
-
-            if field_name == "bram_factor":
-                if new_network.layer[layer_id].conv.should_fit_on_chip:
-                    continue
-                layer = new_network.layer[layer_id]
-                scheduler_iters = div_ceil(
-                        layer.num_inputs, layer.conv.worker_factor)
-                conv_iters = div_ceil(
-                        layer.num_outputs, layer.conv.conv_folding_factor)
-                new_value = sample_array(
-                    compute_factors(conv_iters)
-                    + compute_multiples(conv_iters, scheduler_iters * conv_iters))
-            elif (new_network.layer[layer_id].conv.should_fit_on_chip
-                        and field_name == "look_ahead"):
-                continue
-            else:
-                new_value = sample_array(self.valid_values[layer_id][1][field_name])
-
-            setattr(getattr(new_network.layer[layer_id], layer_type), field_name, new_value)
-
-            # Special case: synchronize changes to bram_factor
-            if field_name == "worker_factor" or field_name == "conv_folding_factor":
-                layer = new_network.layer[layer_id]
-                layer.conv.bram_factor = layer.conv.conv_folding_factor * layer.conv.worker_factor
-
-                # Select the largest layer.layer_id that satisfies the new
-                # constraints imposed.
-                # while True:
-                #     total_convolvers = (layer.conv.conv_folding_factor
-                #                         * layer.conv.worker_factor)
-
-                #     if layer.conv.bram_factor % total_convolvers == 0:
-                #         size = layer.conv.bram_factor / total
-                #         conv_iters = div_ceil(layer.num_outputs, layer.conv.conv_folding_factor)
-                #         if (size < conv_iters and conv_iters % size == 0
-                #                 or size >= conv_iters and size % conv_iters):
-                #             break
-                #         layer.conv.bram_factor -= 1
-
-            resources = resource_model.project(new_network)
-
-            if (resources.bram <= 0.8 * resource_model.MAX_BRAM
-                    and resources.lut <= 0.8 * resource_model.MAX_LUT
-                    and resources.flip_flop <= 0.8 * resource_model.MAX_FF
-                    and resources.dsp <= resource_model.MAX_DSP):
-                self.state = new_network
-                break
+        self.state = pertubate(self.state)
 
     def energy(self):
         return -estimate_gops(self.state)
@@ -192,10 +202,31 @@ def make_presence_constraint(idx, values):
 
 def search_initial_state(network, num_fpgas):
 
-    for i, layer in enumerate(network.layer):
-        layer.fpga_id = min(i, num_fpgas - 1)
+    split_points = num_fpgas - 1
+    arr = [True] * split_points + [False] * (len(network.layer) - 1 - split_points)
 
-    return network
+    # Perturbate until we find a suitable starting point.
+    for iter in range(200):
+        random.shuffle(arr)
+
+        fpga_id = 0
+        for i, layer in enumerate(network.layer):
+
+            if i != 0 and arr[i - 1]:
+                fpga_id += 1
+
+            # Relable fpga_id
+            layer.fpga_id = fpga_id
+
+        resources = resource_model.project(network)
+        print network
+        print resources
+        print "-------------------------"
+        if satisfies_resource_constraints(resources):
+            return network
+
+    print "Failed to find suitable starting point for num_fpgas =", num_fpgas
+    return None
 
 
 def optimize_with_fixed_fpga_count(network, num_fpgas):
@@ -438,7 +469,9 @@ def main():
                      / layer.conv.stride + 1)
 
             # Default parameters
-            layer.conv.worker_factor = 1
+            # Roughly half the worker factor, prevents heavy multiplexing at the
+            # conv scheduler.
+            layer.conv.worker_factor = int(math.ceil(layer.num_inputs / 3.))
             layer.conv.kernel_folding_factor = 1
             layer.conv.conv_folding_factor = 1
             layer.conv.look_ahead = 1
@@ -456,7 +489,7 @@ def main():
             # The if statement below is an heriustic on limit of BRAM we
             # want to use. The heriustic should balance be able to guess if
             # we need to use that much BRAM it will be bad anyway.
-            if layer_bram_required < 0.5 * resource_model.MAX_BRAM:
+            if layer_bram_required < 0.1 * resource_model.MAX_BRAM:
                 layer.conv.should_fit_on_chip = True
             else:
                 layer.conv.should_fit_on_chip = False

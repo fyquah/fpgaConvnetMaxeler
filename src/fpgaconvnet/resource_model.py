@@ -286,10 +286,18 @@ def lrn_layer_dsp(layer):
 
 
 def project(network):
-    lut = 0.0
-    flip_flop = 0.0
-    bram = 0.0
-    dsp = 0.0
+    # Verify that fpga_id is a non-decreasing sequence
+    for i, layer in enumerate(network.layer):
+        if i != 0:
+            assert (layer.fpga_id >= network.layer[i - 1].fpga_id
+                    and layer.fpga_id < network.num_fpga_used)
+    assert network.layer[-1].fpga_id == network.num_fpga_used - 1
+
+    lut = [0.0] * network.num_fpga_used
+    flip_flop = [0.0] * network.num_fpga_used
+    bram = [0.0] * network.num_fpga_used
+    dsp = [0.0] * network.num_fpga_used
+    has_included_lmem_resources = [False] * network.num_fpga_used
 
     per_fpga_constants = [
         # CheckSumMappedDRP
@@ -309,14 +317,16 @@ def project(network):
     ]
 
     for a, b, c in per_fpga_constants:
-        lut += a
-        flip_flop += b
-        bram += c
+        for i in range(network.num_fpga_used):
+            lut[i] += a
+            flip_flop[i] += b
+            bram[i] += c
 
     # If any of the layer uses off-chip weight transfer, then only we need this.
     for layer in network.layer:
         if layer.HasField("conv"):
-            if not is_cpu_init(layer):
+            if not is_cpu_init(layer) and not has_included_lmem_resources[layer.fpga_id]:
+                has_included_lmem_resources[layer.fpga_id] = True
                 off_chip_constants = [
                     # MemoryControllerPro
                     (6797, 2830, 95),
@@ -326,28 +336,27 @@ def project(network):
                 ]
 
                 for a, b, c in off_chip_constants:
-                    lut += a
-                    flip_flop += b
-                    bram += c
-                break
+                    lut[layer.fpga_id] += a
+                    flip_flop[layer.fpga_id] += b
+                    bram[layer.fpga_id] += c
 
     # fromcpu
     width = network.layer[0].num_inputs * 32
     stream_input_fifo = math.ceil(DEFAULT_FIFO_DEPTH * width / M20K_SIZE)
 
-    lut += 400
-    flip_flop += 502
-    bram += math.ceil(DEFAULT_FIFO_DEPTH * 128 / M20K_SIZE)
-    bram += stream_input_fifo
+    lut[0] += 400
+    flip_flop[0] += 502
+    bram[0] += math.ceil(DEFAULT_FIFO_DEPTH * 128 / M20K_SIZE)
+    bram[0] += stream_input_fifo
 
     logging.debug("Stream input fifo BRAM = %.3f" % stream_input_fifo)
 
     if not is_compatible_streams(128, width):
-        lut += 400
-        flip_flop += 502
+        lut[layer.fpga_id] += 400
+        flip_flop[layer.fpga_id] += 502
         non_multiple_transition_fifo = math.ceil(
             DEFAULT_FIFO_DEPTH * lcm(width, 128) / M20K_SIZE)
-        bram += non_multiple_transition_fifo
+        bram[layer.fpga_id] += non_multiple_transition_fifo
         logging.debug("Input non multiple transition fifo BRAM = %.3f"
                       % non_multiple_transition_fifo)
 
@@ -357,36 +366,37 @@ def project(network):
         logging.debug("-----------------")
 
         if layer.HasField("conv"):
-            lut += conv_layer_lut(layer)
-            flip_flop += conv_layer_flip_flop(layer)
-            bram += conv_layer_bram(layer)
-            dsp += conv_layer_dsp(layer)
+            lut[layer.fpga_id] += conv_layer_lut(layer)
+            flip_flop[layer.fpga_id] += conv_layer_flip_flop(layer)
+            bram[layer.fpga_id] += conv_layer_bram(layer)
+            dsp[layer.fpga_id] += conv_layer_dsp(layer)
 
         elif layer.HasField("pool"):
-            lut += pool_layer_lut(layer)
-            flip_flop += pool_layer_flip_flop(layer)
-            bram += pool_layer_bram(layer)
+            lut[layer.fpga_id] += pool_layer_lut(layer)
+            flip_flop[layer.fpga_id] += pool_layer_flip_flop(layer)
+            bram[layer.fpga_id] += pool_layer_bram(layer)
 
         elif layer.HasField("lrn"):
-            lut += lrn_layer_lut(layer)
-            flip_flop += lrn_layer_flip_flop(layer)
-            bram += lrn_layer_bram(layer)
+            lut[layer.fpga_id] += lrn_layer_lut(layer)
+            flip_flop[layer.fpga_id] += lrn_layer_flip_flop(layer)
+            bram[layer.fpga_id] += lrn_layer_bram(layer)
+            dsp[layer.fpga_id] += lrn_layer_dsp(layer)
 
         logging.debug("-----------------")
 
     # tocpu
     width = network.layer[-1].num_outputs * 32
-    lut += 400
-    flip_flop += 502
+    lut[-1] += 400
+    flip_flop[-1] += 502
     stream_output_fifo = math.ceil(DEFAULT_FIFO_DEPTH * width / M20K_SIZE)
-    bram += stream_output_fifo
-    bram += math.ceil(DEFAULT_FIFO_DEPTH * 128 / M20K_SIZE)  # Final connection via PCIe
+    bram[-1] += stream_output_fifo
+    bram[-1] += math.ceil(DEFAULT_FIFO_DEPTH * 128 / M20K_SIZE)  # Final connection via PCIe
     logging.debug("Stream output width = %.3f" % width)
     logging.debug("Stream output fifo BRAM = %.3f" % stream_output_fifo)
 
     if not is_compatible_streams(128, width):
-        lut += 400
-        flip_flop += 502
+        lut[-1] += 400
+        flip_flop[-1] += 502
         dual_aspect_width = lcm(width, 128)
         non_multiple_transition_fifo = math.ceil(
             DEFAULT_FIFO_DEPTH * dual_aspect_width / M20K_SIZE)
@@ -394,10 +404,10 @@ def project(network):
                        % dual_aspect_width);
         logging.debug("Stream output non multiple transition fifo BRAM = %.3f"
                       % non_multiple_transition_fifo)
-        bram += non_multiple_transition_fifo
+        bram[-1] += non_multiple_transition_fifo
 
-
-    return Resource(bram=bram, flip_flop=flip_flop, lut=lut, dsp=dsp)
+    return [Resource(bram=a, flip_flop=b, lut=c, dsp=d)
+            for a, b, c, d in zip(bram, flip_flop, lut, dsp)]
 
 
 if __name__ == "__main__":
