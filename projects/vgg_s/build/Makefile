@@ -40,7 +40,7 @@ $(TARGET_SIM_MAXFILES): $(ENGINEFILES) $(JAVA_PROTOS)
 		  DFEModel=$(DFEModel) \
 		  maxFileName=$(basename $(notdir $@)) \
 		  target="DFE_SIM" \
-                  fpga_id="$(word 1 $(substr _, ,$(notdir $(basename $@))))" \
+                  fpga_id="$(firstword $(substr _, ,$(notdir $(basename $@))))" \
 		  descriptor="../descriptors/target/$(basename $(notdir $@)).prototxt" \
 		  enableMPCX=$(MPCX)
 
@@ -49,7 +49,7 @@ $(TARGET_SIM_OBJS): $(TARGET_SIM_MAXFILES)
 	$(SLICCOMPILE) $(MAXCOMPILER_BUILD_DIR)/$(basename $(basename $(notdir $@)))_$(DFEModel)_DFE_SIM/results/$(basename $(basename $(notdir $@))).max $@
 
 
-fpgaconvnet/target_main_sim.o: fpgaconvnet/target_main.cpp $(TARGET_SIM_MAXFILES) target_sim_lookup.h
+fpgaconvnet/target_main_sim.o: main.cpp $(TARGET_SIM_MAXFILES) target_sim_lookup.h
 	$(CPUCOMPILER) $< $(ALL_FLAGS) \
 		-I$(MAXCOMPILER_BUILD_DIR) \
 		$(foreach name,$(TARGET_SIMMAXDIRS),-I$(name)) \
@@ -69,6 +69,10 @@ run_target_sim: target_sim
 		   LD_PRELOAD=$(MAXOS_SIM) \
 		   ./$< $(TARGET_NAMES)
 	make stopsim
+
+
+runsim: run_target_sim
+
 
 # ==============================
 #          DFE
@@ -93,7 +97,7 @@ $(TARGET_DFE_OBJS): $(TARGET_DFE_MAXFILES)
 	$(SLICCOMPILE) $(MAXCOMPILER_BUILD_DIR)/$(basename $(basename $(notdir $@)))_$(DFEModel)_DFE/results/$(basename $(basename $(notdir $@))).max $@
 
 
-fpgaconvnet/target_main_dfe.o: fpgaconvnet/target_main.cpp $(TARGET_DFE_MAXFILES) target_dfe_lookup.h
+fpgaconvnet/target_main_dfe.o: main.cpp $(TARGET_DFE_MAXFILES) target_dfe_lookup.h
 	$(CPUCOMPILER) $< $(ALL_FLAGS) \
 		-I$(MAXCOMPILER_BUILD_DIR) \
 		$(foreach name,$(TARGET_DFEMAXDIRS),-I$(name)) \
@@ -109,4 +113,9 @@ target_dfe: fpgaconvnet/convnet.o \
 
 run_target_dfe: target_dfe
 	SLIC_CONF="$(SLIC_CONF)" LD_PRELOAD=$(MAXOS_HW) ./$< $(TARGET_NAMES)
+
+
+rundfe: run_target_dfe
+
+
 endif
