@@ -11,14 +11,20 @@ import fpgaconvnet.protos.Parameters;
 public class GenericNetworkBuilder {
     public static class NetworkEngineParameters extends EngineParameters {
         private final String s_descriptor = "descriptor";
+        private final String s_fpgaId = "fpga_id";
 
         @Override
         protected void declarations() {
             declareParam(s_descriptor, DataType.STRING, "");
+            declareParam(s_fpgaId, DataType.STRING, "0");
         }
 
         public String getDescriptor() {
             return getParam(s_descriptor);
+        }
+
+        public int getFpgaId() {
+            return Integer.parseInt((String) getParam(s_fpgaId));
         }
 
         public NetworkEngineParameters(String[] args) {
@@ -36,7 +42,8 @@ public class GenericNetworkBuilder {
             Parameters.Network networkParameters = new ParametersTransformer(
                     networkParamsBuilder.build()).transform();
 
-            NetworkManager manager = new NetworkManager(engineParameters, networkParameters);
+            NetworkManager manager = new NetworkManager(
+                    engineParameters, networkParameters, engineParameters.getFpgaId());
             BuildConfig buildConfig = manager.getBuildConfig();
             buildConfig.setBuildEffort(BuildConfig.Effort.HIGH);
             buildConfig.setMPPRCostTableSearchRange(1, 20);

@@ -3,10 +3,11 @@ package fpgaconvnet;
 import java.util.ArrayList;
 import java.util.List;
 
-import com.maxeler.maxcompiler.v2.build.EngineParameters;
 import com.maxeler.maxcompiler.v2.managers.custom.CustomManager;
 import com.maxeler.maxcompiler.v2.managers.custom.DFELink;
 import com.maxeler.maxcompiler.v2.managers.custom.stdlib.DebugLevel;
+import com.maxeler.maxcompiler.v2.managers.custom.stdlib.Max4MAIARingConnection;
+import com.maxeler.maxcompiler.v2.managers.custom.stdlib.MaxRingBidirectionalStream;
 import com.maxeler.maxcompiler.v2.managers.custom.stdlib.LMemInterface;
 import com.maxeler.maxcompiler.v2.managers.custom.stdlib.LMemCommandGroup;
 import com.maxeler.maxcompiler.v2.managers.engine_interfaces.CPUTypes;
@@ -20,6 +21,8 @@ import fpgaconvnet.protos.Parameters;
 
 public class NetworkManager extends CustomManager {
 
+    private final boolean isSimulation;
+    private final int fpgaId;
     private LMemInterface lmem;
     private List<ComputationChain> computationChains;
     /* NetworkParameters here are completely filled, (ie: earlier stages of the compilation process
@@ -72,18 +75,22 @@ public class NetworkManager extends CustomManager {
 
         // configuring streams for ConvolutionLayers.
         long addr = 0;
-        for (int i = 0 ; i < networkParameters.getLayerCount() ; i++) {
+        for (int i = 0, j = 0; i < networkParameters.getLayerCount() ; i++) {
             Parameters.LayerParameter layerParams = networkParameters.getLayer(i);
 
+            if (layerParams.getFpgaId() != fpgaId) {
+                continue;
+            }
+
             if (isConvLayer(layerParams)) {
-                computationChains[i].setScalar(ei, "init", init);
-                for (Tuple3<String, DFELink, Integer> link : computationChains[i].getInitializerInputs()) {
+                computationChains[j].setScalar(ei, "init", init);
+                for (Tuple3<String, DFELink, Integer> link : computationChains[j].getInitializerInputs()) {
                     ei.setStream(
                             link.getFirst(),
                             CPUTypes.FLOAT,
                             init ? link.getThird() * CPUTypes.FLOAT.sizeInBytes() : 0);
                 }
-                for (Tuple3<String, DFELink, Integer> link : computationChains[i].getLMemInputs()) {
+                for (Tuple3<String, DFELink, Integer> link : computationChains[j].getLMemInputs()) {
                     /* Third is stream size perPixel */
                     int arrSize = link.getThird() * CPUTypes.FLOAT.sizeInBytes();
                     InterfaceParam rwSize =
@@ -103,9 +110,11 @@ public class NetworkManager extends CustomManager {
             } else if (isLrnLayer(layerParams)) {
                 InterfaceParam approx_factor = ei.addParam(
                         "approx_factor_" + layerParams.getLayerId(), CPUTypes.FLOAT);
-                computationChains[i].setScalar(ei, "approx_factor", approx_factor);
+                computationChains[j].setScalar(ei, "approx_factor", approx_factor);
 
             }
+
+            j++;
         }
 
         ei.ignoreAll(Direction.IN_OUT);
@@ -115,6 +124,10 @@ public class NetworkManager extends CustomManager {
     private void setupKernels() {
         for (int i = 0 ; i < networkParameters.getLayerCount() ; i++) {
             Parameters.LayerParameter layer = networkParameters.getLayer(i);
+
+            if (layer.getFpgaId() != fpgaId) {
+                continue;
+            }
             if (isConvLayer(layer)) {
                 computationChains.add(new ConvolutionLayer(layer, this));
             } else if (isPoolLayer(layer)) {
@@ -130,20 +143,41 @@ public class NetworkManager extends CustomManager {
     private void linkKernels() {
 
         /* Data tranfer */
-        DFELink fromCpu = addStreamFromCPU("fromcpu");
-        DFELink toCpu = addStreamToCPU("tocpu");
+        DFELink fromLink;
+        DFELink toLink;
+
+        if (networkParameters.getNumFpgaUsed() > 1) {
+        }
+
+        if (fpgaId == 0) {
+            fromLink = addStreamFromCPU("fromcpu");
+        } else {
+            MaxRingBidirectionalStream maxRingStream = addMaxRingBidirectionalStream(
+                    "source_stream", Max4MAIARingConnection.MAXRING_B);
+            fromLink = maxRingStream.getLinkFromRemoteDFE();
+        }
+
+        if (fpgaId == networkParameters.getNumFpgaUsed() - 1) {
+            toLink = addStreamToCPU("tocpu");
+        } else {
+            MaxRingBidirectionalStream maxRingStream = addMaxRingBidirectionalStream(
+                    "dest_stream", Max4MAIARingConnection.MAXRING_A);
+            toLink = maxRingStream.getLinkToRemoteDFE();
+        }
 
         /* Kernel logic transfer */
-        DFELink prevOutput = fromCpu;
+        DFELink prevOutput = fromLink;
 
-        for (int i = 0 ; i < networkParameters.getLayerCount() ; i++) {
+        for (int i = 0 ; i < computationChains.size() ; i++) {
             computationChains[i].getInput() <== prevOutput;
             prevOutput = computationChains[i].getOutput();
         }
-        toCpu <== prevOutput;
+        toLink <== prevOutput;
 
-        /* Weight initialization. */
-        for (int i = 0 ; i < networkParameters.getLayerCount() ; i++) {
+        /* Weight initialization.
+         * NOTE: Not sure if RAM is shared or not..
+         */
+        for (int i = 0 ; i < computationChains.size() ; i++) {
             for (Tuple3<String, DFELink, Integer> link : computationChains[i].getInitializerInputs()) {
                 DFELink dataStream = addStreamFromCPU(link.getFirst());
                 link.getSecond() <== dataStream;
@@ -169,11 +203,15 @@ public class NetworkManager extends CustomManager {
         }
     }
 
-    public NetworkManager(EngineParameters engineParameters, Parameters.Network networkParametersIn) {
+    public NetworkManager(
+            GenericNetworkBuilder.NetworkEngineParameters engineParameters, Parameters.Network networkParametersIn,
+            int argFpgaId) {
         super(engineParameters);
+        fpgaId = argFpgaId;
         networkParameters = networkParametersIn;
         computationChains = new ArrayList<ComputationChain>();
         lmem = null;
+        isSimulation = engineParameters.getTarget().equals("DFE_SIM");
 
         config.setAllowNonMultipleTransitions(true);
         debug.setDebugLevel(new DebugLevel().setHasStreamStatus(true));

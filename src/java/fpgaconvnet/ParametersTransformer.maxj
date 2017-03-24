@@ -170,23 +170,18 @@ public class ParametersTransformer {
 
         final int unstridedHeight = inputHeight - kernelSize + 2 * pad;
         final int unstridedWidth = inputWidth - kernelSize + 2 * pad;
-        final int expectedHeight = Utils.divCeil(unstridedHeight, stride) + 1;
-        final int expectedWidth = Utils.divCeil(unstridedWidth, stride) + 1;
+        int expectedHeight;
+        int expectedWidth;
 
 
         if (paramsCase.equals(LayerParameter.ParamsCase.CONV)) {
-            if (unstridedHeight % stride != 0) {
-                raiseError(layer_id,
-                           ("conv layer `stride` must divide "
-                            + "`input_height - kernel_size + 2 * pad`!"));
-            }
-            if (unstridedWidth % stride != 0) {
-                raiseError(layer_id,
-                           ("conv layer `stride` must divide "
-                            + "`input_width - kernel_size + 2 * pad`!"));
-            }
+            expectedHeight = unstridedHeight / stride + 1;
+            expectedWidth = unstridedWidth / stride + 1;
 
         } else {
+            expectedHeight = Utils.divCeil(unstridedHeight, stride) + 1;
+            expectedWidth = Utils.divCeil(unstridedWidth, stride) + 1;
+
             if (unstridedHeight % stride != 0) {
                 raiseWarning(layer_id,
                              ("pool layer `stride` doesn't divide "
@@ -322,6 +317,7 @@ public class ParametersTransformer {
         }
 
         networkBuilder.setFrequency(networkParameters.getFrequency());
+        networkBuilder.setNumFpgaUsed(networkParameters.getNumFpgaUsed());
         return networkBuilder.build();
     }
 }
