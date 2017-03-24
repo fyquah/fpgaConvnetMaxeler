@@ -32,18 +32,18 @@ fpgaconvnet/target_main_sim.o: main.cpp $(TARGET_SIM_MAXFILES)
 		-D__SIM__ -c -o $@
 
 
-target_sim: fpgaconvnet/convnet.o \
+target_sim: fpgaconvnet/convnet_sim.o \
 		fpgaconvnet/target_main_sim.o \
 		fpgaconvnet/protos/parameters.pb.o \
 		$(TARGET_SIM_OBJS)
-	$(CPUCOMPILER) $(ALL_FLAGS) -o $@ $^ $(LFLAGS)
+	$(CPUCOMPILER) -D__SIM__ $(ALL_FLAGS) -o $@ $^ $(LFLAGS)
 
 
 run_target_sim: target_sim
 	$(MAXCOMPILERSIM) -n $(USER)a -c$(DEVICENUM) -d$(NUMDEVICES) restart
 	SLIC_CONF+="use_simulation=$(USER)a; default_topology_timeout=-1" \
 		   LD_PRELOAD=$(MAXOS_SIM) \
-		   ./$< $(TARGET_NAMES)
+		   ./$< $(PRJ_OPTIMIZED_DESCRIPTOR)
 	make stopsim
 
 

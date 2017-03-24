@@ -58,6 +58,33 @@ public class NetworkManager extends CustomManager {
         return ei;
     }
 
+    private int getFpgaInputSize() {
+        for (int i = 0 ; i < networkParameters.getLayerCount() ; i++) {
+            Parameters.LayerParameter layerParams = networkParameters.getLayer(i);
+            if (layerParams.getFpgaId() == fpgaId) {
+                return layerParams.getInputHeight()
+                        * layerParams.getInputWidth()
+                        * layerParams.getNumInputs();
+            }
+        }
+
+        throw new RuntimeException("No layer with fpga id == " + fpgaId);
+    }
+
+    private int getFpgaOutputSize() {
+        for (int i = 0 ; i < networkParameters.getLayerCount() ; i++) {
+            Parameters.LayerParameter layerParams = networkParameters.getLayer(
+                    networkParameters.getLayerCount() - 1 - i);
+            if (layerParams.getFpgaId() == fpgaId) {
+                return layerParams.getOutputHeight()
+                        * layerParams.getOutputWidth()
+                        * layerParams.getNumOutputs();
+            }
+        }
+
+        throw new RuntimeException("No layer with fpga id == " + fpgaId);
+    }
+
     private EngineInterface interfaceDefault () {
         EngineInterface ei = new EngineInterface();
 
@@ -85,6 +112,16 @@ public class NetworkManager extends CustomManager {
         }
         if (fpgaId == networkParameters.getNumFpgaUsed() - 1) {
             ei.setStream("tocpu", CPUTypes.FLOAT, N * outputSize * CPUTypes.FLOAT.sizeInBytes());
+        }
+
+        if (isSimulation) {
+            if (fpgaId > 0) {
+                ei.setStream("mock_maxring_in", CPUTypes.UINT8, 2 * N * getFpgaInputSize());
+            }
+
+            if (fpgaId < networkParameters.getNumFpgaUsed() - 1) {
+                ei.setStream("mock_maxring_out", CPUTypes.UINT8, 2 * N * getFpgaOutputSize());
+            }
         }
 
         // configuring streams for ConvolutionLayers.

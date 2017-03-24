@@ -93,9 +93,14 @@ private:
     uint64_t input_size;
     uint64_t output_size;
     bool initialized_weights;
+    const char *load_spec;
 
-    max_engine_t *dfe;
-    max_file_t *max_file;
+    int num_fpgas;
+    max_engine_t *dfe;          /* Used only when num_fpgas == 1 */
+    max_engarray_t *dfe_array;  /* Used only when num_fpgas > 1 */
+    std::vector<max_file_t *> max_files;
+    std::vector<int> fpga_input_size;
+    std::vector<int> fpga_output_size;
 
     Convnet(const Convnet &) {}
     void set_layer_weights(
@@ -104,11 +109,18 @@ private:
         float *kernels,
         float *bias
     );
+    void constructor(
+            const protos::Network & network_params,
+            std::vector<max_file_t*> max_files,
+            const char* load_spec = "*");
 
 public:
     Convnet(const protos::Network & network_params,
-            max_file_t *max_file,
-            const char* load_spec = "*");
+            max_file_t* max_files,
+            const char* load_spec);
+    Convnet(const protos::Network & network_params,
+            std::vector<max_file_t*> max_files,
+            const char* load_spec);
     ~Convnet ();
 
     void load_weights_from_files(

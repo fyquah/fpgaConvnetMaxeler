@@ -8,7 +8,9 @@
 #include "fpgaconvnet/convnet.h"
 #include "fpgaconvnet/feedforward.h"
 
-#include "cifar10_quick_maxring.h"
+#include "target_0.h"
+#include "target_1.h"
+#include "target_2.h"
 
 
 #ifdef __SIM__
@@ -28,9 +30,14 @@ std::vector<float> run_feature_extraction(
         const std::vector<float> & images
 )
 {
-    max_file_t *max_file = cifar10_quick_maxring_init();
+    std::vector<max_file_t*> max_files;
     std::vector<float> extracted_features;
-    fpgaconvnet::Convnet convnet(network_parameters, max_file, "");
+
+    max_files.push_back(target_0_init());
+    max_files.push_back(target_1_init());
+    max_files.push_back(target_2_init());
+
+    fpgaconvnet::Convnet convnet(network_parameters, max_files, "");
 
     /* TODO: load the weights from somewhere. */
     convnet.randomize_weights();
@@ -48,10 +55,55 @@ std::vector<float> run_feature_extraction(
 }
 
 
+void load_cifar10(const char *filename, std::vector<float> &images, std::vector<int> &labels)
+{
+    labels = std::vector<int>(10000);
+    images = std::vector<float>(10000 * 1024 * 3);
+    std::ifstream fin(filename);
+
+    if (!fin.is_open()) {
+        throw fpgaconvnet::Exception("File not found");
+    }
+
+    for (unsigned iter = 0 ; iter < N ; iter++) {
+        char byte;
+        std::vector<float> red(1024);
+        std::vector<float> blue(1024);
+        std::vector<float> green(1024);
+
+        fin.read(static_cast<char*>(&byte), 1);
+        labels.push_back(int(byte));
+
+        for (int i = 0 ; i< 1024 ; i++) {
+            fin.read(static_cast<char*>(&byte), 1);
+            red[i] = float((unsigned char) byte) / 255.0;
+        }
+
+        for (int i = 0 ; i< 1024 ; i++) {
+            fin.read(&byte, 1);
+            green[i] = float((unsigned char) byte) / 255.0;
+        }
+
+        for (int i = 0 ; i< 1024 ; i++) {
+            fin.read(&byte, 1);
+            blue[i] = float((unsigned char) byte) / 255.0;
+        }
+
+        for (int i = 0 ; i < 1024 ; i++) {
+            images[(iter * 3 * 1024) + 3 * i] = red[i];
+            images[(iter * 3 * 1024) + 3 * i + 1] = green[i];
+            images[(iter * 3 * 1024) + 3 * i + 2] = blue[i];
+        }
+    }
+
+    fin.close();
+}
+
+
 int main(int argc, char **argv)
 {
     std::vector<int> labels;
-    std::vector<float> pixel_stream;
+    std::vector<float> images;
 
     if (argc < 2) {
 	std::cout << "Missing network descriptor" << std::endl;
@@ -61,20 +113,11 @@ int main(int argc, char **argv)
     std::cout << "Loading netowork parameters from " << argv[1] << std::endl;
     fpgaconvnet::protos::Network network_parameters =
 	    fpgaconvnet::load_network_proto(argv[1]);
+    std::cout << network_parameters.DebugString() << std::endl;
 
-    /* TODO: Code to load images here. Code below is a stub to load random
-     *       data as image input.
-     */
     std::cout << "Reading images ..." << std::endl;
-    for (unsigned i = 0 ; i < N ; i++) {
-	for (unsigned j = 0;
-		j < fpgaconvnet::calc_conv_in_size(network_parameters);
-		j++) {
-	    pixel_stream.push_back((float(rand()) / float(RAND_MAX)));
-	}
-    } 
+    load_cifar10("cifar-10-batches-bin/data_batch_1.bin", images, labels);
 
-    std::vector<float> conv_out = run_feature_extraction(
-	    network_parameters, pixel_stream);
+    std::vector<float> conv_out = run_feature_extraction(network_parameters, images);
     return 0;
 }
