@@ -101,6 +101,7 @@ $(ALL_GENERATED_PROTOS): $(PROTOS)
 	mkdir -p java/
 	$(PROTOC) $< -I$(WHEREISROOT)/protos --java_out=./java --python_out=./ --cpp_out=./
 	touch fpgaconvnet/__init__.py fpgaconvnet/protos/__init__.py
+	ln -s $(abspath $(WHEREISROOT)/src/fpgaconvnet/modelling/) ./fpgaconvnet/ 
 
 protos: $(ALL_GENERATED_PROTOS)
 

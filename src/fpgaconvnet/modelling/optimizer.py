@@ -14,7 +14,7 @@ import yaml
 import simanneal
 
 from google.protobuf import text_format
-from fpgaconvnet import resource_model
+from fpgaconvnet.modelling import resource_model
 from fpgaconvnet.protos import parameters_pb2
 
 
