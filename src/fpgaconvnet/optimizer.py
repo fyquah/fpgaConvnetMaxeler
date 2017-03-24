@@ -3,6 +3,7 @@ from __future__ import absolute_import
 import argparse
 import bisect
 import logging
+import math
 import sys
 import random
 
@@ -39,6 +40,24 @@ def compute_valid_values(N):
     return ret
 
 
+def compute_factors(N):
+    ret = [1]
+    for i in range(2, N + 1):
+        if N % i == 0:
+            ret.append(i)
+    return ret
+
+
+def compute_multiples(N, cap):
+    ret = [N]
+    i = 2
+    while True:
+        if N * i > cap:
+            return ret
+        i += 1
+        ret.append(N * i)
+
+
 def random_displacement(x, stepsize, values):
     pos = bisect.bisect_left(values, x)
     flag = 1 if np.random.rand() > 0.5 else -1
@@ -66,17 +85,21 @@ class OptimizationProblem(simanneal.Annealer):
                         "worker_factor": compute_valid_values(layer.num_inputs),
                         "conv_folding_factor": compute_valid_values(layer.num_outputs),
                         "kernel_folding_factor": compute_valid_values(
-                            layer.conv.kernel_size * layer.conv.kernel_size)
+                            layer.conv.kernel_size * layer.conv.kernel_size),
+                        "look_ahead": compute_factors(layer.output_height * layer.output_width),
+
+                        # Special cases... argh.
+                        "bram_factor": None,
                 }))
 
             elif layer.HasField("pool"):
                 self.valid_values.append(("pool", {
-                        "channel_folding_factor": compute_valid_values(layer.num_inputs)
+                        "channel_folding_factor": compute_valid_values(layer.num_inputs),
                 }))
 
             elif layer.HasField("lrn"):
                 self.valid_values.append(("lrn", {
-                        "channel_folding_factor": compute_valid_values(layer.num_inputs)
+                        "channel_folding_factor": compute_valid_values(layer.num_inputs),
                 }))
 
             else:
@@ -84,23 +107,61 @@ class OptimizationProblem(simanneal.Annealer):
 
 
     def move(self):
+        # TODO(fyq14): Decide if it is time to shift left or shift right.
+
         while True:
             layer_id = random.randint(0, len(self.state.layer) - 1)
             layer_type = self.valid_values[layer_id][0]
             field_name = sample_array(self.valid_values[layer_id][1].keys())
-            new_value = sample_array(self.valid_values[layer_id][1][field_name])
-            original = getattr(getattr(self.state.layer[layer_id], layer_type), field_name)
-            setattr(getattr(self.state.layer[layer_id], layer_type), field_name, new_value)
+            new_network = parameters_pb2.Network()
+            new_network.CopyFrom(self.state)
 
-            resources = resource_model.project(self.state)
-
-            if (resources.bram <= resource_model.MAX_BRAM
-                    and resources.lut <= resource_model.MAX_LUT
-                    and resources.flip_flop <= resource_model.MAX_FF
-                    and resources.dsp <= resource_model.MAX_DSP):
-                break
+            if field_name == "bram_factor":
+                if new_network.layer[layer_id].conv.should_fit_on_chip:
+                    continue
+                layer = new_network.layer[layer_id]
+                scheduler_iters = div_ceil(
+                        layer.num_inputs, layer.conv.worker_factor)
+                conv_iters = div_ceil(
+                        layer.num_outputs, layer.conv.conv_folding_factor)
+                new_value = sample_array(
+                    compute_factors(conv_iters)
+                    + compute_multiples(conv_iters, scheduler_iters * conv_iters))
+            elif (new_network.layer[layer_id].conv.should_fit_on_chip
+                        and field_name == "look_ahead"):
+                continue
             else:
-                setattr(getattr(self.state.layer[layer_id], layer_type), field_name, original)
+                new_value = sample_array(self.valid_values[layer_id][1][field_name])
+
+            setattr(getattr(new_network.layer[layer_id], layer_type), field_name, new_value)
+
+            # Special case: synchronize changes to bram_factor
+            if field_name == "worker_factor" or field_name == "conv_folding_factor":
+                layer = new_network.layer[layer_id]
+                layer.conv.bram_factor = layer.conv.conv_folding_factor * layer.conv.worker_factor
+
+                # Select the largest layer.layer_id that satisfies the new
+                # constraints imposed.
+                # while True:
+                #     total_convolvers = (layer.conv.conv_folding_factor
+                #                         * layer.conv.worker_factor)
+
+                #     if layer.conv.bram_factor % total_convolvers == 0:
+                #         size = layer.conv.bram_factor / total
+                #         conv_iters = div_ceil(layer.num_outputs, layer.conv.conv_folding_factor)
+                #         if (size < conv_iters and conv_iters % size == 0
+                #                 or size >= conv_iters and size % conv_iters):
+                #             break
+                #         layer.conv.bram_factor -= 1
+
+            resources = resource_model.project(new_network)
+
+            if (resources.bram <= 0.8 * resource_model.MAX_BRAM
+                    and resources.lut <= 0.8 * resource_model.MAX_LUT
+                    and resources.flip_flop <= 0.8 * resource_model.MAX_FF
+                    and resources.dsp <= resource_model.MAX_DSP):
+                self.state = new_network
+                break
 
     def energy(self):
         return -estimate_gops(self.state)
@@ -129,40 +190,64 @@ def make_presence_constraint(idx, values):
     return {"type": "eq", "fun": fn}
 
 
+def search_initial_state(network, num_fpgas):
+
+    for i, layer in enumerate(network.layer):
+        layer.fpga_id = min(i, num_fpgas - 1)
+
+    return network
+
+
+def optimize_with_fixed_fpga_count(network, num_fpgas):
+
+    initial_state = search_initial_state(network, num_fpgas)
+    if initial_state is None:
+        return None
+    problem = OptimizationProblem(initial_state)
+    state, e = problem.anneal()
+    resource = resource_model.project(state)
+    total_lut_used = resource.lut
+    total_ff_used = resource.flip_flop
+    total_dsp_used = resource.dsp
+    total_m20k_used = resource.bram
+
+    print "====> Optimized for", num_fpgas, "FPGAs."
+    print "Estimated total LUT used: %d (%.3f) " % \
+            (total_lut_used,
+             float(total_lut_used) / resource_model.MAX_LUT)
+    print "Estimated total flip flops used: %d (%.3f)" % \
+            (total_ff_used,
+             float(total_ff_used) / resource_model.MAX_FF)
+    print "Estimated total DSP used: %d (%.3f)" % \
+            (total_dsp_used,
+             float(total_dsp_used) / resource_model.MAX_DSP)
+    print "Estimaed M20k used: %d (%.3f)" % \
+            (total_m20k_used,
+             float(total_m20k_used) / resource_model.MAX_BRAM)
+    print "Estimated GOps:", estimate_gops(state), "\n"
+
+    return state
+
+
 def run_optimizer(network):
-    num_conv_layers = 0
-    for layer in network.layer:
-        if layer.HasField("conv"):
-            num_conv_layers += 1
-
     minimized_states = []
+    original_network = network
+
     for i in range(1, network.num_fpga_available + 1):
-        problem = OptimizationProblem(network)
-        state, e = problem.anneal()
-        resource = resource_model.project(state)
-        total_lut_used = resource.lut
-        total_ff_used = resource.flip_flop
-        total_dsp_used = resource.dsp
-        total_m20k_used = resource.bram
+        network = parameters_pb2.Network()
+        network.CopyFrom(original_network)
+        network.num_fpga_used = i
+        minimized_states.append(optimize_with_fixed_fpga_count(network , i))
 
-        print "=> Attempt", i
-        print "Estimated total LUT used: %d (%.3f) " % \
-                (total_lut_used,
-                 float(total_lut_used) / resource_model.MAX_LUT)
-        print "Estimated total flip flops used: %d (%.3f)" % \
-                (total_ff_used,
-                 float(total_ff_used) / resource_model.MAX_FF)
-        print "Estimated total DSP used: %d (%.3f)" % \
-                (total_dsp_used,
-                 float(total_dsp_used) / resource_model.MAX_DSP)
-        print "Estimaed M20k used: %d (%.3f)" % \
-                (total_m20k_used,
-                 float(total_m20k_used) / resource_model.MAX_BRAM)
-        print "Estimated GOps:", estimate_gops(state), "\n"
-        minimized_states.append(state)
-
-    # TODO(fyq14): Choose the best state, rather than returning the first one..
-    return minimized_states[0]
+    # Choose the best state, that uses the lowest number of FPGAs.
+    best = None
+    best_index = None
+    for i, network in enumerate(minimized_states):
+        if (network is not None
+                and (best is None or estimate_gops(network) > best + 1.0)):
+            best = estimate_gops(network)
+            best_index = i
+    return minimized_states[best_index]
 
 
 def div_ceil(a, b):
@@ -357,21 +442,39 @@ def main():
                      / layer.conv.stride + 1)
 
             # Default parameters
-            layer.conv.look_ahead = 1
             layer.conv.worker_factor = 1
             layer.conv.kernel_folding_factor = 1
             layer.conv.conv_folding_factor = 1
+            layer.conv.look_ahead = 1
             layer.conv.bram_factor = layer.num_inputs * layer.num_outputs
+            layer_bram_required = (math.ceil(
+                    layer.num_inputs * layer.num_outputs * (layer.conv.kernel_size ** 2))
+                        * resource_model.NUM_BITS
+                    / resource_model.M20K_SIZE)
+
+
+            # We use a heriustic where if it is possible to fit the whole layer
+            # on the on-chip FPGA, we should do that, so that we don't overflow
+            # the LMem bandwidth
+            #
+            # The if statement below is an heriustic on limit of BRAM we
+            # want to use. The heriustic should balance be able to guess if
+            # we need to use that much BRAM it will be bad anyway.
+            if layer_bram_required < 0.5 * resource_model.MAX_BRAM:
+                layer.conv.should_fit_on_chip = True
+            else:
+                layer.conv.should_fit_on_chip = False
+                layer.conv.bram_per_convolver = 32  # Heriustic.
 
         elif layer.HasField("pool"):
             layer.num_outputs = layer.num_inputs
             stride = layer.pool.stride or layer.pool.dim
             layer.pool.stride = stride
             layer.output_height = div_ceil(layer.input_height, stride)
-            layer.output_width =  div_ceil(layer.input_width, stride)
+            layer.output_width = div_ceil(layer.input_width, stride)
 
             # Default parameters
-            layer.pool.channel_folding_factor = layer.num_outputs
+            layer.pool.channel_folding_factor = 1
 
         elif layer.HasField("lrn"):
             layer.num_outputs = layer.num_inputs
@@ -379,7 +482,7 @@ def main():
             layer.output_width =  layer.input_width
 
             # Default parameters
-            layer.lrn.channel_folding_factor = layer.num_outputs
+            layer.lrn.channel_folding_factor = 1
 
         else:
             raise RuntimeError("Unknown layer!")

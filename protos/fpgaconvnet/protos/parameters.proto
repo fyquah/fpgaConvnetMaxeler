@@ -8,6 +8,7 @@ message Network
     /* Frequency of design in MHz. Note that all kernels will run at the same frequency. */
     optional uint32 frequency = 2 [default = 100];
     optional uint32 num_fpga_available = 3 [default = 1];
+    optional uint32 num_fpga_used = 4 [default = 1];
 }
 
 
@@ -39,7 +40,7 @@ message LayerParameter
     optional uint32 layer_id = 11;
     optional bool is_first_layer = 12 [default = false];
     optional bool is_last_layer = 13 [default = false];
-    optional uint32 fpga_id = 14;
+    optional uint32 fpga_id = 15;
 }
 
 
@@ -99,6 +100,9 @@ message ConvolutionParameter
     optional uint32 kernel_size = 7;
     optional uint32 stride = 8 [default = 1];
     optional uint32 pad = 9 [default = 0];
+
+    /* Used by optimizer */
+    optional bool should_fit_on_chip = 10 [default = false];
 }
 
 
