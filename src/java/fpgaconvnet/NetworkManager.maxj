@@ -70,8 +70,12 @@ public class NetworkManager extends CustomManager {
         int inputSize = Utils.layerInputDimension(firstLayer).totalSize();
         int outputSize = Utils.layerOutputDimension(lastLayer).totalSize();
 
-        ei.setStream("fromcpu", CPUTypes.FLOAT, N * inputSize * CPUTypes.FLOAT.sizeInBytes());
-        ei.setStream("tocpu", CPUTypes.FLOAT, N * outputSize * CPUTypes.FLOAT.sizeInBytes());
+        if (fpgaId == 0) {
+            ei.setStream("fromcpu", CPUTypes.FLOAT, N * inputSize * CPUTypes.FLOAT.sizeInBytes());
+        }
+        if (fpgaId == networkParameters.getNumFpgaUsed() - 1) {
+            ei.setStream("tocpu", CPUTypes.FLOAT, N * outputSize * CPUTypes.FLOAT.sizeInBytes());
+        }
 
         // configuring streams for ConvolutionLayers.
         long addr = 0;
