@@ -88,7 +88,6 @@ public class NetworkManager extends CustomManager {
         }
 
         // configuring streams for ConvolutionLayers.
-        long addr = 0;
         for (int i = 0, j = 0; i < networkParameters.getLayerCount() ; i++) {
             Parameters.LayerParameter layerParams = networkParameters.getLayer(i);
 
@@ -113,12 +112,11 @@ public class NetworkManager extends CustomManager {
                             * N * arrSize;
                     ei.setLMemLinearWrapped(
                             link.getFirst(),                       /* streamName */
-                            ei.addConstant(addr),                    /* address */
+                            ei.addConstant(layerParams.getConv().getWeightAddressBase()), /* address */
                             ei.addConstant(arrSize), /* arrSize */
                             rwSize,                   /* rwSize */
                             ei.addConstant(0l)                     /* offset */
                     );
-                    addr += arrSize;
                 }
 
             } else if (isLrnLayer(layerParams)) {
@@ -160,27 +158,42 @@ public class NetworkManager extends CustomManager {
         DFELink fromLink;
         DFELink toLink;
 
-        if (networkParameters.getNumFpgaUsed() > 1) {
+        System.out.println("Linking kernels");
+        if (isSimulation) {
+            System.out.println("Simulation - mocking max ring input and outputs.");
+        } else {
+            System.out.println("Creating real maxring links");
         }
 
         if (fpgaId == 0) {
             fromLink = addStreamFromCPU("fromcpu");
         } else {
-            MaxRingBidirectionalStream maxRingStream = addMaxRingBidirectionalStream(
-                    "source_stream", Max4MAIARingConnection.MAXRING_B);
-            fromLink = maxRingStream.getLinkFromRemoteDFE();
-            nullSource = new NullSourceKernel(makeKernelParameters("null_source"));
-            maxRingStream.getLinkToRemoteDFE() <== addKernel(nullSource).getOutput("source");
+            if (isSimulation) {
+                fromLink = addStreamFromCPU("mock_maxring_in");
+
+            } else {
+                MaxRingBidirectionalStream maxRingStream = addMaxRingBidirectionalStream(
+                        "source_stream", Max4MAIARingConnection.MAXRING_B);
+                fromLink = maxRingStream.getLinkFromRemoteDFE();
+                nullSource = new NullSourceKernel(makeKernelParameters("null_source"));
+
+            }
         }
 
         if (fpgaId == networkParameters.getNumFpgaUsed() - 1) {
             toLink = addStreamToCPU("tocpu");
         } else {
-            MaxRingBidirectionalStream maxRingStream = addMaxRingBidirectionalStream(
-                    "dest_stream", Max4MAIARingConnection.MAXRING_A);
-            toLink = maxRingStream.getLinkToRemoteDFE();
-            nullSink = new NullSinkKernel(makeKernelParameters("null_sink"));
-            addKernel(nullSink).getInput("sink") <== maxRingStream.getLinkFromRemoteDFE();
+            if (isSimulation) {
+                toLink = addStreamToCPU("mock_maxring_out");
+
+            } else {
+                MaxRingBidirectionalStream maxRingStream = addMaxRingBidirectionalStream(
+                        "dest_stream", Max4MAIARingConnection.MAXRING_A);
+                toLink = maxRingStream.getLinkToRemoteDFE();
+                nullSink = new NullSinkKernel(makeKernelParameters("null_sink"));
+                addKernel(nullSink).getInput("sink") <== maxRingStream.getLinkFromRemoteDFE();
+
+            }
         }
 
         /* Kernel logic transfer */
@@ -229,7 +242,7 @@ public class NetworkManager extends CustomManager {
         networkParameters = networkParametersIn;
         computationChains = new ArrayList<ComputationChain>();
         lmem = null;
-        isSimulation = engineParameters.getTarget().equals("DFE_SIM");
+        isSimulation = engineParameters.getTarget().toString().trim().equals("DFE_SIM");
 
         config.setAllowNonMultipleTransitions(true);
         debug.setDebugLevel(new DebugLevel().setHasStreamStatus(true));
@@ -237,6 +250,11 @@ public class NetworkManager extends CustomManager {
         System.out.println("Network compilation target:");
         System.out.println(networkParameters.toString());
         System.out.println("Frequency = " + networkParameters.getFrequency());
+        if (isSimulation) {
+            System.out.println("Compiling for simulation");
+        } else {
+            System.out.println("Compiling for actual DFE");
+        }
 
         setupKernels();
         linkKernels();

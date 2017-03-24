@@ -101,6 +101,9 @@ message ConvolutionParameter
     optional uint32 stride = 8 [default = 1];
     optional uint32 pad = 9 [default = 0];
 
+    /* Used by the compiler. */
+    optional uint32 weight_address_base = 11;
+
     /* Used by optimizer */
     optional bool should_fit_on_chip = 10 [default = false];
 }

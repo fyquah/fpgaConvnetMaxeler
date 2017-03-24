@@ -28,7 +28,7 @@ public class ParametersTransformer {
     }
 
     private LayerParameter parseLayer(int layer_id, LayerParameter layerParameter,
-                                      LayerParameter previousLayer) {
+                                      LayerParameter previousLayer, int weightAddressBase) {
         LayerParameter.Builder builder = LayerParameter.newBuilder();
         int inputHeight = 0;
         int inputWidth = 0;
@@ -125,6 +125,7 @@ public class ParametersTransformer {
                     .mergeFrom(convParams)
                     .setStride(stride)
                     .setBramFactor(bramFactor)
+                    .setWeightAddressBase(weightAddressBase)
                     .build());
 
         } else if (paramsCase.equals(LayerParameter.ParamsCase.POOL)) {
@@ -301,17 +302,45 @@ public class ParametersTransformer {
         }
     }
 
+    private int getAddressSeparation(LayerParameter layerParams) {
+        int byteWidth = Utils.divCeil(
+                layerParams.getConv().getKernelFoldingFactor()
+                    * layerParams.getConv().getConvFoldingFactor()
+                    * layerParams.getConv().getWorkerFactor()
+                    * 4,
+                384) * 384;
+        IterationCounter ctr = new IterationCounter(layerParams);
+        return byteWidth * ctr.getTotalIterations();
+    }
+
+    private boolean convInitFromCpu(LayerParameter layerParams) {
+        IterationCounter ctr = new IterationCounter(layerParams);
+        int fullOnChipBramFactor =
+                layerParams.getConv().getWorkerFactor()
+                * layerParams.getConv().getConvFoldingFactor()
+                * ctr.getSchedulerIterations()
+                * ctr.getConvolutionIterations();
+        return fullOnChipBramFactor == layerParams.getConv().getBramFactor();
+    }
+
     public Parameters.Network transform() throws RuntimeException {
         Parameters.Network.Builder networkBuilder = Parameters.Network.newBuilder();
+        int weightAddressBase = 0;
         int layerCount = networkParameters.getLayerCount();
         if (layerCount == 0) {
             raiseError(0, "Number of layers in networkParameters must be greater than 1");
         }
-        LayerParameter previousLayer = parseLayer(0, networkParameters.getLayer(0), null);
+        LayerParameter previousLayer = parseLayer(
+                0, networkParameters.getLayer(0), null, weightAddressBase);
         verifyLayerParameters(previousLayer);
         networkBuilder.addLayer(previousLayer);
+
         for (int i = 1; i < layerCount ; i++) {
-            previousLayer = parseLayer(i, networkParameters.getLayer(i), previousLayer);
+            if (previousLayer.getParamsCase().equals(LayerParameter.ParamsCase.CONV)
+                    && !convInitFromCpu(previousLayer)) {
+                weightAddressBase += getAddressSeparation(previousLayer);
+            }
+            previousLayer = parseLayer(i, networkParameters.getLayer(i), previousLayer, weightAddressBase);
             verifyLayerParameters(previousLayer);
             networkBuilder.addLayer(previousLayer);
         }
