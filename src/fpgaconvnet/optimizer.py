@@ -80,60 +80,6 @@ def sample_array(arr):
     return arr[idx]
 
 
-def pertubate(state):
-    while True:
-        layer_id = random.randint(0, len(state.layer) - 1)
-        layer_type = self.valid_values[layer_id][0]
-        field_name = sample_array(self.valid_values[layer_id][1].keys())
-        new_network = parameters_pb2.Network()
-        new_network.CopyFrom(state)
-
-        if field_name == "bram_factor":
-            if new_network.layer[layer_id].conv.should_fit_on_chip:
-                continue
-            layer = new_network.layer[layer_id]
-            scheduler_iters = div_ceil(
-                    layer.num_inputs, layer.conv.worker_factor)
-            conv_iters = div_ceil(
-                    layer.num_outputs, layer.conv.conv_folding_factor)
-            new_value = sample_array(
-                compute_factors(conv_iters)
-                + compute_multiples(conv_iters, scheduler_iters * conv_iters))
-        elif (new_network.layer[layer_id].conv.should_fit_on_chip
-                    and field_name == "look_ahead"):
-            continue
-        else:
-            new_value = sample_array(self.valid_values[layer_id][1][field_name])
-
-        setattr(getattr(new_network.layer[layer_id], layer_type), field_name, new_value)
-
-        # Special case: synchronize changes to bram_factor
-        if field_name == "worker_factor" or field_name == "conv_folding_factor":
-            layer = new_network.layer[layer_id]
-            layer.conv.bram_factor = layer.conv.conv_folding_factor * layer.conv.worker_factor
-
-            # Select the largest layer.layer_id that satisfies the new
-            # constraints imposed.
-            # while True:
-            #     total_convolvers = (layer.conv.conv_folding_factor
-            #                         * layer.conv.worker_factor)
-
-            #     if layer.conv.bram_factor % total_convolvers == 0:
-            #         size = layer.conv.bram_factor / total
-            #         conv_iters = div_ceil(layer.num_outputs, layer.conv.conv_folding_factor)
-            #         if (size < conv_iters and conv_iters % size == 0
-            #                 or size >= conv_iters and size % conv_iters):
-            #             break
-            #         layer.conv.bram_factor -= 1
-
-        resources = resource_model.project(new_network)
-
-        if satisfies_resource_constraints(resources):
-            return state
-
-    return None
-
-
 class OptimizationProblem(simanneal.Annealer):
 
     def __init__(self, network):
@@ -171,7 +117,60 @@ class OptimizationProblem(simanneal.Annealer):
 
     def move(self):
         # TODO(fyq14): Decide if it is time to shift left or shift right.
-        self.state = pertubate(self.state)
+        self.state = self._pertubate(self.state)
+
+    def _pertubate(self, state):
+        while True:
+            layer_id = random.randint(0, len(state.layer) - 1)
+            layer_type = self.valid_values[layer_id][0]
+            field_name = sample_array(self.valid_values[layer_id][1].keys())
+            new_network = parameters_pb2.Network()
+            new_network.CopyFrom(state)
+
+            if field_name == "bram_factor":
+                if new_network.layer[layer_id].conv.should_fit_on_chip:
+                    continue
+                layer = new_network.layer[layer_id]
+                scheduler_iters = div_ceil(
+                        layer.num_inputs, layer.conv.worker_factor)
+                conv_iters = div_ceil(
+                        layer.num_outputs, layer.conv.conv_folding_factor)
+                new_value = sample_array(
+                    compute_factors(conv_iters)
+                    + compute_multiples(conv_iters, scheduler_iters * conv_iters))
+            elif (new_network.layer[layer_id].conv.should_fit_on_chip
+                        and field_name == "look_ahead"):
+                continue
+            else:
+                new_value = sample_array(self.valid_values[layer_id][1][field_name])
+
+            setattr(getattr(new_network.layer[layer_id], layer_type), field_name, new_value)
+
+            # Special case: synchronize changes to bram_factor
+            if field_name == "worker_factor" or field_name == "conv_folding_factor":
+                layer = new_network.layer[layer_id]
+                layer.conv.bram_factor = layer.conv.conv_folding_factor * layer.conv.worker_factor
+
+                # Select the largest layer.layer_id that satisfies the new
+                # constraints imposed.
+                # while True:
+                #     total_convolvers = (layer.conv.conv_folding_factor
+                #                         * layer.conv.worker_factor)
+
+                #     if layer.conv.bram_factor % total_convolvers == 0:
+                #         size = layer.conv.bram_factor / total
+                #         conv_iters = div_ceil(layer.num_outputs, layer.conv.conv_folding_factor)
+                #         if (size < conv_iters and conv_iters % size == 0
+                #                 or size >= conv_iters and size % conv_iters):
+                #             break
+                #         layer.conv.bram_factor -= 1
+
+            resources = resource_model.project(new_network)
+
+            if satisfies_resource_constraints(resources):
+                return state
+
+        return None
 
     def energy(self):
         return -estimate_gops(self.state)
@@ -219,9 +218,6 @@ def search_initial_state(network, num_fpgas):
             layer.fpga_id = fpga_id
 
         resources = resource_model.project(network)
-        print network
-        print resources
-        print "-------------------------"
         if satisfies_resource_constraints(resources):
             return network
 
@@ -237,24 +233,27 @@ def optimize_with_fixed_fpga_count(network, num_fpgas):
     problem = OptimizationProblem(initial_state)
     state, e = problem.anneal()
     resource = resource_model.project(state)
-    total_lut_used = resource.lut
-    total_ff_used = resource.flip_flop
-    total_dsp_used = resource.dsp
-    total_m20k_used = resource.bram
 
     print "====> Optimized for", num_fpgas, "FPGAs."
-    print "Estimated total LUT used: %d (%.3f) " % \
-            (total_lut_used,
-             float(total_lut_used) / resource_model.MAX_LUT)
-    print "Estimated total flip flops used: %d (%.3f)" % \
-            (total_ff_used,
-             float(total_ff_used) / resource_model.MAX_FF)
-    print "Estimated total DSP used: %d (%.3f)" % \
-            (total_dsp_used,
-             float(total_dsp_used) / resource_model.MAX_DSP)
-    print "Estimaed M20k used: %d (%.3f)" % \
-            (total_m20k_used,
-             float(total_m20k_used) / resource_model.MAX_BRAM)
+    for i, r in enumerate(resource):
+        total_lut_used = r.lut
+        total_ff_used = r.flip_flop
+        total_dsp_used = r.dsp
+        total_m20k_used = r.bram
+
+        print "fpga %d Estimated total LUT used: %d (%.3f) " % \
+                (i, total_lut_used,
+                 float(total_lut_used) / resource_model.MAX_LUT)
+        print "fpga %d Estimated total flip flops used: %d (%.3f)" % \
+                (i, total_ff_used,
+                 float(total_ff_used) / resource_model.MAX_FF)
+        print "fpga %d Estimated total DSP used: %d (%.3f)" % \
+                (i, total_dsp_used,
+                 float(total_dsp_used) / resource_model.MAX_DSP)
+        print "fpga %d Estimaed M20k used: %d (%.3f)" % \
+                (i, total_m20k_used,
+                 float(total_m20k_used) / resource_model.MAX_BRAM)
+        print ""
     print "Estimated GOps:", estimate_gops(state), "\n"
 
     return state

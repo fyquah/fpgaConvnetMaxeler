@@ -150,7 +150,7 @@ def conv_layer_bram(layer):
     kernel_size = layer.conv.kernel_size
     num_outputs = layer.num_outputs
     scheduler = -238.3 * log2(layer.conv.worker_factor) \
-                + 70 + 960 / 30 * layer.num_inputs
+                + 870.0 + layer.num_inputs / 30.0
     weight_bits_per_multiplier = (
             div_ceil(layer.conv.kernel_size * layer.conv.kernel_size,
                      layer.conv.kernel_folding_factor)
