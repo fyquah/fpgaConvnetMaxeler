@@ -150,7 +150,16 @@ class OptimizationProblem(simanneal.Annealer):
             # Special case: synchronize changes to bram_factor
             if field_name == "worker_factor" or field_name == "conv_folding_factor":
                 layer = new_network.layer[layer_id]
-                layer.conv.bram_factor = layer.conv.conv_folding_factor * layer.conv.worker_factor
+
+                if new_network.layer[layer_id].conv.should_fit_on_chip:
+                    layer.conv.bram_factor = (
+                            layer.conv.conv_folding_factor
+                            * layer.conv.worker_factor
+                            * div_ceil(layer.num_outputs, layer.conv.conv_folding_factor)
+                            * div_ceil(layer.num_inputs, layer.conv.worker_factor))
+                else:
+                    layer.conv.bram_factor = layer.conv.conv_folding_factor * layer.conv.worker_factor
+
 
                 # Select the largest layer.layer_id that satisfies the new
                 # constraints imposed.
