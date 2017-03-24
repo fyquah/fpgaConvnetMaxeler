@@ -168,7 +168,7 @@ class OptimizationProblem(simanneal.Annealer):
             resources = resource_model.project(new_network)
 
             if satisfies_resource_constraints(resources):
-                return state
+                return new_network
 
         return None
 
@@ -263,7 +263,7 @@ def run_optimizer(network):
     minimized_states = []
     original_network = network
 
-    for i in range(1, network.num_fpga_available + 1):
+    for i in range(network.num_fpga_available, network.num_fpga_available + 1):
         network = parameters_pb2.Network()
         network.CopyFrom(original_network)
         network.num_fpga_used = i
