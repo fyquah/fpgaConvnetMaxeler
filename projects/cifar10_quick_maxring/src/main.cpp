@@ -14,7 +14,7 @@
 
 
 #ifdef __SIM__
-    static const uint64_t N = 6;
+    static const uint64_t N = 4;
 #else
     static const uint64_t N = 10000;
 #endif
@@ -44,7 +44,6 @@ std::vector<float> run_feature_extraction(
     convnet.max_init_weights();
 
     /* warm up the DFE with the weights. */
-    extracted_features = convnet.max_run_inference(N, images, false);
     extracted_features = convnet.max_run_inference(N, images, false);
 
     /* TODO: Verify the output is correct. You can use the

@@ -72,9 +72,8 @@ public class NetworkManager extends CustomManager {
     }
 
     private int getFpgaOutputSize() {
-        for (int i = 0 ; i < networkParameters.getLayerCount() ; i++) {
-            Parameters.LayerParameter layerParams = networkParameters.getLayer(
-                    networkParameters.getLayerCount() - 1 - i);
+        for (int i = networkParameters.getLayerCount() - 1 ; i >= 0; i--) {
+            Parameters.LayerParameter layerParams = networkParameters.getLayer(i);
             if (layerParams.getFpgaId() == fpgaId) {
                 return layerParams.getOutputHeight()
                         * layerParams.getOutputWidth()
@@ -115,12 +114,15 @@ public class NetworkManager extends CustomManager {
         }
 
         if (isSimulation) {
+            System.out.println("fpgaId = " + fpgaId);
             if (fpgaId > 0) {
                 ei.setStream("mock_maxring_in", CPUTypes.UINT8, 2 * N * getFpgaInputSize());
+                System.out.println("mock maxring in = " + getFpgaInputSize());
             }
 
             if (fpgaId < networkParameters.getNumFpgaUsed() - 1) {
                 ei.setStream("mock_maxring_out", CPUTypes.UINT8, 2 * N * getFpgaOutputSize());
+                System.out.println("mock maxring out = " + getFpgaOutputSize());
             }
         }
 

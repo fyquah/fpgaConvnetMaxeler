@@ -762,7 +762,7 @@ std::vector<float> Convnet::max_run_inference(
     max_queue_input(actions[0],
                     "fromcpu",
                     (void*) &images[0],
-                    images.size() * sizeof(float));
+                    N * input_size * sizeof(float));
     max_queue_output(actions[num_fpgas - 1],
                      "tocpu",
                      (void*) &ret[0],
@@ -776,27 +776,28 @@ std::vector<float> Convnet::max_run_inference(
 
     for (int i = 0; i < num_fpgas ; i++) {
         log_stdout(INFO) << "Running on DFE " << i << " ..." << std::endl;
+        dfe = max_load(max_files[i], load_spec);
 
         if (i > 0) {
-            max_queue_input(actions[0],
+            max_queue_input(actions[i],
                             "mock_maxring_in",
                             tmp_buffer_in,
                             N * fpga_input_size[i] * 2);
         }
 
         if (i < num_fpgas - 1) {
-            tmp_buffer_out = malloc(N * fpga_output_size[i]);
+            tmp_buffer_out = malloc(N * fpga_output_size[i] * 2);
             max_queue_output(actions[i],
                             "mock_maxring_out",
                             tmp_buffer_out,
                             N * fpga_output_size[i] * 2);
         }
-        dfe = max_load(max_files[i], load_spec);
-        max_run(dfe, actions[i]);
+        max_unload(dfe);
 
         tmp_buffer_in = tmp_buffer_out;
         tmp_buffer_out = NULL;
     }
+    dfe = NULL;
 
     if (tmp_buffer_out != NULL) {
         delete[] tmp_buffer_out;
