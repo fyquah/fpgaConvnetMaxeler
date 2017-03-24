@@ -155,8 +155,7 @@ def conv_layer_bram(layer):
             div_ceil(layer.conv.kernel_size * layer.conv.kernel_size,
                      layer.conv.kernel_folding_factor)
             * layer.conv.bram_factor / (wf * cff))
-    unit = (layer.conv.bram_factor
-            + max(0, 0.09187 * kff - 5.8784)
+    unit = (max(0, 0.09187 * kff - 5.8784)
             + (7.0248 * (layer.conv.kernel_size ** 2))
             + wf * cff * kff * math.ceil(weight_bits_per_multiplier / 20480))
     accumulator = 2 + layer.num_outputs

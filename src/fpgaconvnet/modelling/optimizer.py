@@ -135,9 +135,10 @@ class OptimizationProblem(simanneal.Annealer):
                         layer.num_inputs, layer.conv.worker_factor)
                 conv_iters = div_ceil(
                         layer.num_outputs, layer.conv.conv_folding_factor)
-                new_value = sample_array(
-                    compute_factors(conv_iters)
-                    + compute_multiples(conv_iters, scheduler_iters * conv_iters))
+                new_value = (layer.conv.conv_folding_factor
+                        * layer.conv.worker_factor
+                        * sample_array(compute_factors(conv_iters)
+                                       + compute_multiples(conv_iters, scheduler_iters * conv_iters)))
             elif (new_network.layer[layer_id].conv.should_fit_on_chip
                         and field_name == "look_ahead"):
                 continue
@@ -518,8 +519,6 @@ def main():
     network.layer[0].is_first_layer = True
     network.layer[-1].is_last_layer = True
     print network
-    # logging.getLogger().setLevel(logging.DEBUG)
-    # print resource_model.project(network)
     optimized_network = run_optimizer(network)
 
     with open(FLAGS.output, "w") as f:
