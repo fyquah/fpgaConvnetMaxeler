@@ -376,7 +376,7 @@ def estimate_gops(network):
                     minimum_cycles])
 
         elif layer.HasField("pool"):
-            kernel_input_cycles.append((prev_cycles,)) 
+            kernel_input_cycles.append((prev_cycles,))
             prev_cycles = (
                 prev_cycles
                 * layer.pool.stride
@@ -384,12 +384,8 @@ def estimate_gops(network):
                 * layer.pool.channel_folding_factor)
 
         elif layer.HasField("lrn"):
-            kernel_input_cycles.append((prev_cycles,)) 
-            prev_cycles = (
-                prev_cycles
-                * layer.lrn.stride
-                * layer.lrn.stride
-                * layer.lrn.channel_folding_factor)
+            kernel_input_cycles.append((prev_cycles,))
+            prev_cycles = (prev_cycles * layer.lrn.channel_folding_factor)
 
         else:
             raise RuntimeError("Unknown layer %d." % (layer.layer_id))
@@ -464,7 +460,7 @@ def main():
                 layer.conv.should_fit_on_chip = True
             else:
                 layer.conv.should_fit_on_chip = False
-                layer.conv.bram_per_convolver = 32  # Heriustic.
+                layer.conv.bram_factor = 1
 
         elif layer.HasField("pool"):
             layer.num_outputs = layer.num_inputs

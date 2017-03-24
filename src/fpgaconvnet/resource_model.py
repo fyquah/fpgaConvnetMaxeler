@@ -247,6 +247,44 @@ def pool_layer_flip_flop(layer):
             + 399.39 * layer.num_inputs)
 
 
+# TODO(fyq14): Compute the models for lrn layer. Right now it is just using pooling
+# layer models (which should in principle be similar, but, LOL :p)
+def lrn_layer_flip_flop(layer):
+    return (
+            136.26 * layer.lrn.local_size * layer.lrn.local_size
+                * layer.lrn.channel_folding_factor
+            + 399.39 * layer.num_inputs)
+
+
+def lrn_layer_lut(layer):
+    return (
+            34.9 * layer.lrn.local_size * layer.lrn.local_size
+                * layer.pool.channel_folding_factor
+            + 1.6152 * layer.input_width * layer.num_inputs)
+
+
+def lrn_layer_bram(layer):
+    channel_folding_factor = layer.lrn.channel_folding_factor
+    kernel_bram = (
+        layer.input_width * 20.0
+            * layer.num_inputs / 20480.0 * log2(channel_folding_factor)
+        - 11.2)
+    if layer.is_last_layer:
+        bits = 32
+    else:
+        bits = NUM_BITS
+
+    stream_bram = math.ceil(
+            DEFAULT_FIFO_DEPTH * layer.num_inputs * bits / M20K_SIZE)
+    logging.debug("Layer %d pooling stream_bram = %.3f" %
+                  (layer.layer_id, stream_bram))
+    return kernel_bram + stream_bram
+
+
+def lrn_layer_dsp(layer):
+    return layer.lrn.channel_folding_factor
+
+
 def project(network):
     lut = 0.0
     flip_flop = 0.0
