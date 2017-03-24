@@ -45,6 +45,12 @@ std::vector<float> run_feature_extraction(
 
     /* warm up the DFE with the weights. */
     extracted_features = convnet.max_run_inference(N, images, false);
+    fpgaconvnet::verify_conv_output(
+            network_parameters,
+            N,
+            &extracted_features[0],
+            "../test_data/pool3.bin",
+            fpgaconvnet::FORMAT_BINARY);
 
     /* TODO: Verify the output is correct. You can use the
      * fpgaconvnet::verify_conv_out function for this.

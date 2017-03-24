@@ -792,6 +792,7 @@ std::vector<float> Convnet::max_run_inference(
                             tmp_buffer_out,
                             N * fpga_output_size[i] * 2);
         }
+        max_run(dfe, actions[i]);
         max_unload(dfe);
 
         tmp_buffer_in = tmp_buffer_out;
