@@ -1,0 +1,14 @@
+package fpgaconvnet.kernels;
+
+import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
+import com.maxeler.maxcompiler.v2.kernelcompiler.KernelParameters;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
+
+
+public class NullSinkKernel extends Kernel {
+    public NullSinkKernel(final KernelParameters parameters) {
+        super(parameters);
+        final DFEVar input = io.input("sink", dfeUInt(256));
+        io.scalarOutput("devnull", dfeUInt(64)) <== input.cast(dfeUInt(64));
+    }
+}

@@ -17,10 +17,14 @@ import com.maxeler.maxcompiler.v2.managers.engine_interfaces.InterfaceParam;
 
 import fpgaconvnet.Utils.Tuple3;
 import fpgaconvnet.protos.Parameters;
+import fpgaconvnet.kernels.NullSinkKernel;
+import fpgaconvnet.kernels.NullSourceKernel;
 
 
 public class NetworkManager extends CustomManager {
 
+    private NullSinkKernel nullSink = null;
+    private NullSourceKernel nullSource = null;
     private final boolean isSimulation;
     private final int fpgaId;
     private LMemInterface lmem;
@@ -62,6 +66,12 @@ public class NetworkManager extends CustomManager {
 
         for (int i = 0 ; i < computationChains.size() ; i++) {
             computationChains[i].setKernelTimings(ei, N, init);
+        }
+        if (nullSink != null) {
+            ei.setTicks(nullSink.getName(), 0);
+        }
+        if (nullSource != null) {
+            ei.setTicks(nullSource.getName(), 0);
         }
 
         Parameters.LayerParameter firstLayer = networkParameters.getLayer(0);
@@ -159,6 +169,8 @@ public class NetworkManager extends CustomManager {
             MaxRingBidirectionalStream maxRingStream = addMaxRingBidirectionalStream(
                     "source_stream", Max4MAIARingConnection.MAXRING_B);
             fromLink = maxRingStream.getLinkFromRemoteDFE();
+            nullSource = new NullSourceKernel(makeKernelParameters("null_source"));
+            maxRingStream.getLinkToRemoteDFE() <== addKernel(nullSource).getOutput("source");
         }
 
         if (fpgaId == networkParameters.getNumFpgaUsed() - 1) {
@@ -167,6 +179,8 @@ public class NetworkManager extends CustomManager {
             MaxRingBidirectionalStream maxRingStream = addMaxRingBidirectionalStream(
                     "dest_stream", Max4MAIARingConnection.MAXRING_A);
             toLink = maxRingStream.getLinkToRemoteDFE();
+            nullSink = new NullSinkKernel(makeKernelParameters("null_sink"));
+            addKernel(nullSink).getInput("sink") <== maxRingStream.getLinkFromRemoteDFE();
         }
 
         /* Kernel logic transfer */
