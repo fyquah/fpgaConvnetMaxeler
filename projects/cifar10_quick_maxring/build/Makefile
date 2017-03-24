@@ -7,6 +7,11 @@ PRJ_DESCRIPTOR=../descriptors/cifar10_quick_maxring.prototxt
 PRJ_OPTIMIZED_DESCRIPTOR=cifar10_quick_maxring.optimized.prototxt
 
 
+data:
+	curl "https://www.cs.toronto.edu/~kriz/cifar-10-binary.tar.gz" >cifar10-binary.tar.gz
+	tar xzvf cifar10-binary.tar.gz
+
+
 $(PRJ_OPTIMIZED_DESCRIPTOR): fpgaconvnet/modelling/optimizer.py $(PRJ_DESCRIPTOR) $(PYTHON_PROTOS)
 	python fpgaconvnet/modelling/optimizer.py \
 	    --resource-bench $(WHEREISROOT)/results/resource_bench.yaml \
