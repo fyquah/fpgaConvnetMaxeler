@@ -25,7 +25,7 @@ def main():
             raise RuntimeError("Missing fpga_id in layer %d!" % i)
 
     with open(FLAGS.output, "w") as f:
-        f.write("TARGET_NAMES= " + "".join(["target_%d" % i for i in arr]))
+        f.write("TARGET_NAMES= " + " ".join(["target_%d" % i for i in arr]))
 
 
 if __name__ == "__main__":
