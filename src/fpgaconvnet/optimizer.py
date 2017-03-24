@@ -34,9 +34,9 @@ parser.add_argument("--output", dest="output", type=str,
 
 def satisfies_resource_constraints(resources):
 
-    return all(r.bram <= 0.8 * resource_model.MAX_BRAM
-                and r.lut <= 0.8 * resource_model.MAX_LUT
-                and r.flip_flop <= 0.8 * resource_model.MAX_FF
+    return all(r.bram <= 0.7 * resource_model.MAX_BRAM
+                and r.lut <= 0.7 * resource_model.MAX_LUT
+                and r.flip_flop <= 0.7 * resource_model.MAX_FF
                 and r.dsp <= resource_model.MAX_DSP
                for r in resources)
 
