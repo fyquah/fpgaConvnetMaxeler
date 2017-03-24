@@ -7,7 +7,10 @@ PRJ_DESCRIPTOR=../descriptors/vgg_s.prototxt
 PRJ_OPTIMIZED_DESCRIPTOR=vgg_s.optimized.prototxt
 
 
-$(PRJ_OPTIMIZED_DESCRIPTOR): fpgaconvnet/optimizer.py $(PRJ_DESCRIPTOR) $(PYTHON_PROTOS)
+$(PRJ_OPTIMIZED_DESCRIPTOR): fpgaconvnet/optimizer.py \
+    			     $(PRJ_DESCRIPTOR) \
+			     $(PYTHON_PROTOS) \
+			     sync_py_srcs
 	python $< --resource-bench $(WHEREISROOT)/results/resource_bench.yaml \
 	    --output $@ $(PRJ_DESCRIPTOR)
 
