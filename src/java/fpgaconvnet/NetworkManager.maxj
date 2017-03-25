@@ -215,6 +215,7 @@ public class NetworkManager extends CustomManager {
                         "source_stream", Max4MAIARingConnection.MAXRING_B);
                 fromLink = maxRingStream.getLinkFromRemoteDFE();
                 nullSource = new NullSourceKernel(makeKernelParameters("null_source"));
+                maxRingStream.getLinkToRemoteDFE() <== addKernel(nullSource).getOutput("source");
 
             }
         }
