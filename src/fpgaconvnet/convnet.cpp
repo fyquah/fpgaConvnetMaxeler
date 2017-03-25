@@ -574,18 +574,17 @@ void Convnet::constructor(
     fpga_input_size = std::vector<int>(num_fpgas);
     fpga_output_size = std::vector<int>(num_fpgas);
 
-#ifdef __SIM__
-    dfe_array = NULL;
-    dfe = NULL;
-#else
     if (num_fpgas == 1) {
         dfe_array = NULL;
         dfe = max_load(max_files[0], load_spec);
     } else {
-        dfe_array = max_load_mixed_array((max_file_t**) &max_files[0], num_fpgas, load_spec);
         dfe = NULL;
-    }
+#ifdef __SIM__
+        dfe_array = max_load_mixed_array((max_file_t**) &max_files[0], num_fpgas, load_spec);
+#else
+        dfe_array = NULL;
 #endif
+    }
 
     for (auto it = network_params.layer().begin();
             it != network_params.layer().end();
@@ -776,7 +775,10 @@ std::vector<float> Convnet::max_run_inference(
 
     for (int i = 0; i < num_fpgas ; i++) {
         log_stdout(INFO) << "Running on DFE " << i << " ..." << std::endl;
-        dfe = max_load(max_files[i], load_spec);
+
+        if (num_fpgas > 1) {
+            dfe = max_load(max_files[i], load_spec);
+        }
 
         if (i > 0) {
             max_queue_input(actions[i],
@@ -793,7 +795,10 @@ std::vector<float> Convnet::max_run_inference(
                             N * fpga_output_size[i] * 2);
         }
         max_run(dfe, actions[i]);
-        max_unload(dfe);
+
+        if (num_fpgas > 1) {
+            max_unload(dfe);
+        }
 
         tmp_buffer_in = tmp_buffer_out;
         tmp_buffer_out = NULL;
