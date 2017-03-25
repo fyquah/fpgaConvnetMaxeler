@@ -12,7 +12,9 @@ data:
 	tar xzvf cifar10-binary.tar.gz
 
 
-$(PRJ_OPTIMIZED_DESCRIPTOR): fpgaconvnet/modelling/optimizer.py $(PRJ_DESCRIPTOR) $(PYTHON_PROTOS)
+$(PRJ_OPTIMIZED_DESCRIPTOR): fpgaconvnet/modelling/optimizer.py \
+			     fpgaconvnet/modelling/resource_model.py \
+  			     $(PRJ_DESCRIPTOR) $(PYTHON_PROTOS)
 	python fpgaconvnet/modelling/optimizer.py \
 	    --resource-bench $(WHEREISROOT)/results/resource_bench.yaml \
 	    --output $@ \

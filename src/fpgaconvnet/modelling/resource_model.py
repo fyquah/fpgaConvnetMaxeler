@@ -284,6 +284,55 @@ def lrn_layer_dsp(layer):
     return layer.lrn.channel_folding_factor
 
 
+def get_fpga_input_width(network, fpga_index):
+    assert fpga_index >= 0 and fpga_index < network.num_fpga_used
+    for layer in network.layer:
+        if layer.fpga_id == fpga_index:
+            return layer.num_inputs
+    raise RuntimeError("Cannot find suitable fpga with num %d" % fpga_index)
+
+
+def get_fpga_output_width(network, fpga_index):
+    assert fpga_index >= 0 and fpga_index < network.num_fpga_used
+    for layer in reversed(network.layer):
+        if layer.fpga_id == fpga_index:
+            return layer.num_outputs
+    raise RuntimeError("Cannot find suitable fpga with num %d" % fpga_index)
+
+
+def compute_external_io_resources(width, resource_width, name="<Annonymous>"):
+    """Estimate the resrouces required to do IO to external devices.
+    
+    Eg: Max ring, PCIe, LMem"""
+    lut = 0.
+    flip_flop = 0.
+    bram = 0.
+
+    # The default FIFO
+    lut += 400
+    flip_flop += 502
+    stream_output_fifo = math.ceil(DEFAULT_FIFO_DEPTH * width / M20K_SIZE)
+    bram += stream_output_fifo
+    bram += math.ceil(DEFAULT_FIFO_DEPTH * resource_width / M20K_SIZE)  # Final connection via PCIe
+    logging.debug("Stream %s width = %.3f" % (name, width))
+    logging.debug("Stream %s fifo BRAM = %.3f" % (name, stream_output_fifo))
+
+    # DualAspectFifo
+    if not is_compatible_streams(128, resource_width):
+        lut += 400
+        flip_flop += 502
+        dual_aspect_width = lcm(width, 128)
+        non_multiple_transition_fifo = math.ceil(
+            DEFAULT_FIFO_DEPTH * dual_aspect_width / M20K_SIZE)
+        logging.debug("Stream %s dual aspect width = %.3f"
+                       % (name, dual_aspect_width));
+        logging.debug("Stream %s non multiple transition fifo BRAM = %.3f"
+                      % (name, non_multiple_transition_fifo))
+        bram += non_multiple_transition_fifo
+
+    return Resource(flip_flop=flip_flop, lut=lut, bram=bram, dsp=0.0)
+
+
 def project(network):
     # Verify that fpga_id is a non-decreasing sequence
     for i, layer in enumerate(network.layer):
@@ -324,7 +373,8 @@ def project(network):
     # If any of the layer uses off-chip weight transfer, then only we need this.
     for layer in network.layer:
         if layer.HasField("conv"):
-            if not is_cpu_init(layer) and not has_included_lmem_resources[layer.fpga_id]:
+            if (not is_cpu_init(layer)
+                    and not has_included_lmem_resources[layer.fpga_id]):
                 has_included_lmem_resources[layer.fpga_id] = True
                 off_chip_constants = [
                     # MemoryControllerPro
@@ -383,6 +433,24 @@ def project(network):
 
         logging.debug("-----------------")
 
+    # intermediate maxring stream fifos
+    for fpga_index in range(network.num_fpga_used):
+        # First fpga doesn't have a maxring input connetion
+        # while last fpga doens't have a maxring output connection.
+        for name, flag, width in [
+                ("max_ring_in", fpga_index > 0,
+                 get_fpga_input_width(network, fpga_index)),
+                ("max_ring_out", fpga_index < network.num_fpga_used - 1,
+                 get_fpga_output_width(network, fpga_index))]:
+            if flag:
+                tmp = compute_external_io_resources(
+                        width=width, resource_width=256,
+                        name=name)
+                lut[fpga_index] += tmp.lut
+                flip_flop[fpga_index] += tmp.flip_flop
+                bram[fpga_index] += tmp.bram
+                dsp[fpga_index] += tmp.dsp
+        
     # tocpu
     width = network.layer[-1].num_outputs * 32
     lut[-1] += 400
