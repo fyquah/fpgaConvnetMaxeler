@@ -80,12 +80,77 @@ def sample_array(arr):
     return arr[idx]
 
 
-class OptimizationProblem(simanneal.Annealer):
+def make_fpga_alloc_table(network):
+    table = [0] * network.num_fpga_used
+    for layer in network.layer:
+        table[layer.fpga_id] += 1
+    return table
 
+
+def compute_ops_per_image(layer):
+    if layer.HasField("conv"):
+        return (layer.output_height * layer.output_width
+                * (layer.num_outputs * layer.num_inputs)
+                * (layer.conv.kernel_size ** 2)
+                * 2)
+    elif layer.HasField("pool"):
+        return (layer.output_height * layer.output_width
+                * layer.num_inputs
+                * (layer.pool.dim ** 2))
+
+    elif layer.HasField("lrn"):
+        return (layer.output_height * layer.output_width
+                * layer.num_inputs
+                * layer.lrn.local_size)
+
+
+class FpgaPositioningProblem(simanneal.Annealer):
+    """Minimizes standard deviation of ops per image between fpgas."""
+
+    def __init__(self, network):
+        self.state = network
+
+    def move(self):
+        while True:
+            fpga_to_shift = np.random.randint(self.state.num_fpga_used)
+            adjacent = (fpga_to_shift - 1
+                        if np.random.randint(2) == 0
+                        else fpga_to_shift + 1)
+            fpga_alloc_table = make_fpga_alloc_table(self.state)
+
+            if (adjacent < 0
+                    or adjacent >= self.state.num_fpga_used
+                    or fpga_alloc_table[adjacent] == 1):
+                continue
+            fpga_alloc_table[adjacent] -= 1
+            fpga_alloc_table[fpga_to_shift] += 1
+
+            new_state = parameters_pb2.Network()
+            new_state.CopyFrom(self.state)
+
+            fpga_index = 0
+            for layer in new_state.layer:
+                layer.fpga_id = fpga_index
+                fpga_alloc_table[fpga_index] -= 1
+                if fpga_alloc_table[fpga_index] == 0:
+                    fpga_index += 1
+
+            self.state = new_state
+            break
+
+    def energy(self):
+        ops = [0] * self.state.num_fpga_used
+        for layer in self.state.layer:
+            ops[layer.fpga_id] += compute_ops_per_image(layer)
+        return np.std(ops)
+
+
+class FoldingFactorOptimizationProblem(simanneal.Annealer):
+    """Minimizes GOps with ff values for compute time given a FPGA allocation."""
     def __init__(self, network):
         initial_state = parameters_pb2.Network()
         initial_state.CopyFrom(network)
-        super(OptimizationProblem, self).__init__(initial_state)
+        super(FoldingFactorOptimizationProblem, self).__init__(initial_state)
         self.valid_values = []
 
         for layer in network.layer:
@@ -211,36 +276,29 @@ def make_presence_constraint(idx, values):
 
 def search_initial_state(network, num_fpgas):
 
-    split_points = num_fpgas - 1
-    arr = [True] * split_points + [False] * (len(network.layer) - 1 - split_points)
+    for i, layer in enumerate(network.layer):
+        layer.fpga_id = min(i, num_fpgas - 1)
+    network.num_fpga_used = num_fpgas
 
-    # Perturbate until we find a suitable starting point.
-    for iter in range(200):
-        random.shuffle(arr)
+    problem = FpgaPositioningProblem(network)
+    state, e = problem.anneal()
 
-        fpga_id = 0
-        for i, layer in enumerate(network.layer):
-
-            if i != 0 and arr[i - 1]:
-                fpga_id += 1
-
-            # Relable fpga_id
-            layer.fpga_id = fpga_id
-
-        resources = resource_model.project(network)
-        if satisfies_resource_constraints(resources):
-            return network
-
-    print "Failed to find suitable starting point for num_fpgas =", num_fpgas
-    return None
+    # TODO(fyq14): Adjust the folding factors such that the problem is feasiable.
+    #              Otherwise, return None.
+    return state
 
 
 def optimize_with_fixed_fpga_count(network, num_fpgas):
 
     initial_state = search_initial_state(network, num_fpgas)
     if initial_state is None:
+        print "Failed to find an initial state for", num_fpgas
         return None
-    problem = OptimizationProblem(initial_state)
+
+    print "====> Found a suitable initial state for ", num_fpgas
+    print initial_state
+    print ""
+    problem = FoldingFactorOptimizationProblem(initial_state)
     state, e = problem.anneal()
     resource = resource_model.project(state)
 
@@ -265,6 +323,7 @@ def optimize_with_fixed_fpga_count(network, num_fpgas):
                  float(total_m20k_used) / resource_model.MAX_BRAM)
         print ""
     print "Estimated GOps:", estimate_gops(state), "\n"
+    print ""
 
     return state
 
