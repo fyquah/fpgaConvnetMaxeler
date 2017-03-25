@@ -32,6 +32,13 @@ std::vector<float> run_feature_extraction(
 {
     std::vector<max_file_t*> max_files;
     std::vector<float> extracted_features;
+    std::vector<std::string> filenames = {
+            "../weights/conv0_weights",
+            "../weights/conv0_bias",
+            "../weights/conv2_weights",
+            "../weights/conv2_bias",
+            "../weights/conv4_weights",
+            "../weights/conv4_bias" };
 
     max_files.push_back(target_0_init());
     max_files.push_back(target_1_init());
@@ -39,8 +46,7 @@ std::vector<float> run_feature_extraction(
 
     fpgaconvnet::Convnet convnet(network_parameters, max_files, "");
 
-    /* TODO: load the weights from somewhere. */
-    convnet.randomize_weights();
+    convnet.load_weights_from_files(filenames, fpgaconvnet::FORMAT_BINARY);
     convnet.max_init_weights();
 
     /* warm up the DFE with the weights. */
@@ -51,10 +57,6 @@ std::vector<float> run_feature_extraction(
             &extracted_features[0],
             "../test_data/pool3.bin",
             fpgaconvnet::FORMAT_BINARY);
-
-    /* TODO: Verify the output is correct. You can use the
-     * fpgaconvnet::verify_conv_out function for this.
-     */
 
     return extracted_features;
 }
