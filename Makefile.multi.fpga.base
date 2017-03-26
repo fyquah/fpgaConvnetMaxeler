@@ -86,7 +86,8 @@ target_dfe: fpgaconvnet/convnet.o \
 
 
 run_target_dfe: target_dfe
-	SLIC_CONF="$(SLIC_CONF)" LD_PRELOAD=$(MAXOS_HW) ./$< $(TARGET_NAMES)
+	SLIC_CONF="$(SLIC_CONF)" LD_PRELOAD=$(MAXOS_HW) \
+		  ./$< $(PRJ_OPTIMIZED_DESCRIPTOR)
 
 
 rundfe: run_target_dfe

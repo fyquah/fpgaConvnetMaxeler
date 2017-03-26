@@ -580,9 +580,9 @@ void Convnet::constructor(
     } else {
         dfe = NULL;
 #ifdef __SIM__
-        dfe_array = max_load_mixed_array((max_file_t**) &max_files[0], num_fpgas, load_spec);
-#else
         dfe_array = NULL;
+#else
+        dfe_array = max_load_mixed_array((max_file_t**) &max_files[0], num_fpgas, load_spec);
 #endif
     }
 
