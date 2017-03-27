@@ -446,10 +446,17 @@ def project(network):
                 tmp = compute_external_io_resources(
                         width=width, resource_width=256,
                         name=name)
+
+                # For Streaming
                 lut[fpga_index] += tmp.lut
                 flip_flop[fpga_index] += tmp.flip_flop
                 bram[fpga_index] += tmp.bram
                 dsp[fpga_index] += tmp.dsp
+
+                # InterFPGALink
+                bram[fpga_index] += 20
+                lut[fpga_index] += 2000
+                flip_flop[fpga_index] += 4000
         
     # tocpu
     width = network.layer[-1].num_outputs * 32
