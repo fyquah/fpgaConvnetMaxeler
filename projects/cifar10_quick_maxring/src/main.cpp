@@ -16,7 +16,7 @@
 #ifdef __SIM__
     static const uint64_t N = 4;
 #else
-    static const uint64_t N = 10000;
+    static const uint64_t N  = 100000;
 #endif
 
 
@@ -51,6 +51,7 @@ std::vector<float> run_feature_extraction(
 
     /* warm up the DFE with the weights. */
     extracted_features = convnet.max_run_inference(N, images, false);
+    extracted_features = convnet.max_run_inference(N, images, true);
     fpgaconvnet::verify_conv_output(
             network_parameters,
             N,
@@ -72,7 +73,7 @@ void load_cifar10(const char *filename, std::vector<float> &images, std::vector<
         throw fpgaconvnet::Exception("File not found");
     }
 
-    for (unsigned iter = 0 ; iter < N ; iter++) {
+    for (unsigned iter = 0 ; iter < 10000 ; iter++) {
         char byte;
         std::vector<float> red(1024);
         std::vector<float> blue(1024);
@@ -106,6 +107,15 @@ void load_cifar10(const char *filename, std::vector<float> &images, std::vector<
     fin.close();
 }
 
+std::vector<float> duplicate_vector(const std::vector<float> &v, int count)
+{
+    std::vector<float> ret(v.size() * count);
+    for (int i = 0 ; i < count ; i++) {
+        std::memcpy(&ret[i * v.size()], &v[0], sizeof(float) * v.size());
+    }
+    return ret;
+}
+
 
 int main(int argc, char **argv)
 {
@@ -123,7 +133,10 @@ int main(int argc, char **argv)
     std::cout << network_parameters.DebugString() << std::endl;
 
     std::cout << "Reading images ..." << std::endl;
+    // cifar10 batch has 10k images. We have 100k so we can hide the latency.
     load_cifar10("cifar-10-batches-bin/data_batch_1.bin", images, labels);
+    std::cout << "Duplicating images from 10000 -> " << N << std::endl;
+    images = duplicate_vector(images, N / 10000);
 
     std::vector<float> conv_out = run_feature_extraction(network_parameters, images);
     return 0;

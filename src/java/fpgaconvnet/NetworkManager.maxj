@@ -191,6 +191,32 @@ public class NetworkManager extends CustomManager {
         }
     }
 
+    int ringConnectionCtr = 0;
+
+    private Max4MAIARingConnection inputRingConnection() {
+        if (fpgaId == 0) {
+            throw new RuntimeException("Input ring wrong");
+        }
+
+        if (fpgaId % 2 == 0) {
+            return Max4MAIARingConnection.MAXRING_B;
+        } else {
+            return Max4MAIARingConnection.MAXRING_A;
+        }
+    }
+
+    private Max4MAIARingConnection outputRingConnection() {
+        if (fpgaId == networkParameters.getNumFpgaUsed() - 1) {
+            throw new RuntimeException("Output ring connection.");
+        }
+
+        if (fpgaId % 2 == 0) {
+            return Max4MAIARingConnection.MAXRING_A;
+        } else {
+            return Max4MAIARingConnection.MAXRING_B;
+        }
+    }
+
     private void linkKernels() {
 
         /* Data tranfer */
@@ -212,7 +238,7 @@ public class NetworkManager extends CustomManager {
 
             } else {
                 MaxRingBidirectionalStream maxRingStream = addMaxRingBidirectionalStream(
-                        "source_stream", Max4MAIARingConnection.MAXRING_B);
+                        "source_stream", inputRingConnection());
                 fromLink = maxRingStream.getLinkFromRemoteDFE();
                 nullSource = new NullSourceKernel(makeKernelParameters("null_source"));
                 maxRingStream.getLinkToRemoteDFE() <== addKernel(nullSource).getOutput("source");
@@ -228,7 +254,7 @@ public class NetworkManager extends CustomManager {
 
             } else {
                 MaxRingBidirectionalStream maxRingStream = addMaxRingBidirectionalStream(
-                        "dest_stream", Max4MAIARingConnection.MAXRING_A);
+                        "dest_stream", outputRingConnection());
                 toLink = maxRingStream.getLinkToRemoteDFE();
                 nullSink = new NullSinkKernel(makeKernelParameters("null_sink"));
                 addKernel(nullSink).getInput("sink") <== maxRingStream.getLinkFromRemoteDFE();
