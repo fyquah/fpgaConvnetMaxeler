@@ -476,15 +476,17 @@ def estimate_gops(network):
 
         elif layer.HasField("pool"):
             kernel_input_cycles.append((prev_cycles,))
+            pool_iters = div_ceil(layer.num_outputs, layer.pool.channel_folding_factor)
             prev_cycles = (
                 prev_cycles
                 * layer.pool.stride
                 * layer.pool.stride
-                * layer.pool.channel_folding_factor)
+                * pool_iters)
 
         elif layer.HasField("lrn"):
             kernel_input_cycles.append((prev_cycles,))
-            prev_cycles = (prev_cycles * layer.lrn.channel_folding_factor)
+            lrn_iters = div_ceil(layer.num_outputs, layer.lrn.channel_folding_factor)
+            prev_cycles = (prev_cycles * lrn_iters)
 
         else:
             raise RuntimeError("Unknown layer %d." % (layer.layer_id))
