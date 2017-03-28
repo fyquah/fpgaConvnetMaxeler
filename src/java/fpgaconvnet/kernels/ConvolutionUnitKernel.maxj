@@ -331,8 +331,7 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
         if (getWeightsLoadStrategy() == WeightsLoadStrategy.INIT_FROM_CPU) {
             filtersRom = retrieveWeightsRom();
             DFEVector<DFEVar> inputVec = getCpuWeightsInput();
-            DFEVector<DFEVar> originalVec = filtersRom.read(cpuInitWeightsCounter.getWeightAddress());
-            DFEVector<DFEVar> newVec = weightsMemoryType.newInstance(this);
+            DFEVector<DFEVar> weightsInputAccumulator = weightsMemoryType.newInstance(this);
 
             for (int worker = 0 ; worker < convParams.getWorkerFactor() ; worker++) {
                 for (int conv = 0 ; conv < convParams.getConvFoldingFactor() ; conv++) {
@@ -342,19 +341,21 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
                                            * convParams.getKernelFoldingFactor()))
                                 + (conv * convParams.getKernelFoldingFactor())
                                 + mult);
-                        newVec[idx] <== (
-                                cpuInitWeightsCounter.getWriteEnable(worker, conv)
+                        optimization.pushPipeliningFactor(0.0);
+                        weightsInputAccumulator[idx] <== (
+                                cpuInitWeightsCounter.getIsWorkerConvTurn(worker, conv)
                                 ? inputVec[mult]
-                                : originalVec[idx]);
+                                : stream.offset(weightsInputAccumulator[idx], -1));
+                        optimization.popPipeliningFactor();
                     }
                 }
             }
 
             filtersRom.write(
-                    cpuInitWeightsCounter.getWeightAddress(),
-                    stream.offset(newVec, -GlobalConfig.FMEM_LATENCY),
+                    cpuInitWeightsCounter.getInitAddress(),
+                    weightsInputAccumulator,
                     cpuInitWeightsCounter.getWriteEnable());
-            return cycleWeightsRead = originalVec;
+            return cycleWeightsRead = filtersRom.read(cpuInitWeightsCounter.getWeightAddress());
 
         } else if (getWeightsLoadStrategy() == WeightsLoadStrategy.WITH_CACHE) {
             filtersRom = retrieveWeightsRom();

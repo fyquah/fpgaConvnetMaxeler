@@ -104,6 +104,14 @@ static uint64_t div_ceil(uint64_t a, uint64_t b)
 }
 
 
+static uint64_t calc_total_multipliers(const protos::LayerParameter & layer)
+{
+    return layer.conv().worker_factor()
+            * layer.conv().conv_folding_factor()
+            * layer.conv().kernel_folding_factor();
+}
+
+
 /* The number of iterations to convolve a kernel with a sliding window. */
 static uint64_t calc_kernel_iterations(const protos::LayerParameter & layer)
 {
@@ -365,7 +373,8 @@ void verify_conv_output(
     fin.close();
 }
 
-void allign_and_place_cpu_initialized_kernel_weights(
+/* Don't even ask me how this works. This is dark magic to me by now. */
+void special_allign_and_place_kernel_weights(
         const protos::LayerParameter & layer,
         float *dest_base,
         float *src_base
@@ -424,6 +433,48 @@ void allign_and_place_cpu_initialized_kernel_weights(
     }
 }
 
+void allign_and_place_cpu_initialized_kernel_weights(
+        const protos::LayerParameter & layer,
+        float *dest_base,
+        float *src_base
+)
+{
+    const uint64_t total_rom_size = calc_total_rom_size(layer);
+    float *tmp = new float[total_rom_size];
+    const uint64_t rom_per_worker =
+            total_rom_size / layer.conv().worker_factor();
+    const uint64_t rom_per_conv =
+            rom_per_worker / layer.conv().conv_folding_factor();
+    const uint64_t total_iterations = calc_total_iterations(layer);
+
+    special_allign_and_place_kernel_weights(
+            layer,
+            tmp,
+            src_base);
+
+    for (int iter = 0 ; iter < total_iterations ; iter++) {
+        uint64_t addr = iter * calc_total_multipliers(layer);
+
+        for (int worker = 0 ; worker < layer.conv().worker_factor() ; worker++) {
+            for (int conv = 0 ; conv < layer.conv().conv_folding_factor() ; conv++) {
+                uint64_t offset =
+                        (iter * layer.conv().kernel_folding_factor())
+                        + (worker * rom_per_worker)
+                        + (conv * rom_per_conv);
+
+                std::memcpy(
+                        dest_base + addr,
+                        tmp + offset,
+                        sizeof(float) * layer.conv().kernel_folding_factor());
+                addr += layer.conv().kernel_folding_factor();
+            }
+        }
+    }
+
+    delete[] tmp;
+}
+
+
 
 void allign_and_place_lmem_initialized_kernel_weights(
         const protos::LayerParameter & layer,
@@ -439,7 +490,7 @@ void allign_and_place_lmem_initialized_kernel_weights(
             rom_per_worker / layer.conv().conv_folding_factor();
     const uint64_t total_iterations = calc_total_iterations(layer);
 
-    allign_and_place_cpu_initialized_kernel_weights(
+    special_allign_and_place_kernel_weights(
             layer,
             tmp,
             src_base);

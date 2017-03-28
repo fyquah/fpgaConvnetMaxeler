@@ -19,6 +19,7 @@ public class CpuInitWeightsCounter extends KernelLib {
     final IterationCounter iterCounter;
     final ConvolutionParameter convParams;
     final LayerParameter layerParams;
+    final DFEVar initAddress;
     final DFEVar initConvIter;
     final DFEVar initWorkerIter;
     final DFEVar initWeightsFlag;
@@ -27,7 +28,6 @@ public class CpuInitWeightsCounter extends KernelLib {
     final DFEVar isPaddingInit;
     final DFEVar convIter;
     final DFEVar kernelIter;
-    final DFEVar fmemStage;
     final int totalAddressCount;
     final DFEVar weightAddress;
 
@@ -60,13 +60,11 @@ public class CpuInitWeightsCounter extends KernelLib {
         CounterChain initChain = control.count.makeCounterChain();
         DFEVar initCycleIter = control.count.simpleCounter(
                 Utils.ceilLog2(initCycles()), initCycles());
+        initAddress = Utils.chainCounterOrZero(this, initChain, totalAddressCount);
         initWorkerIter = Utils.chainCounterOrZero(
                 this, initChain, layerParams.getConv().getWorkerFactor());
         initConvIter = Utils.chainCounterOrZero(
                 this, initChain, layerParams.getConv().getConvFoldingFactor());
-        fmemStage = Utils.chainCounterOrZero(
-                this, initChain, GlobalConfig.FMEM_LATENCY);
-        DFEVar initAddress = Utils.chainCounterOrZero(this, initChain, totalAddressCount);
         Counter initializationCompleteCtr = control.count.makeCounter(
                 control.count.makeParams(1)
                 .withInc(1)
@@ -80,8 +78,7 @@ public class CpuInitWeightsCounter extends KernelLib {
                 .withWrapMode(Count.WrapMode.STOP_AT_MAX)
                 .withEnable(initAddress.eq(totalAddressCount - 1)
                             & initConvIter.eq(layerParams.getConv().getConvFoldingFactor() - 1)
-                            & initWorkerIter.eq(layerParams.getConv().getWorkerFactor() - 1)
-                            & fmemStage.eq(GlobalConfig.FMEM_LATENCY - 1)));
+                            & initWorkerIter.eq(layerParams.getConv().getWorkerFactor() - 1)));
 
         initWeightsFlag = io.scalarInput("init", dfeUInt(1));
         initializationComplete = initializationCompleteCtr.getCount();
@@ -94,7 +91,7 @@ public class CpuInitWeightsCounter extends KernelLib {
         kernelIter = Utils.chainCounterOrZero(this, chain, iterCounter.getKernelIterations());
         weightAddress = makeSimpleEnableCounter(
                 totalAddressCount,
-                ~isPaddingInit | ~isInitializingWeights);
+                ~isInitializingWeights);
     }
 
     public DFEVar getWeightAddress() {
@@ -102,19 +99,21 @@ public class CpuInitWeightsCounter extends KernelLib {
     }
 
     public DFEVar getWriteEnable() {
-        return isInitializingWeights & ~isPaddingInit & fmemStage.eq(0);
+        return isInitializingWeights
+                & ~isPaddingInit
+                & initConvIter.eq(convParams.getConvFoldingFactor() - 1)
+                & initWorkerIter.eq(convParams.getWorkerFactor() - 1);
     }
 
-    public DFEVar getWriteEnable(int workerId, int convUnitIndex) {
+    public DFEVar getIsWorkerConvTurn(int workerId, int convUnitIndex) {
         return isInitializingWeights
                 & initConvIter.eq(convUnitIndex)
                 & initWorkerIter.eq(workerId)
-                & ~isPaddingInit
-                & fmemStage.eq(0);
+                & ~isPaddingInit;
     }
 
     public DFEVar getWeightsInputFlag() {
-        return isInitializingWeights & fmemStage.eq(0);
+        return isInitializingWeights;
     }
 
     public DFEVar getInputControlFlag() {
@@ -142,8 +141,7 @@ public class CpuInitWeightsCounter extends KernelLib {
                 * layerParams.getConv().getConvFoldingFactor()
                 * iterCounter.getSchedulerIterations()
                 * iterCounter.getConvolutionIterations()
-                * iterCounter.getKernelIterations()
-                * GlobalConfig.FMEM_LATENCY;
+                * iterCounter.getKernelIterations();
     }
 
     public int initCycles() {
@@ -151,5 +149,9 @@ public class CpuInitWeightsCounter extends KernelLib {
                 ((int) Utils.lcm(4, layerParams.getConv().getKernelFoldingFactor()))
                 / layerParams.getConv().getKernelFoldingFactor();
         return Utils.divCeil(realInitCycles(), multipleBase) * multipleBase;
+    }
+
+    public DFEVar getInitAddress() {
+        return initAddress;
     }
 }
