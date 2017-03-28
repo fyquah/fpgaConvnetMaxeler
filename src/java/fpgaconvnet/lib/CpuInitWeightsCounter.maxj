@@ -96,6 +96,10 @@ public class CpuInitWeightsCounter extends KernelLib {
         return weightAddress;
     }
 
+    public DFEVar getWriteEnable() {
+        return isInitializingWeights & ~isPaddingInit;
+    }
+
     public DFEVar getWriteEnable(int workerId, int convUnitIndex) {
         return isInitializingWeights
                 & initConvIter.eq(convUnitIndex)
