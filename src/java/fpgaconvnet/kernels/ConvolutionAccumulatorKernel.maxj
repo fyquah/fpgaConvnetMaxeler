@@ -149,14 +149,10 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
         DFEVar isInitializingWeights = initWeightsFlag & ~initializationComplete;
 
         // Runtime Counters and loop variables
-        batchCounter = control.count.makeCounter(
-                control.count.makeParams(Utils.ceilLog2(
-                        convParams.getLookAhead() * ctr.getTotalIterations()))
-                .withInitValue(0l)
-                .withInc(1l)
-                .withMax(convParams.getLookAhead() * ctr.getTotalIterations())
-                .withEnable(~isInitializingWeights)
-            ).getCount();
+        batchCounter = makeSimpleEnableCounter(
+                convParams.getLookAhead() * ctr.getTotalIterations(),
+                ~isInitializingWeights);
+
         DFEVar convIter;
         DFEVar lookAheadIter;
         DFEVar pixelIter;
@@ -169,13 +165,7 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
             Utils.chainCounterOrZero(this, chain, getSchedulerIterations());
             convIter = Utils.chainCounterOrZero(this, chain, getConvolutionIterations());
             Utils.chainCounterOrZero(this, chain, getKernelIterations());
-            pixelIter = control.count.makeCounter(
-                    control.count.makeParams(Utils.ceilLog2(totalIter))
-                    .withInitValue(0l)
-                    .withInc(1)
-                    .withMax(totalIter)
-                    .withEnable(~isInitializingWeights)
-                ).getCount();
+            pixelIter = makeSimpleEnableCounter(totalIter, ~isInitializingWeights);
 
             lookAheadIter = constant.var(dfeBool(), 0);
             outputControlFlag = ~isInitializingWeights & pixelIter.eq(totalIter - 1);

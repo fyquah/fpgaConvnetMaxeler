@@ -223,7 +223,7 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
             } else {
                 Memory<DFEVar> pixelsMem = mem.alloc(
                         GlobalConfig.dataType,
-                        convParams.getLookAhead() * getKernelIterations());
+                        Math.max(2, convParams.getLookAhead() * getKernelIterations()));
                 DFEVar pixel = control.mux(lookAheadCounter.getKernelIter(), pixelChoices);
                 pixelsMem.write(
                         lookAheadCounter.getPixelAddress(),
@@ -312,7 +312,8 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
         switch (getWeightsLoadStrategy()) {
         case INIT_FROM_CPU:
             filtersRom = mem.alloc(
-                    GlobalConfig.dataType, totalAddressCount);
+                    GlobalConfig.dataType,
+                    Math.max(2, totalAddressCount));
             filtersRom.write(
                     cpuInitWeightsCounter.getWeightAddress(),
                     getCpuWeightsInput()[multId],

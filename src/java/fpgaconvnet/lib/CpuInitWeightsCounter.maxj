@@ -29,6 +29,21 @@ public class CpuInitWeightsCounter extends KernelLib {
     final int totalAddressCount;
     final DFEVar weightAddress;
 
+    public DFEVar makeSimpleEnableCounter(int max, DFEVar enable) {
+        if (max == 1) {
+            return constant.var(dfeBool(), 0);
+        } else {
+            return control.count.makeCounter(
+                    control.count.makeParams(Utils.ceilLog2(max))
+                    .withInitValue(0l)
+                    .withInc(1l)
+                    .withMax(max)
+                    .withEnable(enable)
+                ).getCount();
+
+        }
+    }
+
     public CpuInitWeightsCounter(ConvolutionUnitKernel kernel, LayerParameter argLayerParams) {
         super(kernel);
 
@@ -72,12 +87,9 @@ public class CpuInitWeightsCounter extends KernelLib {
         CounterChain chain = control.count.makeCounterChain(~isInitializingWeights);
         convIter = Utils.chainCounterOrZero(this, chain, iterCounter.getConvolutionIterations());
         kernelIter = Utils.chainCounterOrZero(this, chain, iterCounter.getKernelIterations());
-        weightAddress = control.count.makeCounter(
-                control.count.makeParams(Utils.ceilLog2(totalAddressCount))
-                .withInc(1)
-                .withMax(totalAddressCount)
-                .withEnable(~isPaddingInit | ~isInitializingWeights)
-            ).getCount();
+        weightAddress = makeSimpleEnableCounter(
+                totalAddressCount,
+                ~isPaddingInit | ~isInitializingWeights);
     }
 
     public DFEVar getWeightAddress() {

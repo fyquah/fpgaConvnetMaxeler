@@ -9,6 +9,7 @@ import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
 
 import fpgaconvnet.protos.Parameters;
 import fpgaconvnet.IterationCounter;
+import fpgaconvnet.Utils;
 
 
 public abstract class ConvolutionKernelBase extends Kernel {
@@ -67,4 +68,20 @@ public abstract class ConvolutionKernelBase extends Kernel {
             return constant.var(dfeBool(), 0);
         }
     }
+
+    public DFEVar makeSimpleEnableCounter(int max, DFEVar enable) {
+        if (max == 1) {
+            return constant.var(dfeBool(), 0);
+        } else {
+            return control.count.makeCounter(
+                    control.count.makeParams(Utils.ceilLog2(max))
+                    .withInitValue(0l)
+                    .withInc(1l)
+                    .withMax(max)
+                    .withEnable(enable)
+                ).getCount();
+
+        }
+    }
+
 }
