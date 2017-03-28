@@ -81,7 +81,8 @@ fpgaconvnet/target_main_dfe.o: main.cpp $(TARGET_DFE_MAXFILES)
 target_dfe: fpgaconvnet/convnet.o \
 		fpgaconvnet/target_main_dfe.o \
 		fpgaconvnet/protos/parameters.pb.o \
-		$(TARGET_DFE_OBJS)
+		$(TARGET_DFE_OBJS) \
+		$(ADDITIONAL_OBJS)
 	$(CPUCOMPILER) $(ALL_FLAGS) -o $@ $^ $(LFLAGS)
 
 

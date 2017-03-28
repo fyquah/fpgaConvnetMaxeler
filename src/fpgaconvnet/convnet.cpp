@@ -353,7 +353,7 @@ void verify_conv_output(
             total_error += std::abs(obtained  - expected);
             total_pixels += 1;
 
-            if (std::abs(obtained - expected) > 0.001) {
+            if (std::abs(obtained - expected) > 0.01) {
                 log_stdout(WARNING) << j << "\t| ERROR: Obtained " << obtained << ", expected " << expected << std::endl;
             }
             // else {
