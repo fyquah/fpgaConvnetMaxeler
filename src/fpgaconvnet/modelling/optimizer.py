@@ -280,6 +280,9 @@ def search_initial_state(network, num_fpgas):
         layer.fpga_id = min(i, num_fpgas - 1)
     network.num_fpga_used = num_fpgas
 
+    if (num_fpgas == 1):
+        return network
+
     problem = FpgaPositioningProblem(network)
     state, e = problem.anneal()
 

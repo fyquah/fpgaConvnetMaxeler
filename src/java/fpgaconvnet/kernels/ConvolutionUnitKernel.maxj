@@ -125,23 +125,15 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
 
     /* initCycles used only in CPU initialization. */
     public int stallInitCycles() {
-        return initCycles() - realInitCycles();
+        return cpuInitWeightsCounter.stallInitCycles();
     }
 
     public int realInitCycles() {
-        return layerParams.getConv().getWorkerFactor()
-                * layerParams.getConv().getConvFoldingFactor()
-                * getSchedulerIterations()
-                * getConvolutionIterations()
-                * getKernelIterations();
+        return cpuInitWeightsCounter.realInitCycles();
     }
 
     public int initCycles() {
-        /* Return different values based on caching strategy. */
-        int multipleBase =
-                ((int) Utils.lcm(4, layerParams.getConv().getKernelFoldingFactor()))
-                / layerParams.getConv().getKernelFoldingFactor();
-        return Utils.divCeil(realInitCycles(), multipleBase) * multipleBase;
+        return cpuInitWeightsCounter.initCycles();
     }
 
     public int initStreamSize() {
@@ -304,11 +296,11 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
 
     }
 
-    private Memory<DFEVectorType<DFEVar>> filtersRom = null;
+    private Memory<DFEVector<DFEVar>> filtersRom = null;
     private DFEVector<DFEVar> cycleWeightsRead = null;
     private DFEVectorType<DFEVar> weightsMemoryType = null;
 
-    private Memory<DFEVectorType<DFEVar>> retrieveWeightsRom() {
+    private Memory<DFEVector<DFEVar>> retrieveWeightsRom() {
         if (filtersRom != null) {
             return filtersRom;
         }
@@ -318,12 +310,11 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
         case WITH_CACHE:
             weightsMemoryType = new DFEVectorType<DFEVar>(
                     GlobalConfig.dataType, getTotalMultipliers());
+            return filtersRom = mem.alloc(weightsMemoryType, totalAddressCount);
 
         default:
             throw new RuntimeException("Retrieve weight roms failed");
         }
-
-        return filtersRom = mem.alloc(weightsMemoryType, totalAddressCount);
     }
 
     private int getTotalMultipliers() {
@@ -340,19 +331,19 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
         if (getWeightsLoadStrategy() == WeightsLoadStrategy.INIT_FROM_CPU) {
             filtersRom = retrieveWeightsRom();
             DFEVector<DFEVar> inputVec = getCpuWeightsInput();
-            DFEVector<DFEVar> originalVec = filtersRom.read(cpuInitCounter.getWeightAddress())
+            DFEVector<DFEVar> originalVec = filtersRom.read(cpuInitWeightsCounter.getWeightAddress());
             DFEVector<DFEVar> newVec = weightsMemoryType.newInstance(this);
 
             for (int worker = 0 ; worker < convParams.getWorkerFactor() ; worker++) {
-                for (int conv = 0 ; conv < convParams.getConvolutionFactor() ; conv++) {
-                    for (int mult = 0 ; mult < convParams.getKernelFoldingFacotr() ; mult++) {
+                for (int conv = 0 ; conv < convParams.getConvFoldingFactor() ; conv++) {
+                    for (int mult = 0 ; mult < convParams.getKernelFoldingFactor() ; mult++) {
                         int idx = (
                                 (worker * (convParams.getConvFoldingFactor()
                                            * convParams.getKernelFoldingFactor()))
                                 + (conv * convParams.getKernelFoldingFactor())
                                 + mult);
-                        newVec[idx] = (
-                                cpuInitCounter.getWriteEnable(worker, conv)
+                        newVec[idx] <== (
+                                cpuInitWeightsCounter.getWriteEnable(worker, conv)
                                 ? inputVec[mult]
                                 : originalVec[idx]);
                     }
@@ -361,18 +352,19 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
 
             filtersRom.write(
                     cpuInitWeightsCounter.getWeightAddress(),
-                    newVec,
-                    cpuinitCounter.getWriteEnable());
+                    stream.offset(newVec, -GlobalConfig.FMEM_LATENCY),
+                    cpuInitWeightsCounter.getWriteEnable());
             return cycleWeightsRead = originalVec;
 
         } else if (getWeightsLoadStrategy() == WeightsLoadStrategy.WITH_CACHE) {
             filtersRom = retrieveWeightsRom();
             DFEVector<DFEVar> inputVec = getLMemWeightsInput();
-            DFEVector<DFEVar> originalVec = filtersRom.read(lookAheadCounter.getWriteAddress());
+            DFEVector<DFEVar> originalVec = filtersRom.read(
+                    lookAheadCounter.getWeightAddress());
 
             filtersRom.write(
                     cpuInitWeightsCounter.getWeightAddress(),
-                    inputVec.slice(0, getTotalMultipliers),
+                    inputVec.slice(0, getTotalMultipliers()),
                     lookAheadCounter.getWeightWriteEnable());
             return cycleWeightsRead = originalVec;
 
@@ -385,39 +377,22 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
 
     public DFEVar getConvWeights(
             int workerId, int convUnitIndex, int multId) {
-        Memory<DFEVar> filtersRom = null;
         int idx;
 
         switch (getWeightsLoadStrategy()) {
         case INIT_FROM_CPU:
         case WITH_CACHE:
-            DFEVector<DFEVar> weightsVec = retrieveCycleWeightsRead();
-
             idx = workerId;
             idx = (idx * convParams.getConvFoldingFactor()) + convUnitIndex;
             idx = (idx * convParams.getKernelFoldingFactor()) + multId;
 
-            return retrieveCycleWeightsRead()[idx]
+            return retrieveCycleWeightsRead()[idx];
 
         case STREAM_FROM_LMEM:
             idx = workerId;
             idx = (idx * convParams.getConvFoldingFactor()) + convUnitIndex;
             idx = (idx * convParams.getKernelFoldingFactor()) + multId;
             return getLMemWeightsInput()[idx];
-
-            filtersRom = mem.alloc(GlobalConfig.dataType, totalAddressCount);
-            idx = workerId;
-            idx = (idx * convParams.getConvFoldingFactor()) + convUnitIndex;
-            idx = (idx * convParams.getKernelFoldingFactor()) + multId;
-
-            DFEVar weightInput = getLMemWeightsInput()[idx];
-            filtersRom.write(
-                    lookAheadCounter.getWeightAddress(),
-                    weightInput,
-                    lookAheadCounter.getWeightWriteEnable());
-            return (lookAheadCounter.getWeightWriteEnable()
-                    ? weightInput 
-                    : filtersRom.read(lookAheadCounter.getWeightAddress()));
 
         }
 
