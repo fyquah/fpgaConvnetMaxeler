@@ -35,7 +35,8 @@ fpgaconvnet/target_main_sim.o: main.cpp $(TARGET_SIM_MAXFILES)
 target_sim: fpgaconvnet/convnet_sim.o \
 		fpgaconvnet/target_main_sim.o \
 		fpgaconvnet/protos/parameters.pb.o \
-		$(TARGET_SIM_OBJS)
+		$(TARGET_SIM_OBJS) \
+		$(ADDITIONAL_OBJS)
 	$(CPUCOMPILER) -D__SIM__ $(ALL_FLAGS) -o $@ $^ $(LFLAGS)
 
 
