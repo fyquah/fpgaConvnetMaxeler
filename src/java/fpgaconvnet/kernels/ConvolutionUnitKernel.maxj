@@ -310,7 +310,9 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
         case WITH_CACHE:
             weightsMemoryType = new DFEVectorType<DFEVar>(
                     GlobalConfig.dataType, getTotalMultipliers());
-            return filtersRom = mem.alloc(weightsMemoryType, totalAddressCount);
+            return filtersRom = mem.alloc(
+                    weightsMemoryType,
+                    Math.max(2, totalAddressCount));
 
         default:
             throw new RuntimeException("Retrieve weight roms failed");
