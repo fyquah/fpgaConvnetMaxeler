@@ -234,6 +234,11 @@ def pool_layer_bram(layer):
     return kernel_bram + stream_bram
 
 
+def pool_layer_dsp(layer):
+    del layer
+    return 0
+
+
 def pool_layer_lut(layer):
     return (
             34.9 * layer.pool.dim * layer.pool.dim * layer.pool.channel_folding_factor
@@ -414,22 +419,22 @@ def project(network):
 
         logging.debug("-----------------")
 
-        if layer.HasField("conv"):
-            lut[layer.fpga_id] += conv_layer_lut(layer)
-            flip_flop[layer.fpga_id] += conv_layer_flip_flop(layer)
-            bram[layer.fpga_id] += conv_layer_bram(layer)
-            dsp[layer.fpga_id] += conv_layer_dsp(layer)
+        for field_type in ["conv", "pool", "lrn"]:
+            if layer.HasField(field_type):
+                layer_lut = globals()["%s_layer_lut" % field_type](layer)
+                layer_flip_flop = globals()["%s_layer_flip_flop" % field_type](layer)
+                layer_bram = globals()["%s_layer_bram" % field_type](layer)
+                layer_dsp = globals()["%s_layer_dsp" % field_type](layer)
+                logging.debug("Layer %d (%s):" % (layer.layer_id, field_type))
+                logging.debug("- LUT = %.3f" % layer_lut)
+                logging.debug("- FF = %.3f" % layer_flip_flop)
+                logging.debug("- BRAM = %.3f" % layer_bram)
+                logging.debug("- DSP = %.3f" % layer_dsp)
 
-        elif layer.HasField("pool"):
-            lut[layer.fpga_id] += pool_layer_lut(layer)
-            flip_flop[layer.fpga_id] += pool_layer_flip_flop(layer)
-            bram[layer.fpga_id] += pool_layer_bram(layer)
-
-        elif layer.HasField("lrn"):
-            lut[layer.fpga_id] += lrn_layer_lut(layer)
-            flip_flop[layer.fpga_id] += lrn_layer_flip_flop(layer)
-            bram[layer.fpga_id] += lrn_layer_bram(layer)
-            dsp[layer.fpga_id] += lrn_layer_dsp(layer)
+                lut[layer.fpga_id] += layer_lut
+                flip_flop[layer.fpga_id] += layer_flip_flop
+                bram[layer.fpga_id] += layer_bram
+                dsp[layer.fpga_id] += layer_dsp
 
         logging.debug("-----------------")
 
@@ -480,8 +485,12 @@ def project(network):
                       % non_multiple_transition_fifo)
         bram[-1] += non_multiple_transition_fifo
 
-    return [Resource(bram=a, flip_flop=b, lut=c, dsp=d)
-            for a, b, c, d in zip(bram, flip_flop, lut, dsp)]
+    ret = [Resource(bram=a, flip_flop=b, lut=c, dsp=d)
+           for a, b, c, d in zip(bram, flip_flop, lut, dsp)]
+
+    for i, fpga_resource in enumerate(ret):
+        logging.debug("FPGA %d - %s" % (i, str(fpga_resource)))
+    return ret
 
 
 if __name__ == "__main__":

@@ -34,7 +34,7 @@ parser.add_argument("--output", dest="output", type=str,
 
 def satisfies_resource_constraints(resources):
 
-    return all(r.bram <= 0.7 * resource_model.MAX_BRAM
+    return all(r.bram <= 0.9 * resource_model.MAX_BRAM
                 and r.lut <= 0.7 * resource_model.MAX_LUT
                 and r.flip_flop <= 0.7 * resource_model.MAX_FF
                 and r.dsp <= resource_model.MAX_DSP
@@ -593,6 +593,8 @@ def main():
     network.layer[-1].is_last_layer = True
     print network
     optimized_network = run_optimizer(network)
+    logging.getLogger().setLevel(logging.DEBUG)
+    resource_model.project(optimized_network)
 
     with open(FLAGS.output, "w") as f:
         f.write(text_format.MessageToString(optimized_network))
