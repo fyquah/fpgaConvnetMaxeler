@@ -51,7 +51,9 @@ std::vector<float> run_feature_extraction(
 
     /* warm up the DFE with the weights. */
     extracted_features = convnet.max_run_inference(N, images, false);
+#ifndef __SIM__
     extracted_features = convnet.max_run_inference(N, images, true);
+#endif
     fpgaconvnet::verify_conv_output(
             network_parameters,
             N,
@@ -135,8 +137,10 @@ int main(int argc, char **argv)
     std::cout << "Reading images ..." << std::endl;
     // cifar10 batch has 10k images. We have 100k so we can hide the latency.
     load_cifar10("cifar-10-batches-bin/data_batch_1.bin", images, labels);
+#ifndef __SIM__
     std::cout << "Duplicating images from 10000 -> " << N << std::endl;
     images = duplicate_vector(images, N / 10000);
+#endif
 
     std::vector<float> conv_out = run_feature_extraction(network_parameters, images);
     return 0;

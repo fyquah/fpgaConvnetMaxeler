@@ -151,13 +151,16 @@ def conv_layer_bram(layer):
     num_outputs = layer.num_outputs
     scheduler = -238.3 * log2(layer.conv.worker_factor) \
                 + 870.0 + layer.num_inputs / 30.0
-    weight_bits_per_multiplier = (
-            div_ceil(layer.conv.kernel_size * layer.conv.kernel_size,
+    kernel_iterations = div_ceil(layer.conv.kernel_size * layer.conv.kernel_size,
                      layer.conv.kernel_folding_factor)
+    weight_bits_per_multiplier = (
+            kernel_iterations
             * layer.conv.bram_factor / (wf * cff))
+    pixels_bram = math.ceil(layer.conv.look_ahead * kernel_iterations / 20480)
     unit = (max(0, 0.09187 * kff - 5.8784)
             + (7.0248 * (layer.conv.kernel_size ** 2))
-            + wf * cff * kff * math.ceil(weight_bits_per_multiplier / 20480))
+            + wf * cff * kff * math.ceil(weight_bits_per_multiplier / 20480)
+            + wf * kff * pixels_bram)
     accumulator = 2 + layer.num_outputs
     scheduler_unit_fifo_bram = math.ceil(
             DEFAULT_FIFO_DEPTH * (kernel_size ** 2) * NUM_BITS / M20K_SIZE)
