@@ -154,11 +154,6 @@ public class ConvolutionTransposerKernel extends ConvolutionKernelBase {
                 }
             }
 
-            System.out.println(String.format(
-                    "Layer %d min offset = %d", layerParams.getLayerId(), min));
-            System.out.println(String.format(
-                    "Layer %d max offset = %d", layerParams.getLayerId(), max));
-
             return new Pair<Integer, Integer>(min, max);
         }
     }
