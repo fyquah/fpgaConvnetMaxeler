@@ -78,16 +78,16 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
 
         StrideCounter strideCounter = new StrideCounter(
                 this,
+                inputDimension.height(),
+                inputDimension.width(),
                 layerParams.getConv().getStride(),
-                ~isBorder(row, col)
-                    & col.eq(inputDimension.width() - 1)
-                    & iter.eq(getSchedulerIterations() - 1),
-                ~isBorder(row, col)
-                    & iter.eq(getSchedulerIterations() - 1),
-                iter.eq(getSchedulerIterations() - 1)
-                    & col.eq(inputDimension.width() - 1)
-                    & row.eq(inputDimension.height() - 1));
-        DFEVar outputControlFlag = strideCounter.isOutputReady() & ~isBorder(row, col);
+
+                isBorder(row, col),
+                getSchedulerIterations(),
+                
+                kernelDim / 2 - layerParams.getConv().getPad());
+        DFEVar outputControlFlag = strideCounter.getControlFlag();
+        strideCounter.simWatch();
 
         if (layerParams.getIsFirstLayer()) {
             /* First layer - cast from dfefloat to fixed point. */

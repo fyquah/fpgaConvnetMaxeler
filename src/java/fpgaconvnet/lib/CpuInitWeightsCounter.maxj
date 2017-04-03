@@ -6,7 +6,6 @@ import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Count;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Count.Counter;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.CounterChain;
 
-import fpgaconvnet.GlobalConfig;
 import fpgaconvnet.IterationCounter;
 import fpgaconvnet.Utils;
 import fpgaconvnet.kernels.ConvolutionUnitKernel;

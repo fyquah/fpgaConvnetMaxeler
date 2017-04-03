@@ -4,6 +4,7 @@ package fpgaconvnet.lib;
 import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
 import com.maxeler.maxcompiler.v2.kernelcompiler.KernelLib;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.CounterChain;
 
 import fpgaconvnet.Utils;
 
@@ -12,58 +13,68 @@ public class StrideCounter extends KernelLib {
     final int stride;
     DFEVar rowStrideCtr;
     DFEVar colStrideCtr;
-    DFEVar rowTrigger;
-    DFEVar colTrigger;
+    DFEVar controlFlag;
+
+    DFEVar row;
+    DFEVar col;
+    DFEVar iter;
 
     public StrideCounter(
-            Kernel kernel, int argStride, DFEVar argRowTrigger, DFEVar argColTrigger, DFEVar argReset) {
+            Kernel kernel,
+            int rows,
+            int cols,
+            int argStride,
+
+            DFEVar isBorderPixel,
+            int cyclesPerPixel,
+            int borderWidth) {
         super(kernel);
         stride = argStride;
-        rowTrigger = argRowTrigger;
-        colTrigger = argColTrigger;
-        rowStrideCtr = makeStrideCtr(rowTrigger, argReset);
-        colStrideCtr = makeStrideCtr(colTrigger, argReset);
+
+        CounterChain masterChain = control.count.makeCounterChain();
+        row = Utils.chainCounterOrZero(this, masterChain, rows);
+        col = Utils.chainCounterOrZero(this, masterChain, cols);
+        iter = Utils.chainCounterOrZero(this, masterChain, cyclesPerPixel);
+
+        if (stride == 1) {
+            colStrideCtr = constant.var(dfeBool(), 0);
+            rowStrideCtr = constant.var(dfeBool(), 0);
+            controlFlag = ~isBorderPixel;
+
+        } else {
+            colStrideCtr = control.count.makeCounter(
+                    control.count.makeParams(Utils.ceilLog2(stride))
+                        .withMax(stride)
+                        .withInc(1)
+                        .withReset(col.eq(0) & iter.eq(0))
+                        .withEnable(iter.eq(cyclesPerPixel - 1)
+                                    & ~isBorderPixel)
+                    ).getCount();
+            rowStrideCtr = control.count.makeCounter(
+                    control.count.makeParams(Utils.ceilLog2(stride))
+                        .withMax(stride)
+                        .withInc(1)
+                        .withReset(row.eq(0)
+                                   & col.eq(0)
+                                   & iter.eq(0))
+                        .withEnable(iter.eq(cyclesPerPixel - 1)
+                                    & col.eq(cols - 1 - borderWidth)
+                                    & ~isBorderPixel)
+                    ).getCount();
+            controlFlag = rowStrideCtr.eq(0) & colStrideCtr.eq(0) & ~isBorderPixel;
+        }
     }
 
-    public DFEVar isOutputReady() {
-        /* colTrigger here, since if we cannoy increment the col counter at the next iteration,
-         * it means we will be at eq(0) again.
-         */
-        return rowStrideCtr.eq(0) & colStrideCtr.eq(0);
+    public DFEVar getControlFlag() {
+        return controlFlag;
     }
     
     public void simWatch() {
         rowStrideCtr.simWatch("sc_row_stride");
         colStrideCtr.simWatch("sc_col_stride");
-    }
-
-    private DFEVar makeStrideCtr(DFEVar trigger, DFEVar reset) {
-
-        if (stride == 1) {
-            return constant.var(dfeBool(), 0);
-
-        } else {
-            return control.count.makeCounter(
-                    control.count.makeParams(Utils.ceilLog2(stride))
-                    .withMax(stride)
-                    .withInc(1)
-                    .withReset(reset)
-                    /* reset takes precedence over a trigger - consider a 2 * 2 kernel at the
-                     * last pixel of an image.
-                     *
-                     * At that point, counter will be (0, 0), but after that pixel, the counter
-                     * should stay at 0, 0 when entering the next image, rather that going to
-                     * (1, 1) or (0, 1).
-                     *
-                     * TODO(fyquah): There is a lot of tangling signals here, so it is worth
-                     * cleaning it up.
-                     * 1. Move the row and column counting logic here.
-                     * 2. Make this logic simpler. i.e: We can start counting from a non-zero
-                     *    value to compensate for padding et al.
-                     */
-                    .withEnable(trigger & ~reset))
-                        .getCount();
-
-        }
+        row.simWatch("sc_row");
+        col.simWatch("sc_col");
+        iter.simWatch("sc_iter");
+        controlFlag.simWatch("control_flag");
     }
 }
