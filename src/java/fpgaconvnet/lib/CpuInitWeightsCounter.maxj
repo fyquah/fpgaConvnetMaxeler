@@ -147,7 +147,8 @@ public class CpuInitWeightsCounter extends KernelLib {
         int multipleBase =
                 ((int) Utils.lcm(4, layerParams.getConv().getKernelFoldingFactor()))
                 / layerParams.getConv().getKernelFoldingFactor();
-        return Utils.divCeil(realInitCycles(), multipleBase) * multipleBase;
+        int x =  Utils.divCeil(realInitCycles(), multipleBase) * multipleBase;
+        return Math.max(x, ctr.getBiasInitCycles());
     }
 
     public DFEVar getInitAddress() {

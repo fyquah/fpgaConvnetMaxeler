@@ -77,4 +77,10 @@ public class IterationCounter {
     public int getSchedulerIterations() {
         return Utils.divCeil(layerParams.getNumInputs(), layerParams.getConv().getWorkerFactor());
     }
+
+    /* The number of cycles required to populate the bias. */
+    public int getBiasInitCycles() {
+        // maxeler requires streams to be a multiple of 16 bytes = 4 * 4 bytes.
+        return Utils.divCeil(layerParams.getNumOutputs(), 4) * 4;
+    }
 }

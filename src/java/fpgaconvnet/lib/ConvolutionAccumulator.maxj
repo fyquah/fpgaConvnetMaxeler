@@ -35,7 +35,12 @@ public class ConvolutionAccumulator extends KernelLib {
     private final DFEVar batchCounter;
     private final DFEVar rawBiasInput;
     private final DFEVar isInitializingWeights;
+    private final DFEVar enableSignal;
     private final DFEVector<DFEVar> output;
+
+    public void setEnableSignal(DFEVar x) {
+        enableSignal <== x;
+    }
 
     public DFEVar makeSimpleEnableCounter(int max, DFEVar enable) {
         if (max == 1) {
@@ -173,14 +178,14 @@ public class ConvolutionAccumulator extends KernelLib {
 
         // Counters for initialization
         DFEVar initChannel = control.count.simpleCounter(
-                Utils.ceilLog2(initCycles()),
-                initCycles());
+                Utils.ceilLog2(ctr.getBiasInitCycles()),
+                ctr.getBiasInitCycles());
         Counter initializationCompleteCtr = control.count.makeCounter(
                 control.count.makeParams(1)
                 .withInc(1)
                 .withMax(1)
                 .withWrapMode(Count.WrapMode.STOP_AT_MAX)
-                .withEnable(initChannel.eq(initCycles() - 1)));
+                .withEnable(initChannel.eq(ctr.getBiasInitCycles() - 1)));
 
         DFEVar initWeightsFlag = io.scalarInput("init", dfeUInt(1));
         DFEVar initializationComplete = initializationCompleteCtr.getCount();
@@ -189,7 +194,7 @@ public class ConvolutionAccumulator extends KernelLib {
         // Runtime Counters and loop variables
         batchCounter = makeSimpleEnableCounter(
                 convParams.getLookAhead() * ctr.getTotalIterations(),
-                ~isInitializingWeights);
+                enableSignal);
 
         DFEVar convIter;
         DFEVar lookAheadIter;
@@ -199,18 +204,18 @@ public class ConvolutionAccumulator extends KernelLib {
         if (convParams.getLookAhead() == 1) {
             final int totalIter =
                     ctr.getKernelIterations() * ctr.getConvolutionIterations() * ctr.getSchedulerIterations();
-            CounterChain chain = control.count.makeCounterChain(~isInitializingWeights);
+            CounterChain chain = control.count.makeCounterChain(enableSignal);
             Utils.chainCounterOrZero(this, chain, ctr.getSchedulerIterations());
             convIter = Utils.chainCounterOrZero(this, chain, ctr.getConvolutionIterations());
             Utils.chainCounterOrZero(this, chain, ctr.getKernelIterations());
-            pixelIter = makeSimpleEnableCounter(totalIter, ~isInitializingWeights);
+            pixelIter = makeSimpleEnableCounter(totalIter, enableSignal);
 
             lookAheadIter = constant.var(dfeBool(), 0);
-            outputControlFlag = ~isInitializingWeights & pixelIter.eq(totalIter - 1);
+            outputControlFlag = enableSignal & pixelIter.eq(totalIter - 1);
 
         } else {
 
-            CounterChain chain = control.count.makeCounterChain(~isInitializingWeights);
+            CounterChain chain = control.count.makeCounterChain(enableSignal);
             DFEVar loopIter = Utils.chainCounterOrZero(this, chain, ctr.getRevisitIterations());;
             lookAheadIter = Utils.chainCounterOrZero(this, chain, convParams.getLookAhead());
             DFEVar weightIter;
@@ -237,12 +242,12 @@ public class ConvolutionAccumulator extends KernelLib {
             DFEVar kernelIter = Utils.chainCounterOrZero(this, chain, ctr.getKernelIterations());
 
             convIter = getConvIter(
-                    ~isInitializingWeights, chain, lookAheadIter, weightIter, kernelIter);
+                    enableSignal, chain, lookAheadIter, weightIter, kernelIter);
             pixelIter = getPixelIter(
-                    ~isInitializingWeights, chain, lookAheadIter, weightIter, kernelIter);
+                    enableSignal, chain, lookAheadIter, weightIter, kernelIter);
 
             outputControlFlag =
-                    ~isInitializingWeights
+                    enableSignal
                     & loopIter.eq(ctr.getRevisitIterations() - 1)
                     & weightIter.eq(ctr.getLastWeightIterations() - 1)
                     & kernelIter.eq(ctr.getKernelIterations() - 1);
@@ -366,11 +371,6 @@ public class ConvolutionAccumulator extends KernelLib {
 
     public String getBiasInputName() {
         return "input_bias";
-    }
-
-    public int initCycles() {
-        // maxeler requires streams to be a multiple of 16 bytes = 4 * 4 bytes.
-        return Utils.divCeil(layerParams.getNumOutputs(), 4) * 4;
     }
 
     public int cyclesPerImage() {
