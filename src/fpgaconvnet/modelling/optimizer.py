@@ -32,6 +32,43 @@ parser.add_argument("--output", dest="output", type=str,
                     required=True)
 
 
+def memory_fetch_size(layer):
+    return div_ceil(
+            layer.conv.conv_folding_factor
+            * layer.conv.worker_factor
+            * layer.conv.kernel_folding_factor, 96) * 96
+
+
+def calc_total_iters(layer):
+    worker_iters = div_ceil(layer.num_inputs, layer.conv.worker_factor)
+    conv_iters = div_ceil(layer.num_outputs, layer.conv.conv_folding_factor)
+    kernel_iters = div_ceil(layer.conv.kernel_size * layer.conv.kernel_size,
+            layer.conv.kernel_folding_factor)
+    return worker_iters * conv_iters * kernel_iters
+
+
+def is_off_chip_weights(layer):
+    worker_iters = div_ceil(layer.num_inputs, layer.conv.worker_factor)
+    conv_iters = div_ceil(layer.num_outputs, layer.conv.conv_folding_factor)
+    on_chip_bram_factor = (
+            layer.conv.worker_factor * worker_iters
+            * layer.conv.conv_folding_factor * conv_iters)
+    return layer.conv.bram_factor != on_chip_bram_factor
+
+
+def populate_weight_address(optimized_network):
+    address = 0
+    for layer in optimized_network.layer:
+        if layer.HasField("conv"):
+            if is_off_chip_weights(layer):
+                layer.conv.weight_address_base = address
+                address += memory_fetch_size(layer) * calc_total_iters(layer)
+                layer.conv.should_fit_on_chip = False
+            else:
+                layer.conv.look_ahead = 1
+                layer.conv.should_fit_on_chip = True
+
+
 def satisfies_resource_constraints(resources):
 
     return all(r.bram <= 0.9 * resource_model.MAX_BRAM
@@ -160,7 +197,7 @@ class FoldingFactorOptimizationProblem(simanneal.Annealer):
                         "conv_folding_factor": compute_valid_values(layer.num_outputs),
                         "kernel_folding_factor": compute_valid_values(
                             layer.conv.kernel_size * layer.conv.kernel_size),
-                        "look_ahead": compute_factors(layer.output_height * layer.output_width),
+                        # "look_ahead": compute_factors(layer.output_height * layer.output_width),
 
                         # Special cases... argh.
                         "bram_factor": None,
@@ -593,6 +630,8 @@ def main():
     network.layer[-1].is_last_layer = True
     print network
     optimized_network = run_optimizer(network)
+    populate_weight_address(optimized_network)
+
     logging.getLogger().setLevel(logging.DEBUG)
     resource_model.project(optimized_network)
 
