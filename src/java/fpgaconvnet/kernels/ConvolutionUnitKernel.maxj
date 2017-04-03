@@ -1,6 +1,8 @@
 package fpgaconvnet.kernels;
 
 import java.lang.RuntimeException;
+import java.util.ArrayList;
+import java.util.List;
 
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVector;
@@ -15,6 +17,7 @@ import fpgaconvnet.protos.Parameters.LayerParameter;
 import fpgaconvnet.protos.Parameters.ConvolutionParameter;
 import fpgaconvnet.lib.CpuInitWeightsCounter;
 import fpgaconvnet.lib.LookAheadCounter;
+import fpgaconvnet.lib.ConvolutionAccumulator;
 
 
 public class ConvolutionUnitKernel extends ConvolutionKernelBase {
@@ -28,6 +31,7 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
     private final int kernelDim;
     private final DFEVectorType<DFEVar> inputVectorType;
     private final DFEVectorType<DFEVar> outputVectorType;
+    private final DFEVectorType<DFEVar> workerOutputVectorType;
     private final LayerParameter layerParams;
     private final ConvolutionParameter convParams;
     private final int convFoldingFactor;
@@ -48,8 +52,10 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
 
         ctr = new IterationCounter(layerParams);
         inputVectorType = new DFEVectorType<DFEVar>(GlobalConfig.dataType, kernelDim * kernelDim);
-        outputVectorType = new DFEVectorType<DFEVar>(
+        workerOutputVectorType = new DFEVectorType<DFEVar>(
                 GlobalConfig.dataType, layerParams.getConv().getConvFoldingFactor());
+        outputVectorType = new DFEVectorType<DFEVar>(
+                GlobalConfig.dataType, layerParams.getNumOutputs());
 
         convFoldingFactor = layerParams.getConv().getConvFoldingFactor();
         kernelFoldingFactor = layerParams.getConv().getKernelFoldingFactor();
@@ -57,6 +63,7 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
 
         DFEVar inputControlFlag = null;
         DFEVar outputControlFlag = null;
+        List<DFEVector<DFEVar>> workerOutputList = new ArrayList<DFEVector<DFEVar>>();
 
         switch (getWeightsLoadStrategy()) {
         case INIT_FROM_CPU:
@@ -79,7 +86,7 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
             DFEVector<DFEVar> inputWindow = io.input(
                     getInputName(workerId), inputVectorType, inputControlFlag);
 
-            DFEVector<DFEVar> output = outputVectorType.newInstance(this);
+            DFEVector<DFEVar> output = workerOutputVectorType.newInstance(this);
             final DFEVar[] pixelVars = new DFEVar[layerParams.getConv().getKernelFoldingFactor()];
             final DFEVar[][] weightVars = new DFEVar[convFoldingFactor][kernelFoldingFactor];
 
@@ -102,8 +109,7 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
                 }
                 output[convUnitIndex] <== convUnitOutput;
             }
-
-            io.output(getOutputName(workerId), output, outputVectorType, outputControlFlag);
+            workerOutputList.add(output);
 
             if (workerId == 0) {
                 if (cpuInitWeightsCounter != null) {
@@ -120,6 +126,27 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
                 weightVars[0][0].simWatch("weight");
                 pixelVars[0].simWatch("pixel");
             }
+        }
+
+        ConvolutionAccumulator accumulator = new ConvolutionAccumulator(this, layerParams);
+        accumulator.setInput(workerOutputList);
+        accumulator.setRawBiasInput(io.input(accumulator.getBiasInputName(),
+                                             GlobalConfig.cpuType,
+                                             accumulator.getIsInitializingWeights()));
+
+        if (layerParams.getIsLastLayer()) {
+            /* Last layer - cast from fixed point to dfe float. */
+            DFEVectorType<DFEVar> rawOutputVectorType = new DFEVectorType<DFEVar>(
+                    GlobalConfig.cpuType, layerParams.getNumOutputs());
+            DFEVector<DFEVar> rawOutput = rawOutputVectorType.newInstance(this);
+
+            for (int i = 0 ; i < layerParams.getNumOutputs() ; i++) {
+                rawOutput[i] <== accumulator.getOutput()[i].cast(GlobalConfig.cpuType);
+            }
+            io.output(getOutputName(), rawOutput, rawOutputVectorType, outputControlFlag);
+
+        } else {
+            io.output(getOutputName(), accumulator.getOutput(), outputVectorType, outputControlFlag);
         }
     }
 
@@ -161,8 +188,8 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
         return "weight_lmem";
     }
 
-    public String getOutputName(int workerId) {
-        return "output_" + workerId;
+    public String getOutputName() {
+        return "output";
     }
 
     public WeightsLoadStrategy getWeightsLoadStrategy() {

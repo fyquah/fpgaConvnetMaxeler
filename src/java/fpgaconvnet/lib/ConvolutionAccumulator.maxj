@@ -1,10 +1,12 @@
-package fpgaconvnet.kernels;
+package fpgaconvnet.lib;
 
 import java.lang.RuntimeException;
 
 import java.util.List;
 import java.util.ArrayList;
 
+import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
+import com.maxeler.maxcompiler.v2.kernelcompiler.KernelLib;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Count;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Count.Counter;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.CounterChain;
@@ -13,7 +15,6 @@ import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEType;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVector;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVectorType;
-import com.maxeler.maxcompiler.v2.kernelcompiler.KernelParameters;
 
 import fpgaconvnet.IterationCounter;
 import fpgaconvnet.GlobalConfig;
@@ -22,8 +23,9 @@ import fpgaconvnet.protos.Parameters.LayerParameter;
 import fpgaconvnet.protos.Parameters.ConvolutionParameter;
 
 
-public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
+public class ConvolutionAccumulator extends KernelLib {
 
+    private final List<DFEVector<DFEVar>> inputVectors;
     private final List<Memory<DFEVar>> biasRoms;
     private final LayerParameter layerParams;
     private final ConvolutionParameter convParams;
@@ -31,6 +33,36 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
     private final DFEVectorType<DFEVar> outputVectorType;
     private final IterationCounter ctr;
     private final DFEVar batchCounter;
+    private final DFEVar rawBiasInput;
+    private final DFEVar isInitializingWeights;
+    private final DFEVector<DFEVar> output;
+
+    public DFEVar makeSimpleEnableCounter(int max, DFEVar enable) {
+        if (max == 1) {
+            return constant.var(dfeBool(), 0);
+        } else {
+            return control.count.makeCounter(
+                    control.count.makeParams(Utils.ceilLog2(max))
+                    .withInitValue(0l)
+                    .withInc(1l)
+                    .withMax(max)
+                    .withEnable(enable)
+                ).getCount();
+
+        }
+    }
+
+    public void setRawBiasInput(DFEVar x) {
+        rawBiasInput <== x;
+    }
+
+    public DFEVar getIsInitializingWeights() {
+        return isInitializingWeights;
+    }
+
+    public DFEVector<DFEVar> getOutput() {
+        return output;
+    }
 
     private List<DFEVar> map(List<DFEVector<DFEVar>> list, int index) {
         /* Gets the index-th element of every vector in list. */
@@ -90,10 +122,10 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
 
         /* The number of convIter that a weightIter yields. */
         DFEVar convIterBase = control.count.makeCounter(
-                control.count.makeParams(Utils.ceilLog2(getConvolutionIterations()))
+                control.count.makeParams(Utils.ceilLog2(ctr.getConvolutionIterations()))
                 .withInitValue(0)
-                .withInc(ctr.getWeightIterations() % getConvolutionIterations())
-                .withMax(getConvolutionIterations())
+                .withInc(ctr.getWeightIterations() % ctr.getConvolutionIterations())
+                .withMax(ctr.getConvolutionIterations())
                 .withEnable(enable
                             & lookAheadIter.eq(layerParams.getConv().getLookAhead() - 1)
                             & checkWeightIterWrap(chain, weightIter)
@@ -102,20 +134,26 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
             ).getCount();
 
         DFEVar convIter = dfeUInt(
-                Utils.ceilLog2(getConvolutionIterations())).newInstance(this);
+                Utils.ceilLog2(ctr.getConvolutionIterations())).newInstance(this);
         optimization.pushPipeliningFactor(0.0);
         convIter <== (kernelIter.eq(0)
                       ? (weightIter.eq(0)
                          ? convIterBase
-                         : Utils.modInc(stream.offset(convIter, -1), getConvolutionIterations()))
+                         : Utils.modInc(stream.offset(convIter, -1), ctr.getConvolutionIterations()))
                       : stream.offset(convIter, -1));
         optimization.popPipeliningFactor();
 
         return convIter;
     }
 
-    public ConvolutionAccumulatorKernel(KernelParameters kp, LayerParameter params) {
-        super(kp, params);
+    public void setInput(List<DFEVector<DFEVar>> workerOutputList) {
+        for (int i = 0 ; i < workerOutputList.size() ; i++) {
+            inputVectors[i] <== workerOutputList[i];
+        }
+    }
+
+    public ConvolutionAccumulator(Kernel owner, LayerParameter params) {
+        super(owner);
 
         ctr = new IterationCounter(params);
         layerParams = params;
@@ -130,8 +168,8 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
             biasRoms.add(mem.alloc(GlobalConfig.dataType, 2));
         }
 
-        DFEVector<DFEVar> output = outputVectorType.newInstance(this);
-        List<DFEVector<DFEVar>> inputVectors = new ArrayList<DFEVector<DFEVar>>();
+        output = outputVectorType.newInstance(this);
+        inputVectors = new ArrayList<DFEVector<DFEVar>>();
 
         // Counters for initialization
         DFEVar initChannel = control.count.simpleCounter(
@@ -146,7 +184,7 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
 
         DFEVar initWeightsFlag = io.scalarInput("init", dfeUInt(1));
         DFEVar initializationComplete = initializationCompleteCtr.getCount();
-        DFEVar isInitializingWeights = initWeightsFlag & ~initializationComplete;
+        isInitializingWeights = initWeightsFlag & ~initializationComplete;
 
         // Runtime Counters and loop variables
         batchCounter = makeSimpleEnableCounter(
@@ -160,11 +198,11 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
 
         if (convParams.getLookAhead() == 1) {
             final int totalIter =
-                    getKernelIterations() * getConvolutionIterations() * getSchedulerIterations();
+                    ctr.getKernelIterations() * ctr.getConvolutionIterations() * ctr.getSchedulerIterations();
             CounterChain chain = control.count.makeCounterChain(~isInitializingWeights);
-            Utils.chainCounterOrZero(this, chain, getSchedulerIterations());
-            convIter = Utils.chainCounterOrZero(this, chain, getConvolutionIterations());
-            Utils.chainCounterOrZero(this, chain, getKernelIterations());
+            Utils.chainCounterOrZero(this, chain, ctr.getSchedulerIterations());
+            convIter = Utils.chainCounterOrZero(this, chain, ctr.getConvolutionIterations());
+            Utils.chainCounterOrZero(this, chain, ctr.getKernelIterations());
             pixelIter = makeSimpleEnableCounter(totalIter, ~isInitializingWeights);
 
             lookAheadIter = constant.var(dfeBool(), 0);
@@ -196,7 +234,7 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
                 weightIter = chain.addCounter(muxedWeightUsageCycles, 1);
             }
 
-            DFEVar kernelIter = Utils.chainCounterOrZero(this, chain, getKernelIterations());
+            DFEVar kernelIter = Utils.chainCounterOrZero(this, chain, ctr.getKernelIterations());
 
             convIter = getConvIter(
                     ~isInitializingWeights, chain, lookAheadIter, weightIter, kernelIter);
@@ -217,29 +255,11 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
         outputControlFlag.simWatch("outputControlFlag");
 
         // Kernel IO interfaces
-        DFEVar rawBiasInput = io.input(getBiasInputName(),
-                                       GlobalConfig.cpuType,
-                                       isInitializingWeights);
+        rawBiasInput = GlobalConfig.cpuType.newInstance(this);
         DFEVar biasInput = rawBiasInput.cast(GlobalConfig.dataType);
-        DFEVar inputControlFlag = ~isInitializingWeights;
 
         for (int i = 0 ; i < layerParams.getConv().getWorkerFactor() ; i++) {
-            inputVectors.add(io.input(getInputName(i), inputVectorType, inputControlFlag));
-        }
-
-        if (layerParams.getIsLastLayer()) {
-            /* Last layer - cast from fixed point to dfe float. */
-            DFEVectorType<DFEVar> rawOutputVectorType = new DFEVectorType<DFEVar>(
-                    GlobalConfig.cpuType, layerParams.getNumOutputs());
-            DFEVector<DFEVar> rawOutput = rawOutputVectorType.newInstance(this);
-
-            for (int i = 0 ; i < layerParams.getNumOutputs() ; i++) {
-                rawOutput[i] <== output[i].cast(GlobalConfig.cpuType);
-            }
-            io.output(getOutputName(), rawOutput, rawOutputVectorType, outputControlFlag);
-
-        } else {
-            io.output(getOutputName(), output, outputVectorType, outputControlFlag);
+            inputVectors.add(inputVectorType.newInstance(this));
         }
 
         for (int i = 0 ; i < params.getNumOutputs() ; i++) {
@@ -348,18 +368,6 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
         return "input_bias";
     }
 
-    public String getInputName(int workerId) {
-        return "input_" + workerId;
-    }
-
-    public String getOutputName() {
-        return "output";
-    }
-
-    public String getOffsetExprName() {
-        return String.format("offset");
-    }
-
     public int initCycles() {
         // maxeler requires streams to be a multiple of 16 bytes = 4 * 4 bytes.
         return Utils.divCeil(layerParams.getNumOutputs(), 4) * 4;
@@ -367,9 +375,9 @@ public class ConvolutionAccumulatorKernel extends ConvolutionKernelBase {
 
     public int cyclesPerImage() {
         int totalOutputPixels = layerParams.getOutputHeight() * layerParams.getOutputWidth();
-        int cyclesPerPixel = getSchedulerIterations()
-                * getConvolutionIterations()
-                * getKernelIterations();
+        int cyclesPerPixel = ctr.getSchedulerIterations()
+                * ctr.getConvolutionIterations()
+                * ctr.getKernelIterations();
         return totalOutputPixels * cyclesPerPixel;
     }
 }
