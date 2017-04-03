@@ -727,17 +727,23 @@ void Convnet::max_init_weights()
 
     for (int i = 0; i < conv_layer_params.size() ; i++) {
         if (is_layer_cpu_initialized(conv_layer_params[i])) {
-            log_stdout(INFO) << "layer " << i << " is host-initialized. Skipping .." << std::endl;
+            log_stdout(INFO) << "layer "
+                    << conv_layer_params[i].layer_id()
+                    << " is host-initialized. Skipping .." << std::endl;
             continue;
         }
 
         auto & layer = conv_layer_params[i];
-        max_actions_t *write_action = max_actions_init(max_files[0], "writeLMem");
+        max_actions_t *write_action = max_actions_init(
+                max_files[conv_layer_params[i].fpga_id()], "writeLMem");
         const uint64_t stream_size =
                 calc_total_iterations(layer) * calc_weights_vector_size(layer)
                 * sizeof(float);
 
-        log_stdout(INFO) << "Initializing weights in LMEM at layer " << i << std::endl;
+        log_stdout(INFO) << "Initializing weights in LMEM at layer "
+            << conv_layer_params[i].layer_id()
+            << " [fpga_id = " << conv_layer_params[i].fpga_id() << "]"
+            << std::endl;
         max_set_param_uint64t(write_action, "start", address);
         max_set_param_uint64t(write_action, "size", stream_size);
         max_queue_input(
@@ -745,7 +751,24 @@ void Convnet::max_init_weights()
                 "weights_in",
                 (void*) &worker_kernels[i][0],
                 stream_size);
-        max_run(dfe, write_action);
+
+        if (num_fpgas == 1) {
+            max_run(dfe, write_action);
+        }
+#ifdef __SIM__
+        else {
+            dfe = max_load(max_files[conv_layer_params[i].fpga_id()], load_spec);
+            max_run(dfe, write_action);
+            max_unload(dfe);
+            dfe = NULL;
+        }
+#else
+        // TODO(fyq14): Complete this
+        else {
+            max_run(dfe_array, write_action);
+        }
+#endif
+
         max_actions_free(write_action);
         log_stdout(INFO) << "Done!" << std::endl;
 

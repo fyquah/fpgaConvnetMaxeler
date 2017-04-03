@@ -8,7 +8,14 @@
 #include "fpgaconvnet/convnet.h"
 #include "fpgaconvnet/feedforward.h"
 
-#include "vgg_s.h"
+#include "target_0.h"
+#include "target_1.h"
+#include "target_2.h"
+#include "target_3.h"
+#include "target_4.h"
+#include "target_5.h"
+#include "target_6.h"
+#include "target_7.h"
 
 
 #ifdef __SIM__
@@ -29,27 +36,39 @@ std::vector<float> run_feature_extraction(
 )
 {
     std::vector<std::string> filenames = {
-            "../weights/conv0_weights.bin",
+            "../weights/conv0_kernels.bin",
             "../weights/conv0_bias.bin",
-            "../weights/conv3_weights.bin",
+            "../weights/conv3_kernels.bin",
             "../weights/conv3_bias.bin",
-            "../weights/conv5_weights.bin",
-            "../weights/conv5_bias.bin"
-            "../weights/conv6_weights.bin",
-            "../weights/conv6_bias.bin"
-            "../weights/conv7_weights.bin",
+            "../weights/conv5_kernels.bin",
+            "../weights/conv5_bias.bin",
+            "../weights/conv6_kernels.bin",
+            "../weights/conv6_bias.bin",
+            "../weights/conv7_kernels.bin",
             "../weights/conv7_bias.bin"
     };
-    max_file_t *max_file = vgg_s_init();
+    std::vector<max_file_t*> max_files;
+
+    max_files.push_back(target_0_init());
+    max_files.push_back(target_1_init());
+    max_files.push_back(target_2_init());
+    max_files.push_back(target_3_init());
+    max_files.push_back(target_4_init());
+    max_files.push_back(target_5_init());
+    max_files.push_back(target_6_init());
+    max_files.push_back(target_7_init());
+
     std::vector<float> extracted_features;
-    fpgaconvnet::Convnet convnet(network_parameters, max_file, "");
+    fpgaconvnet::Convnet convnet(network_parameters, max_files, "");
 
     convnet.load_weights_from_files(filenames, fpgaconvnet::FORMAT_BINARY);
     convnet.max_init_weights();
 
     /* warm up the DFE with the weights. */
     extracted_features = convnet.max_run_inference(N, images, false);
-    extracted_features = convnet.max_run_inference(N, images, false);
+#ifndef __SIM__
+    extracted_features = convnet.max_run_inference(N, images, ture);
+#endif
 
     fpgaconvnet::verify_conv_output(
             network_parameters,
