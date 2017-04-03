@@ -24,4 +24,10 @@ ifeq ($(shell test -e Makefile.targets && echo -n yes), yes)
 include Makefile.targets
 include $(WHEREISROOT)/Makefile.multi.fpga.base
 
+
+debugsim:
+	maxdebug -v -g vgg_0_Graph -s vgg_0_Graph -c -d $(USER)a0:$(USER)a \
+	    target_3_MAIA_DFE_SIM/results/target_3.max
+
+
 endif
