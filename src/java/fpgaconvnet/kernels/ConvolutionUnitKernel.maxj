@@ -63,21 +63,18 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
         totalAddressCount = iterCounter.getWeightIterations() * getKernelIterations();
 
         DFEVar inputControlFlag = null;
-        DFEVar outputControlFlag = null;
         List<DFEVector<DFEVar>> workerOutputList = new ArrayList<DFEVector<DFEVar>>();
 
         switch (getWeightsLoadStrategy()) {
         case INIT_FROM_CPU:
             cpuInitWeightsCounter = new CpuInitWeightsCounter(this, layerParams);
             inputControlFlag = cpuInitWeightsCounter.getInputControlFlag();
-            outputControlFlag = cpuInitWeightsCounter.getOutputControlFlag();
             break;
 
         case STREAM_FROM_LMEM:
         case WITH_CACHE:
             lookAheadCounter = new LookAheadCounter(this, layerParams);
             inputControlFlag = lookAheadCounter.getInputControlFlag();
-            outputControlFlag = lookAheadCounter.getOutputControlFlag();
             break;
 
         }
@@ -147,6 +144,20 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
             lookAheadCounter.setInitFlag(initFlag);
         }
         accumulator.setInitFlag(initFlag);
+
+        DFEVar outputControlFlag = accumulator.getOutputControlFlag();
+
+        switch (getWeightsLoadStrategy()) {
+        case INIT_FROM_CPU:
+            outputControlFlag = outputControlFlag & cpuInitWeightsCounter.getEnableSignal();
+            break;
+
+        case STREAM_FROM_LMEM:
+        case WITH_CACHE:
+            outputControlFlag = outputControlFlag & lookAheadCounter.getEnableSignal();
+            break;
+
+        }
 
         if (layerParams.getIsLastLayer()) {
             /* Last layer - cast from fixed point to dfe float. */
