@@ -160,11 +160,11 @@ public class LookAheadCounter extends KernelLib {
     }
 
     public DFEVar getWeightsInputFlag() {
-        return lookAhead.eq(0);
+        return enableSignal & lookAhead.eq(0);
     }
 
     public DFEVar getWeightWriteEnable() {
-        return lookAhead.eq(0);
+        return enableSignal & lookAhead.eq(0);
     }
 
     public DFEVar getChannelIter() {
@@ -195,11 +195,11 @@ public class LookAheadCounter extends KernelLib {
     }
 
     public DFEVar getInputControlFlag() {
-        return getChannelIter().eq(0);
+        return enableSignal & getChannelIter().eq(0);
     }
 
     public DFEVar getOutputControlFlag() {
-        return constant.var(dfeBool(), 1);
+        return enableSignal;
     }
 
     public DFEVar getPixelWriteEnable() {

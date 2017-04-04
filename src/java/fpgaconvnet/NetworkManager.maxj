@@ -149,6 +149,7 @@ public class NetworkManager extends CustomManager {
                             layerParams.getOutputHeight() * layerParams.getOutputWidth()
                             / layerParams.getConv().getLookAhead()
                             * N * arrSize;
+                    System.out.println("Addres base = " + layerParams.getConv().getWeightAddressBase());
                     ei.setLMemLinearWrapped(
                             link.getFirst(),                       /* streamName */
                             ei.addConstant(layerParams.getConv().getWeightAddressBase()), /* address */

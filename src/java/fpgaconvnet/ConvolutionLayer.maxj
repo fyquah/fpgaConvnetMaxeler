@@ -114,14 +114,7 @@ public class ConvolutionLayer implements ComputationChain {
     }
 
     public void setScalar(EngineInterface ei, String name, InterfaceParam param) {
-        if (name.equals("init")) {
-            if (convolutionUnit.getKernel().getWeightsLoadStrategy()
-                    == WeightsLoadStrategy.INIT_FROM_CPU) {
-                ei.setScalar(convolutionUnit.getKernel().getName(), "init", param);
-            }
-        } else {
-            ei.setScalar(convolutionUnit.getKernel().getName(), name, param);
-        }
+        ei.setScalar(convolutionUnit.getKernel().getName(), name, param);
     }
 
     public List<Tuple3<String, DFELink, Integer>> getInitializerInputs() {

@@ -119,6 +119,7 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
                 if (lookAheadCounter != null) {
                     lookAheadCounter.getPixelAddress().simWatch("pixel_address");
                     lookAheadCounter.getWeightAddress().simWatch("weight_address");
+                    lookAheadCounter.getEnableSignal().simWatch("enable_signal");
                 }
                 inputControlFlag.simWatch("input_control_flag");
                 weightVars[0][0].simWatch("weight");
@@ -138,10 +139,13 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
         }
 
         DFEVar initFlag = io.scalarInput("init", dfeUInt(1));
+        initFlag.simWatch("init_flag");
         if (cpuInitWeightsCounter != null) {
             cpuInitWeightsCounter.setInitFlag(initFlag);
-        } else {
+        } else if (lookAheadCounter != null) {
             lookAheadCounter.setInitFlag(initFlag);
+        } else {
+            throw new RuntimeException("Error");
         }
         accumulator.setInitFlag(initFlag);
 

@@ -722,7 +722,6 @@ void Convnet::load_weights_from_files(std::vector<std::string> filenames, file_f
 void Convnet::max_init_weights()
 {
     uint64_t start = 0;
-    uint64_t address = 0;
     std::vector<int8_t*> buffer_ptrs;
 
     for (int i = 0; i < conv_layer_params.size() ; i++) {
@@ -736,6 +735,7 @@ void Convnet::max_init_weights()
         auto & layer = conv_layer_params[i];
         max_actions_t *write_action = max_actions_init(
                 max_files[conv_layer_params[i].fpga_id()], "writeLMem");
+        const uint64_t address = conv_layer_params[i].conv().weight_address_base();
         const uint64_t stream_size =
                 calc_total_iterations(layer) * calc_weights_vector_size(layer)
                 * sizeof(float);
@@ -744,6 +744,8 @@ void Convnet::max_init_weights()
             << conv_layer_params[i].layer_id()
             << " [fpga_id = " << conv_layer_params[i].fpga_id() << "]"
             << std::endl;
+        log_stdout(INFO) << "Address = " << address << std::endl;
+        log_stdout(INFO) << "Stream size (in bytes) = " << stream_size << std::endl;
         max_set_param_uint64t(write_action, "start", address);
         max_set_param_uint64t(write_action, "size", stream_size);
         max_queue_input(
@@ -771,8 +773,6 @@ void Convnet::max_init_weights()
 
         max_actions_free(write_action);
         log_stdout(INFO) << "Done!" << std::endl;
-
-        address += stream_size;
     }
 
 }

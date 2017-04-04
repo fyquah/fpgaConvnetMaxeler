@@ -62,7 +62,7 @@ def populate_weight_address(optimized_network):
         if layer.HasField("conv"):
             if is_off_chip_weights(layer):
                 layer.conv.weight_address_base = address
-                address += memory_fetch_size(layer) * calc_total_iters(layer)
+                address += memory_fetch_size(layer) * calc_total_iters(layer) * 4
                 layer.conv.should_fit_on_chip = False
             else:
                 layer.conv.look_ahead = 1
