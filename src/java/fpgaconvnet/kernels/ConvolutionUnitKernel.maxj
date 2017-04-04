@@ -134,7 +134,11 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
         accumulator.setRawBiasInput(io.input(accumulator.getBiasInputName(),
                                              GlobalConfig.cpuType,
                                              accumulator.getIsInitializingWeights()));
-        accumulator.setEnableSignal();
+        if (lookAheadCounter != null) {
+            accumulator.setEnableSignal(lookAheadCounter.getEnableSignal());
+        } else {
+            accumulator.setEnableSignal(cpuInitWeightsCounter.getEnableSignal());
+        }
 
         if (layerParams.getIsLastLayer()) {
             /* Last layer - cast from fixed point to dfe float. */
@@ -155,7 +159,7 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
     /* initCycles used only in CPU initialization. */
     public int initCycles() {
         if (cpuInitWeightsCounter != null) {
-            return cpuInitWeightsCounter.initCycles()
+            return cpuInitWeightsCounter.initCycles();
         } else if (lookAheadCounter != null) {
             return lookAheadCounter.initCycles();
         }

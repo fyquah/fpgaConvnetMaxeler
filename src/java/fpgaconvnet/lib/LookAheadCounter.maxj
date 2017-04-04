@@ -1,6 +1,7 @@
 package fpgaconvnet.lib;
 
 import com.maxeler.maxcompiler.v2.kernelcompiler.KernelLib;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Count;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.CounterChain;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEType;
@@ -25,6 +26,41 @@ public class LookAheadCounter extends KernelLib {
     private final DFEVar weightAddress;
     private final DFEVar pixelAddress;
     private final CounterChain masterChain;
+    private final DFEVar initWeightsFlag;
+    private final DFEVar enableSignal;
+
+    public int initCycles() {
+        return ctr.getBiasInitCycles();
+    }
+
+    public DFEVar makeSimpleEnableCounter(int bits, DFEVar max, DFEVar enable) {
+        return control.count.makeCounter(
+                control.count.makeParams(bits)
+                .withInitValue(0l)
+                .withInc(1l)
+                .withMax(max)
+                .withEnable(enable)
+            ).getCount();
+    }
+
+    public DFEVar makeSimpleEnableCounter(int max, DFEVar enable) {
+        if (max == 1) {
+            return constant.var(dfeBool(), 0);
+        } else {
+            return control.count.makeCounter(
+                    control.count.makeParams(Utils.ceilLog2(max))
+                    .withInitValue(0l)
+                    .withInc(1l)
+                    .withMax(max)
+                    .withEnable(enable)
+                ).getCount();
+
+        }
+    }
+
+    public DFEVar getEnableSignal() {
+        return enableSignal;
+    }
 
     public LookAheadCounter(ConvolutionUnitKernel kernel, LayerParameter argLayerParams) {
         super(kernel);
@@ -34,15 +70,25 @@ public class LookAheadCounter extends KernelLib {
         ctr = new IterationCounter(layerParams);
         weightsUsageCycles = ctr.getWeightIterations();
 
-        DFEVar batchCounter = control.count.simpleCounter(
-                Utils.ceilLog2(convParams.getLookAhead() * ctr.getTotalIterations()),
-                convParams.getLookAhead() * ctr.getTotalIterations());
+        DFEVar initCycleIter = control.count.simpleCounter(
+                Utils.ceilLog2(initCycles()), initCycles());
+        DFEVar initializationComplete = control.count.makeCounter(
+                control.count.makeParams(1)
+                .withInc(1)
+                .withMax(1)
+                .withWrapMode(Count.WrapMode.STOP_AT_MAX)
+                .withEnable(initCycleIter.eq(initCycles() - 1))).getCount();
+        initWeightsFlag = io.scalarInput("init", dfeUInt(1));
+        enableSignal = ~initWeightsFlag | initializationComplete;
+
+        DFEVar batchCounter = makeSimpleEnableCounter(
+                convParams.getLookAhead() * ctr.getTotalIterations(), enableSignal);
         final int totalBeforeLastloopIterations =
                 (ctr.getRevisitIterations() - 1)
                 * ctr.getWeightIterations()
                 * ctr.getKernelIterations()
                 * convParams.getLookAhead();
-        masterChain = control.count.makeCounterChain();
+        masterChain = control.count.makeCounterChain(enableSignal);
         lookAhead = Utils.chainCounterOrZero(
                 this, masterChain, layerParams.getConv().getLookAhead());
         if (ctr.getWeightIterations() == ctr.getLastWeightIterations()) {
@@ -68,15 +114,16 @@ public class LookAheadCounter extends KernelLib {
             DFEType type = dfeUInt(bits);
 
             if (ctr.getWeightIterations() == ctr.getLastWeightIterations()) {
-                weightAddress = control.count.simpleCounter(
-                        bits, ctr.getWeightIterations() * ctr.getKernelIterations());
+                weightAddress = makeSimpleEnableCounter(
+                        ctr.getWeightIterations() * ctr.getKernelIterations(),
+                        enableSignal);
 
             } else {
                 DFEVar muxedTotalWeightAddress = (
                         (batchCounter < totalBeforeLastloopIterations)
                         ? constant.var(type, ctr.getWeightIterations() * ctr.getKernelIterations())
                         : constant.var(type, ctr.getLastWeightIterations() * ctr.getKernelIterations()));
-                weightAddress = control.count.simpleCounter(bits, muxedTotalWeightAddress);
+                weightAddress = makeSimpleEnableCounter(bits, muxedTotalWeightAddress, enableSignal);
             }
 
         }
@@ -90,7 +137,8 @@ public class LookAheadCounter extends KernelLib {
                     .withInitValue(0l)
                     .withInc(ctr.getKernelIterations() % totalPixelAddress)
                     .withMax(totalPixelAddress)
-                    .withEnable(getWeightCounterWrap(masterChain, weightUsageIter)
+                    .withEnable(enableSignal
+                                & getWeightCounterWrap(masterChain, weightUsageIter)
                                 & kernelIter.eq(ctr.getKernelIterations() - 1))
                 ).getCount();
             pixelAddress = pixelAddressBase + kernelIter.cast(
@@ -125,7 +173,8 @@ public class LookAheadCounter extends KernelLib {
                 .withInc((weightsUsageCycles * ctr.getKernelIterations())
                          % channelIterations)
                 .withMax(channelIterations)
-                .withEnable(lookAhead.eq(layerParams.getConv().getLookAhead() - 1)
+                .withEnable(enableSignal
+                            & lookAhead.eq(layerParams.getConv().getLookAhead() - 1)
                             & getWeightCounterWrap(masterChain, weightUsageIter)
                             & kernelIter.eq(ctr.getKernelIterations() - 1))
             ).getCount();

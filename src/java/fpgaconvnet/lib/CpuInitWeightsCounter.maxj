@@ -45,6 +45,10 @@ public class CpuInitWeightsCounter extends KernelLib {
         }
     }
 
+    public DFEVar getEnableSignal() {
+        return ~isInitializingWeights;
+    }
+
     public CpuInitWeightsCounter(ConvolutionUnitKernel kernel, LayerParameter argLayerParams) {
         super(kernel);
 
@@ -148,7 +152,7 @@ public class CpuInitWeightsCounter extends KernelLib {
                 ((int) Utils.lcm(4, layerParams.getConv().getKernelFoldingFactor()))
                 / layerParams.getConv().getKernelFoldingFactor();
         int x =  Utils.divCeil(realInitCycles(), multipleBase) * multipleBase;
-        return Math.max(x, ctr.getBiasInitCycles());
+        return Math.max(x, iterCounter.getBiasInitCycles());
     }
 
     public DFEVar getInitAddress() {

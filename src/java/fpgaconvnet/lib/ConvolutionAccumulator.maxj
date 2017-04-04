@@ -167,6 +167,7 @@ public class ConvolutionAccumulator extends KernelLib {
                 GlobalConfig.dataType, layerParams.getConv().getConvFoldingFactor());
         outputVectorType = new DFEVectorType<DFEVar>(
                 GlobalConfig.dataType, layerParams.getNumOutputs());
+        enableSignal = dfeBool().newInstance(this);
         biasRoms = new ArrayList<Memory<DFEVar>>();
 
         for (int i = 0; i < params.getNumOutputs() ; i++) {
