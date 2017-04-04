@@ -32,3 +32,7 @@ include Makefile.targets
 include $(WHEREISROOT)/Makefile.multi.fpga.base
 
 endif
+
+debugsim:
+	maxdebug -v -g cifar10_Graph -s cifar10_Graph -c -d $(USER)a0:$(USER)a \
+	    target_1_MAIA_DFE_SIM/results/target_1.max

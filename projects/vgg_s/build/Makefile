@@ -27,7 +27,7 @@ include $(WHEREISROOT)/Makefile.multi.fpga.base
 
 debugsim:
 	maxdebug -v -g vgg_0_Graph -s vgg_0_Graph -c -d $(USER)a0:$(USER)a \
-	    target_3_MAIA_DFE_SIM/results/target_3.max
+	    target_5_MAIA_DFE_SIM/results/target_5.max
 
 
 endif
