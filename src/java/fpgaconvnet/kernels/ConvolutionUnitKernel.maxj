@@ -131,7 +131,7 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
 
         accumulator = new ConvolutionAccumulator(this, layerParams);
         accumulator.setInput(workerOutputList);
-        accumulator.setRawBiasInput(io.input(accumulator.getBiasInputName(),
+        accumulator.setRawBiasInput(io.input(getBiasInputName(),
                                              GlobalConfig.cpuType,
                                              accumulator.getIsInitializingWeights()));
         if (lookAheadCounter != null) {
@@ -139,6 +139,14 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
         } else {
             accumulator.setEnableSignal(cpuInitWeightsCounter.getEnableSignal());
         }
+
+        DFEVar initFlag = io.scalarInput("init", dfeUInt(1));
+        if (cpuInitWeightsCounter != null) {
+            cpuInitWeightsCounter.setInitFlag(initFlag);
+        } else {
+            lookAheadCounter.setInitFlag(initFlag);
+        }
+        accumulator.setInitFlag(initFlag);
 
         if (layerParams.getIsLastLayer()) {
             /* Last layer - cast from fixed point to dfe float. */
@@ -166,10 +174,14 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
 
         throw new RuntimeException("Error");
     }
+    
+    public int biasInitStreamSize() {
+        return ctr.getBiasInitCycles();
+    }
 
-    public int initStreamSize() {
+    public int kernelsInitStreamSize() {
         // size of every weight input Vector.
-        return initCycles() * layerParams.getConv().getKernelFoldingFactor();
+        return cpuInitWeightsCounter.initCycles() * layerParams.getConv().getKernelFoldingFactor();
     }
 
     public int cyclesPerImage() {
@@ -194,6 +206,10 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
 
     public String getOutputName() {
         return "output";
+    }
+
+    public String getBiasInputName() {
+        return "input_bias";
     }
 
     public WeightsLoadStrategy getWeightsLoadStrategy() {

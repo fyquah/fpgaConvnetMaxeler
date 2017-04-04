@@ -765,7 +765,7 @@ void Convnet::max_init_weights()
 #else
         // TODO(fyq14): Complete this
         else {
-            max_run(dfe_array, write_action);
+            max_run(dfe, write_action);
         }
 #endif
 

@@ -36,7 +36,12 @@ public class ConvolutionAccumulator extends KernelLib {
     private final DFEVar rawBiasInput;
     private final DFEVar isInitializingWeights;
     private final DFEVar enableSignal;
+    private final DFEVar initWeightsFlag;
     private final DFEVector<DFEVar> output;
+
+    public void setInitFlag(DFEVar x) {
+        initWeightsFlag <== x;
+    }
 
     public void setEnableSignal(DFEVar x) {
         enableSignal <== x;
@@ -187,8 +192,8 @@ public class ConvolutionAccumulator extends KernelLib {
                 .withMax(1)
                 .withWrapMode(Count.WrapMode.STOP_AT_MAX)
                 .withEnable(initChannel.eq(ctr.getBiasInitCycles() - 1)));
-
-        DFEVar initWeightsFlag = io.scalarInput("init", dfeUInt(1));
+ 
+        initWeightsFlag = dfeBool().newInstance(this);
         DFEVar initializationComplete = initializationCompleteCtr.getCount();
         isInitializingWeights = initWeightsFlag & ~initializationComplete;
 
@@ -368,10 +373,6 @@ public class ConvolutionAccumulator extends KernelLib {
         //         + "\ninputs = " + s_conv + "\n"
         //         + "\noutput = " + s_output + "\n",
         //         debugValues.toArray(new Object [1]));
-    }
-
-    public String getBiasInputName() {
-        return "input_bias";
     }
 
     public int cyclesPerImage() {

@@ -33,6 +33,10 @@ public class LookAheadCounter extends KernelLib {
         return ctr.getBiasInitCycles();
     }
 
+    public void setInitFlag(DFEVar x) {
+        initWeightsFlag <== x;
+    }
+
     public DFEVar makeSimpleEnableCounter(int bits, DFEVar max, DFEVar enable) {
         return control.count.makeCounter(
                 control.count.makeParams(bits)
@@ -78,7 +82,7 @@ public class LookAheadCounter extends KernelLib {
                 .withMax(1)
                 .withWrapMode(Count.WrapMode.STOP_AT_MAX)
                 .withEnable(initCycleIter.eq(initCycles() - 1))).getCount();
-        initWeightsFlag = io.scalarInput("init", dfeUInt(1));
+        initWeightsFlag = dfeBool().newInstance(this);
         enableSignal = ~initWeightsFlag | initializationComplete;
 
         DFEVar batchCounter = makeSimpleEnableCounter(
