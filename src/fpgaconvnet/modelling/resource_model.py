@@ -389,7 +389,7 @@ def project(network):
                     (6797, 2830, 95),
 
                     # MemoryController
-                    (11203, 11805, 30)
+                    (11203, 11805, 300)
                 ]
 
                 for a, b, c in off_chip_constants:

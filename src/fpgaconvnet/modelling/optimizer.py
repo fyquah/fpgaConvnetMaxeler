@@ -71,7 +71,7 @@ def populate_weight_address(optimized_network):
 
 def satisfies_resource_constraints(resources):
 
-    return all(r.bram <= 0.9 * resource_model.MAX_BRAM
+    return all(r.bram <= 0.7 * resource_model.MAX_BRAM
                 and r.lut <= 0.7 * resource_model.MAX_LUT
                 and r.flip_flop <= 0.7 * resource_model.MAX_FF
                 and r.dsp <= resource_model.MAX_DSP
@@ -311,21 +311,56 @@ def make_presence_constraint(idx, values):
     return {"type": "eq", "fun": fn}
 
 
+def randomize_compute_factors(network, valid_values):
+    """Randomizes the compute-bound parameters of the net.
+    
+    Specifically randomizes worker_factor, conv_folding_factor,
+    kernel_folding_factor, channel_folding_factor.
+    """
+    for layer, values in zip(network.layer, valid_values):
+        if layer.HasField("conv"):
+            layer.conv.worker_factor = sample_array(values[0])
+            layer.conv.conv_folding_factor = sample_array(values[1])
+            layer.conv.kernel_folding_factor = sample_array(values[2])
+
+        elif layer.HasField("pool"):
+            layer.pool.channel_folding_factor = sample_array(values[0])
+
+        elif layer.HasField("lrn"):
+            layer.lrn.channel_folding_factor = sample_array(values[0])
+
+
 def search_initial_state(network, num_fpgas):
 
     for i, layer in enumerate(network.layer):
         layer.fpga_id = min(i, num_fpgas - 1)
     network.num_fpga_used = num_fpgas
 
-    if (num_fpgas == 1):
-        return network
+    if num_fpgas != 1:
+        problem = FpgaPositioningProblem(network)
+        network, e = problem.anneal()
 
-    problem = FpgaPositioningProblem(network)
-    state, e = problem.anneal()
+    # Randomly search the folding factor search until we get a feasible
+    # configuration, then we can annael from there.
+    valid_values = []
+    for layer in network.layer:
+        if layer.HasField("conv"):
+            valid_values.append((
+                    compute_valid_values(layer.num_inputs),
+                    compute_valid_values(layer.num_outputs),
+                    compute_valid_values(layer.conv.kernel_size
+                                         * layer.conv.kernel_size)))
 
-    # TODO(fyq14): Adjust the folding factors such that the problem is feasiable.
-    #              Otherwise, return None.
-    return state
+        elif layer.HasField("pool") or layer.HasField("lrn"):
+            valid_values.append((
+                    compute_valid_values(layer.num_outputs),))
+
+    for i in range(100000):
+        randomize_compute_factors(network, valid_values)
+        resource_projection = resource_model.project(network)
+        if satisfies_resource_constraints(resource_projection):
+            print "Folding factor randomization succeeded after %d stages" % i
+            return network
 
 
 def optimize_with_fixed_fpga_count(network, num_fpgas):
@@ -586,10 +621,9 @@ def main():
             layer.conv.conv_folding_factor = 1
             layer.conv.look_ahead = 1
             layer.conv.bram_factor = layer.num_inputs * layer.num_outputs
-            layer_bram_required = (math.ceil(
-                    layer.num_inputs * layer.num_outputs * (layer.conv.kernel_size ** 2))
-                        * resource_model.NUM_BITS
-                    / resource_model.M20K_SIZE)
+            layer_bram_required = (
+                    layer.num_inputs * layer.num_outputs * (layer.conv.kernel_size ** 2)
+                        * resource_model.NUM_BITS)
 
 
             # We use a heriustic where if it is possible to fit the whole layer
@@ -598,8 +632,8 @@ def main():
             #
             # The if statement below is an heriustic on limit of BRAM we
             # want to use. The heriustic should balance be able to guess if
-            # we need to use that much BRAM it will be bad anyway.
-            if layer_bram_required < 0.1 * resource_model.MAX_BRAM:
+            # Heriustic
+            if layer_bram_required < 5000000:
                 layer.conv.should_fit_on_chip = True
             else:
                 layer.conv.should_fit_on_chip = False
