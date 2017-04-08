@@ -14,6 +14,7 @@ message Network
 
 message LayerParameter
 {
+    /* These fields should be specified. */
     optional uint32 input_height = 3;
     optional uint32 input_width = 4;
     optional uint32 num_inputs = 5;
@@ -46,7 +47,17 @@ message LayerParameter
 
 message ConvolutionParameter
 {
+    /* These fields should be specified. */
+    optional uint32 kernel_size = 7;
+    optional uint32 stride = 8 [default = 1];
+    optional uint32 pad = 9 [default = 0];
+
+    /* These fields are used by the compiler. */
+    optional uint32 weight_address_base = 11;
+
     /*
+     * These fields are used by the optimizer
+     * 
      * conv_folding_factor * worker_factor <= bram_factor <= num_inputs * num_outputs
      * 1 (no lookahead) <= look_ahead <= input_height * input_width (full lookahead)
      *
@@ -84,6 +95,7 @@ message ConvolutionParameter
      * means less frequent off-chip memory lookup, but higher on-chip memory
      * usage.
      */
+    optional bool should_fit_on_chip = 10 [default = false];
     optional uint32 bram_factor = 4;  /* Assigns to fully on-chip when this is not set. */
     optional uint32 look_ahead = 5 [default = 1]; /* Must be a factor of image size. */
 
@@ -94,18 +106,6 @@ message ConvolutionParameter
                                               // - number of multipliers per convoluter.
                                               // - must be a factor of kernelDim * kernelDim
 
-    /* input_height, input_width and num_inputs must be provided at the input layer and are
-     * optional at subsequent layers. They will be used for checking if they are provided.
-     */
-    optional uint32 kernel_size = 7;
-    optional uint32 stride = 8 [default = 1];
-    optional uint32 pad = 9 [default = 0];
-
-    /* Used by the compiler. */
-    optional uint32 weight_address_base = 11;
-
-    /* Used by optimizer */
-    optional bool should_fit_on_chip = 10 [default = false];
 }
 
 
