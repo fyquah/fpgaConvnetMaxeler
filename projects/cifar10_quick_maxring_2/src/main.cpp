@@ -10,7 +10,6 @@
 
 #include "target_0.h"
 #include "target_1.h"
-#include "target_2.h"
 
 
 #ifdef __SIM__
@@ -42,7 +41,6 @@ std::vector<float> run_feature_extraction(
 
     max_files.push_back(target_0_init());
     max_files.push_back(target_1_init());
-    max_files.push_back(target_2_init());
 
     fpgaconvnet::Convnet convnet(network_parameters, max_files, "");
 
