@@ -69,7 +69,7 @@ def is_compatible_streams(a, b):
 def conv_layer_dsp(layer):
     return (layer.conv.worker_factor
             * layer.conv.conv_folding_factor
-            * layer.conv.kernel_folding_factor)
+            * layer.conv.kernel_folding_factor) / 1.7
 
 
 def calc_total_iters(layer):

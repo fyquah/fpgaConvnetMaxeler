@@ -2,6 +2,7 @@ from __future__ import absolute_import
 
 import argparse
 import bisect
+import datetime
 import logging
 import math
 import sys
@@ -16,6 +17,9 @@ import simanneal
 from google.protobuf import text_format
 from fpgaconvnet.modelling import resource_model
 from fpgaconvnet.protos import parameters_pb2
+
+np.random.seed(
+        seed=(datetime.datetime.now() - datetime.datetime(1970, 1, 1)).microseconds)
 
 
 parser = argparse.ArgumentParser(
