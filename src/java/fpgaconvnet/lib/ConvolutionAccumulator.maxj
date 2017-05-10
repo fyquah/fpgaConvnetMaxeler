@@ -26,7 +26,7 @@ import fpgaconvnet.protos.Parameters.ConvolutionParameter;
 public class ConvolutionAccumulator extends KernelLib {
 
     private final List<DFEVector<DFEVar>> inputVectors;
-    private final List<Memory<DFEVar>> biasRoms;
+    private final Memory<DFEVector<DFEVar>> biasRom;
     private final LayerParameter layerParams;
     private final ConvolutionParameter convParams;
     private final DFEVectorType<DFEVar> inputVectorType;
@@ -178,11 +178,9 @@ public class ConvolutionAccumulator extends KernelLib {
         outputVectorType = new DFEVectorType<DFEVar>(
                 GlobalConfig.dataType, layerParams.getNumOutputs());
         enableSignal = dfeBool().newInstance(this);
-        biasRoms = new ArrayList<Memory<DFEVar>>();
-
-        for (int i = 0; i < params.getNumOutputs() ; i++) {
-            biasRoms.add(mem.alloc(GlobalConfig.dataType, 2));
-        }
+        DFEVectorType<DFEVar> biasVectorType = new DFEVectorType<DFEVar>(
+                GlobalConfig.dataType, layerParams.getNumOutputs());
+        biasRom = mem.alloc(biasVectorType, 2);
 
         output = outputVectorType.newInstance(this);
         inputVectors = new ArrayList<DFEVector<DFEVar>>();
@@ -277,18 +275,26 @@ public class ConvolutionAccumulator extends KernelLib {
             inputVectors.add(inputVectorType.newInstance(this));
         }
 
+        DFEVector<DFEVar> biasRomWriteBuffer = biasVectorType.newInstance(this);
+        optimization.pushPipeliningFactor(0.0);
         for (int i = 0 ; i < params.getNumOutputs() ; i++) {
-            biasRoms[i].write(
-                    constant.var(dfeUInt(1), 0),
-                    biasInput,
-                    isInitializingWeights & (initChannel.eq(i)));
+            biasRomWriteBuffer[i] <== (
+                    initChannel.eq(i)
+                    ? biasInput
+                    : stream.offset(biasRomWriteBuffer[i], -1));
         }
+        optimization.popPipeliningFactor();
+        biasRom.write(
+                constant.var(dfeUInt(1), 0),
+                biasRomWriteBuffer,
+                isInitializingWeights & (initChannel.eq(params.getNumOutputs() - 1)));
 
         List<DFEVector<DFEVar>> lookAheadOutputs = new ArrayList<DFEVector<DFEVar>>();
 
         // logic for accumulating outputs
         for (int lookAhead = 0; lookAhead < convParams.getLookAhead() ; lookAhead++) {
             DFEVector<DFEVar> lookAheadOutput = outputVectorType.newInstance(this);
+            DFEVector<DFEVar> bias = biasRom.read(constant.var(dfeUInt(1), 0));
 
             for (int channel = 0 ; channel < layerParams.getNumOutputs() ; channel++) {
 
@@ -303,13 +309,12 @@ public class ConvolutionAccumulator extends KernelLib {
                         lookAheadIter.eq(lookAhead)
                         & convIter.eq(channel / layerParams.getConv().getConvFoldingFactor()));
                 DFEVar muxedSumVars = channelOutputFlag ? sumVars : 0.0;
-                DFEVar bias = biasRoms[channel].read(constant.var(dfeUInt(1), 0));
                 DFEVar carriedSum = stream.offset(acc, -1);
 
                 // push and pop pipelining factor required to make sure this accumulator runs at
                 // 0-tick latency (i.e: stream.offset(-1) works)
                 optimization.pushPipeliningFactor(0);
-                DFEVar prevAcc = initFlag ? bias : carriedSum;
+                DFEVar prevAcc = initFlag ? bias[channel] : carriedSum;
                 optimization.popPipeliningFactor();
 
                 acc <== muxedSumVars + prevAcc;
