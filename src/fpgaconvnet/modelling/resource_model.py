@@ -160,19 +160,14 @@ def conv_layer_bram(layer):
     unit = (max(0, 0.09187 * kff - 5.8784)
             + (7.0248 * (layer.conv.kernel_size ** 2))
             + wf * cff * kff * math.ceil(weight_bits_per_multiplier / 20480)
-            + wf * kff * pixels_bram)
-    accumulator = 2 + layer.num_outputs
+            + wf * kff * pixels_bram) / 4.0
+    accumulator = 300
     scheduler_unit_fifo_bram = math.ceil(
             DEFAULT_FIFO_DEPTH * (kernel_size ** 2) * NUM_BITS / M20K_SIZE)
-    unit_acc_fifo_bram = math.ceil(
-            DEFAULT_FIFO_DEPTH * cff * NUM_BITS / M20K_SIZE)
     acc_next = math.ceil(DEFAULT_FIFO_DEPTH * num_outputs * NUM_BITS / M20K_SIZE)
     streams = (
             # from scheduler -> unit
             wf * scheduler_unit_fifo_bram
-
-            # from unit -> acc
-            + wf * unit_acc_fifo_bram
 
             # from acc -> <next>
             + acc_next)
@@ -209,10 +204,10 @@ def conv_layer_bram(layer):
     logging.debug("Layer %d BRAM streams: %.3f" % (layer.layer_id, streams))
     logging.debug("Layer %d BRAM scheduler -> convUnit: %.3f"
                   % (layer.layer_id, scheduler_unit_fifo_bram))
-    logging.debug("Layer %d BRAM convUnit -> accumulator: %.3f"
-                  % (layer.layer_id, unit_acc_fifo_bram))
     logging.debug("Layer %d BRAM accumulator -> <next>: %.3f"
                   % (layer.layer_id, acc_next))
+
+    return 0
 
     return scheduler + unit + accumulator + streams
 

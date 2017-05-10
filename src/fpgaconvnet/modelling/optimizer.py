@@ -64,13 +64,8 @@ def populate_weight_address(optimized_network):
     address = 0
     for layer in optimized_network.layer:
         if layer.HasField("conv"):
-            if is_off_chip_weights(layer):
-                layer.conv.weight_address_base = address
-                address += memory_fetch_size(layer) * calc_total_iters(layer) * 4
-                layer.conv.should_fit_on_chip = False
-            else:
-                layer.conv.look_ahead = 1
-                layer.conv.should_fit_on_chip = True
+            layer.conv.look_ahead = 1
+            layer.conv.should_fit_on_chip = True
 
 
 def satisfies_resource_constraints(resources):
@@ -257,15 +252,11 @@ class FoldingFactorOptimizationProblem(simanneal.Annealer):
             if field_name == "worker_factor" or field_name == "conv_folding_factor":
                 layer = new_network.layer[layer_id]
 
-                if new_network.layer[layer_id].conv.should_fit_on_chip:
-                    layer.conv.bram_factor = (
-                            layer.conv.conv_folding_factor
-                            * layer.conv.worker_factor
-                            * div_ceil(layer.num_outputs, layer.conv.conv_folding_factor)
-                            * div_ceil(layer.num_inputs, layer.conv.worker_factor))
-                else:
-                    layer.conv.bram_factor = layer.conv.conv_folding_factor * layer.conv.worker_factor
-
+                layer.conv.bram_factor = (
+                        layer.conv.conv_folding_factor
+                        * layer.conv.worker_factor
+                        * div_ceil(layer.num_outputs, layer.conv.conv_folding_factor)
+                        * div_ceil(layer.num_inputs, layer.conv.worker_factor))
 
                 # Select the largest layer.layer_id that satisfies the new
                 # constraints imposed.
@@ -628,20 +619,7 @@ def main():
             layer_bram_required = (
                     layer.num_inputs * layer.num_outputs * (layer.conv.kernel_size ** 2)
                         * resource_model.NUM_BITS)
-
-
-            # We use a heriustic where if it is possible to fit the whole layer
-            # on the on-chip FPGA, we should do that, so that we don't overflow
-            # the LMem bandwidth
-            #
-            # The if statement below is an heriustic on limit of BRAM we
-            # want to use. The heriustic should balance be able to guess if
-            # Heriustic
-            if layer_bram_required < 5000000:
-                layer.conv.should_fit_on_chip = True
-            else:
-                layer.conv.should_fit_on_chip = False
-                layer.conv.bram_factor = 1
+            layer.conv.should_fit_on_chip = True
 
         elif layer.HasField("pool"):
             layer.num_outputs = layer.num_inputs
@@ -667,10 +645,10 @@ def main():
     network.layer[0].is_first_layer = True
     network.layer[-1].is_last_layer = True
     print network
+    logging.getLogger().setLevel(logging.DEBUG)
     optimized_network = run_optimizer(network)
     populate_weight_address(optimized_network)
 
-    logging.getLogger().setLevel(logging.DEBUG)
     resource_model.project(optimized_network)
 
     with open(FLAGS.output, "w") as f:
