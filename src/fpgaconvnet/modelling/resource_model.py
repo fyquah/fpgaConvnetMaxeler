@@ -157,8 +157,9 @@ def conv_layer_bram(layer):
     kff = layer.conv.kernel_folding_factor
     kernel_size = layer.conv.kernel_size
     num_outputs = layer.num_outputs
-    kernel_iterations = div_ceil(layer.conv.kernel_size * layer.conv.kernel_size,
-                     layer.conv.kernel_folding_factor)
+    kernel_iterations = div_ceil(
+            layer.conv.kernel_size * layer.conv.kernel_size,
+            layer.conv.kernel_folding_factor)
 
     if layer.conv.look_ahead > 1:
         accumulator = 0
@@ -169,6 +170,7 @@ def conv_layer_bram(layer):
 
     scheduler_kernel = (
             math.ceil(layer.num_inputs * NUM_BITS / 32.)
+            * layer.conv.kernel_size
             * layer.conv.kernel_size)
     unit_kernel = (
             max(0, 0.09187 * kff - 5.8784)
