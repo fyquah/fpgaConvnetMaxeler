@@ -17,8 +17,8 @@ import sys
 from google.protobuf import text_format
 from fpgaconvnet.protos import parameters_pb2
 
-ACTUAL_BITS = 18.
-NUM_BITS = 18.
+ACTUAL_BITS = 16.
+NUM_BITS = 16.
 DEFAULT_FIFO_DEPTH = 512.
 M20K_SIZE = 20480.
 
@@ -123,8 +123,7 @@ def conv_layer_flip_flop(layer):
             + 39.529 * wf * cff * kff
             + 6272.7)
     acc = (
-            layer.num_outputs * layer.conv.look_ahead * NUM_BITS
-            + 49.874 * wf * cff
+            layer.num_outputs * layer.conv.look_ahead * NUM_BITS + 49.874 * wf * cff
             - 456.46 * cff
             + 7595.4)
     streams = (2 * wf + 1) * (100 + 300)  # StreamStatus + fifo
@@ -143,25 +142,44 @@ def conv_layer_flip_flop(layer):
     return scheduler + unit + acc + streams
 
 
+def estimate_mem_alloc_bram(type_length, num_units):
+    """Estimate BRAM resource of mem.alloc(type, num_units) where type_length =
+    type.size"""
+    assert NUM_BITS == 16
+    num_parallel_mem_units = math.ceil(type_length / 2.0)
+    unit_size = math.ceil(num_units / 512.0)
+    return num_parallel_mem_units * unit_size
+
+
 def conv_layer_bram(layer):
     wf = layer.conv.worker_factor
     cff = layer.conv.conv_folding_factor
     kff = layer.conv.kernel_folding_factor
     kernel_size = layer.conv.kernel_size
     num_outputs = layer.num_outputs
-    scheduler = -238.3 * log2(layer.conv.worker_factor) \
-                + 870.0 + layer.num_inputs / 30.0
     kernel_iterations = div_ceil(layer.conv.kernel_size * layer.conv.kernel_size,
                      layer.conv.kernel_folding_factor)
-    weight_bits_per_multiplier = (
-            kernel_iterations
-            * layer.conv.bram_factor / (wf * cff))
-    pixels_bram = math.ceil(layer.conv.look_ahead * kernel_iterations / 20480)
-    unit = (max(0, 0.09187 * kff - 5.8784)
+
+    if layer.conv.look_ahead > 1:
+        accumulator = 0
+        pixels_bram = math.ceil(layer.conv.look_ahead * kernel_iterations / 20480)
+    else:
+        accumulator = 5  # Pessimistic estimates
+        pixels_bram = 2
+
+    scheduler_kernel = (
+            math.ceil(layer.num_inputs * NUM_BITS / 32.)
+            * layer.conv.kernel_size)
+    unit_kernel = (
+            max(0, 0.09187 * kff - 5.8784)
             + (7.0248 * (layer.conv.kernel_size ** 2))
-            + wf * cff * kff * math.ceil(weight_bits_per_multiplier / 20480)
-            + wf * kff * pixels_bram) / 4.0
-    accumulator = 300
+            + estimate_mem_alloc_bram(
+                type_length=wf * cff * kff,
+                num_units=calc_total_iters(layer))
+            + wf * kff * pixels_bram
+            + accumulator)
+    # In most cases, the accumulator portion shouldn't use any BRAM ...
+
     scheduler_unit_fifo_bram = math.ceil(
             DEFAULT_FIFO_DEPTH * (kernel_size ** 2) * NUM_BITS / M20K_SIZE)
     acc_next = math.ceil(DEFAULT_FIFO_DEPTH * num_outputs * NUM_BITS / M20K_SIZE)
@@ -196,20 +214,19 @@ def conv_layer_bram(layer):
         # TODO(fyq14): Model FIFO right after LMEM.
         streams += math.ceil(DEFAULT_FIFO_DEPTH * lmem_stream_size / M20K_SIZE)
 
-    logging.debug("Layer %d BRAM scheduler: %.3f" % (layer.layer_id, scheduler))
-    logging.debug("Layer %d BRAM convolution unit: %.3f" % (layer.layer_id, unit))
-    logging.debug("Layer %d BRAM accumulator: %.3f" % (layer.layer_id, accumulator))
+    logging.debug("Layer %d BRAM scheduler kernel: %.3f"
+            % (layer.layer_id, scheduler_kernel))
+    logging.debug("Layer %d BRAM convolution unit kernel: %.3f"
+            % (layer.layer_id, unit_kernel))
     logging.debug("Layer %d BRAM used by kernels: %.3f"
-                  % (layer.layer_id, scheduler + unit + accumulator))
+                  % (layer.layer_id, scheduler_kernel + unit_kernel))
     logging.debug("Layer %d BRAM streams: %.3f" % (layer.layer_id, streams))
     logging.debug("Layer %d BRAM scheduler -> convUnit: %.3f"
                   % (layer.layer_id, scheduler_unit_fifo_bram))
     logging.debug("Layer %d BRAM accumulator -> <next>: %.3f"
                   % (layer.layer_id, acc_next))
 
-    return 0
-
-    return scheduler + unit + accumulator + streams
+    return scheduler_kernel + unit_kernel + streams
 
 
 # TODO(fyq14): This Model is broken. The BRAM usage goes down after some point,
@@ -489,6 +506,15 @@ def project(network):
     for i, fpga_resource in enumerate(ret):
         logging.debug("FPGA %d - %s" % (i, str(fpga_resource)))
     return ret
+
+
+def main():
+    filename = sys.argv[1]
+    logging.getLogger().setLevel(logging.DEBUG)
+    with open(filename, "r") as f:
+        network = text_format.Parse(f.read(), parameters_pb2.Network())
+    print network
+    print project(network)
 
 
 if __name__ == "__main__":

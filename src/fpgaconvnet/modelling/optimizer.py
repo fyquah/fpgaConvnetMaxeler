@@ -71,8 +71,8 @@ def populate_weight_address(optimized_network):
 def satisfies_resource_constraints(resources):
 
     return all(r.bram <= 0.7 * resource_model.MAX_BRAM
-                and r.lut <= 0.7 * resource_model.MAX_LUT
-                and r.flip_flop <= 0.7 * resource_model.MAX_FF
+                and r.lut <= 0.5 * resource_model.MAX_LUT
+                and r.flip_flop <= 0.5 * resource_model.MAX_FF
                 and r.dsp <= resource_model.MAX_DSP
                for r in resources)
 
