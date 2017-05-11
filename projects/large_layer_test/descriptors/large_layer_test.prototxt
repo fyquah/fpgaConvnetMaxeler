@@ -1,0 +1,11 @@
+layer {
+    input_height: 37
+    input_width: 37
+    num_inputs: 256
+    num_outputs: 512
+    conv {
+        kernel_size: 3
+        pad: 1
+    }
+    activation: Relu
+}

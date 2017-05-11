@@ -645,7 +645,7 @@ def main():
     network.layer[0].is_first_layer = True
     network.layer[-1].is_last_layer = True
     print network
-    logging.getLogger().setLevel(logging.DEBUG)
+    # logging.getLogger().setLevel(logging.DEBUG)
     optimized_network = run_optimizer(network)
     populate_weight_address(optimized_network)
 
