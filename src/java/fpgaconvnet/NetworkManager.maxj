@@ -10,6 +10,7 @@ import com.maxeler.maxcompiler.v2.managers.custom.stdlib.Max4MAIARingConnection;
 import com.maxeler.maxcompiler.v2.managers.custom.stdlib.MaxRingBidirectionalStream;
 import com.maxeler.maxcompiler.v2.managers.custom.stdlib.LMemInterface;
 import com.maxeler.maxcompiler.v2.managers.custom.stdlib.LMemCommandGroup;
+import com.maxeler.maxcompiler.v2.managers.custom.stdlib.MemoryControllerConfig;
 import com.maxeler.maxcompiler.v2.managers.engine_interfaces.CPUTypes;
 import com.maxeler.maxcompiler.v2.managers.engine_interfaces.EngineInterface;
 import com.maxeler.maxcompiler.v2.managers.engine_interfaces.EngineInterface.Direction;
@@ -283,7 +284,12 @@ public class NetworkManager extends CustomManager {
 
             for (Tuple3<String, DFELink, Integer> link : computationChains[i].getLMemInputs()) {
                 if (lmem == null) {
+                    MemoryControllerConfig config = new MemoryControllerConfig();
+                    config.setDataFIFODepth(32);
+                    config.setDataFifoImplementUsingLUTRAM(true);
+
                     lmem = addLMemInterface();
+                    lmem.setMemoryControllerConfig(config);
                 }
                 DFELink dataStream = lmem.addStreamFromLMem(
                         link.getFirst(),

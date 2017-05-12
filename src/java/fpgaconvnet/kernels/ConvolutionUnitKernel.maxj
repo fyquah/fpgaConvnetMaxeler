@@ -275,19 +275,30 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
                 return control.mux(lookAheadCounter.getKernelIter(), pixelChoices);
 
             } else {
-                Memory<DFEVar> pixelsMem = mem.alloc(
-                        GlobalConfig.dataType,
-                        Math.max(2, convParams.getLookAhead() * getKernelIterations()));
-                DFEVar pixel = control.mux(lookAheadCounter.getKernelIter(), pixelChoices);
-                pixelsMem.write(
-                        lookAheadCounter.getPixelAddress(),
-                        pixel,
-                        lookAheadCounter.getPixelWriteEnable());
+                DFEVar pixel;
 
-                return (lookAheadCounter.getPixelWriteEnable()
-                        ? pixel
-                        : pixelsMem.read(lookAheadCounter.getPixelAddress()));
+                if (pixelChoices.length == 1) {
+                    pixel = pixelChoices[0];
+                } else {
+                    pixel = control.mux(lookAheadCounter.getKernelIter(), pixelChoices);
+                }
 
+                if (convParams.getLookAhead() == 1) {
+                    return pixel;
+
+                } else {
+                    Memory<DFEVar> pixelsMem = mem.alloc(
+                            GlobalConfig.dataType,
+                            convParams.getLookAhead() * getKernelIterations());
+                    pixelsMem.write(
+                            lookAheadCounter.getPixelAddress(),
+                            pixel,
+                            lookAheadCounter.getPixelWriteEnable());
+
+                    return (lookAheadCounter.getPixelWriteEnable()
+                            ? pixel
+                            : pixelsMem.read(lookAheadCounter.getPixelAddress()));
+                }
             }
         }
 
