@@ -129,9 +129,10 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
 
         accumulator = new ConvolutionAccumulator(this, layerParams);
         accumulator.setInput(workerOutputList);
-        accumulator.setRawBiasInput(io.input(getBiasInputName(),
-                                             GlobalConfig.cpuType,
-                                             accumulator.getIsInitializingWeights()));
+        accumulator.setBiasInput(
+                io.input(getBiasInputName(),
+                    GlobalConfig.dataType,
+                    accumulator.getIsInitializingWeights()));
         if (lookAheadCounter != null) {
             accumulator.setEnableSignal(lookAheadCounter.getEnableSignal());
         } else {
@@ -320,20 +321,16 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
         /* TODO(fyq14): Optimize this. */
         DFEVectorType<DFEVar> weightInputType = new DFEVectorType<DFEVar>(
                 GlobalConfig.dataType, getWeightInputSize());
-        DFEVectorType<DFEVar> rawWeightInputType = new DFEVectorType<DFEVar>(
-                GlobalConfig.cpuType, getWeightInputSize());
 
         if (lmemWeightsInput != null) {
             return lmemWeightsInput;
 
         } else if (getWeightsLoadStrategy() == WeightsLoadStrategy.WITH_CACHE
                 || getWeightsLoadStrategy() == WeightsLoadStrategy.STREAM_FROM_LMEM) {
-            DFEVector<DFEVar> rawInputWeight = io.input(
+            lmemWeightsInput = io.input(
                     getLMemWeightName(),
-                    rawWeightInputType,
+                    weightInputType,
                     lookAheadCounter.getWeightsInputFlag());
-            lmemWeightsInput = rawInputWeight.cast(weightInputType);
-
             return lmemWeightsInput;
 
         } else {
@@ -341,8 +338,6 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
                     + " LMem-initialized weights net.");
 
         }
-
-        
     }
 
     private DFEVector<DFEVar> getCpuWeightsInput() {
@@ -350,15 +345,14 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
             return cpuWeightsInput;
 
         } else if (getWeightsLoadStrategy() == WeightsLoadStrategy.INIT_FROM_CPU) {
-            DFEVectorType<DFEVar> weightInputVectorType = new DFEVectorType<DFEVar>(
-                    GlobalConfig.dataType, layerParams.getConv().getKernelFoldingFactor());
-            DFEVectorType<DFEVar> rawWeightInputVectorType = new DFEVectorType<DFEVar>(
-                    GlobalConfig.cpuType, layerParams.getConv().getKernelFoldingFactor());
-            DFEVector<DFEVar> rawWeightsInputs = io.input(
+            DFEVectorType<DFEVar> weightInputVectorType =
+                new DFEVectorType<DFEVar>(
+                    GlobalConfig.dataType,
+                    layerParams.getConv().getKernelFoldingFactor());
+            cpuWeightsInput = io.input(
                     getCpuWeightsInputName(),
-                    rawWeightInputVectorType,
+                    weightInputVectorType,
                     cpuInitWeightsCounter.getWeightsInputFlag());
-            cpuWeightsInput = rawWeightsInputs.cast(weightInputVectorType);
             return cpuWeightsInput;
 
         } else {

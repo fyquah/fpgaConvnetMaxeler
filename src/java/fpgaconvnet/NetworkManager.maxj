@@ -53,7 +53,7 @@ public class NetworkManager extends CustomManager {
         InterfaceParam size = ei.addParam("size", CPUTypes.UINT64);
         InterfaceParam sizeInBytes = size;
 
-        ei.setStream("weights_in", CPUTypes.FLOAT, sizeInBytes);
+        ei.setStream("weights_in", CPUTypes.UINT16, sizeInBytes);
         ei.setLMemLinear("cpu2lmem", start, sizeInBytes);
         ei.ignoreAll(Direction.IN_OUT);
         return ei;
@@ -140,17 +140,18 @@ public class NetworkManager extends CustomManager {
                 for (Tuple3<String, DFELink, Integer> link : computationChains[j].getInitializerInputs()) {
                     ei.setStream(
                             link.getFirst(),
-                            CPUTypes.FLOAT,
-                            init ? link.getThird() * CPUTypes.FLOAT.sizeInBytes() : 0);
+                            CPUTypes.UINT16,
+                            init ? link.getThird() * 2 : 0);
                 }
                 for (Tuple3<String, DFELink, Integer> link : computationChains[j].getLMemInputs()) {
                     /* Third is stream size perPixel */
-                    int arrSize = link.getThird() * CPUTypes.FLOAT.sizeInBytes();
+                    int arrSize = link.getThird() * CPUTypes.UINT16.sizeInBytes();
                     InterfaceParam rwSize =
                             layerParams.getOutputHeight() * layerParams.getOutputWidth()
                             / layerParams.getConv().getLookAhead()
                             * N * arrSize;
-                    System.out.println("Addres base = " + layerParams.getConv().getWeightAddressBase());
+                    System.out.println(
+                            "Address base = " + layerParams.getConv().getWeightAddressBase());
                     ei.setLMemLinearWrapped(
                             link.getFirst(),                       /* streamName */
                             ei.addConstant(layerParams.getConv().getWeightAddressBase()), /* address */
@@ -162,7 +163,7 @@ public class NetworkManager extends CustomManager {
 
             } else if (isLrnLayer(layerParams)) {
                 InterfaceParam approx_factor = ei.addParam(
-                        "approx_factor_" + layerParams.getLayerId(), CPUTypes.FLOAT);
+                        "approx_factor_" + layerParams.getLayerId(), CPUTypes.UINT16);
                 computationChains[j].setScalar(ei, "approx_factor", approx_factor);
 
             }

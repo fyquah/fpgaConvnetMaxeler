@@ -131,7 +131,7 @@ public class ConvolutionLayer implements ComputationChain {
                 String.format("bias_%d", layer.getLayerId()),
                 convolutionUnit.getBlock().getInput(
                     convolutionUnit.getKernel().getBiasInputName()),
-                convolutionUnit.getKernel().initCycles()));
+                convolutionUnit.getKernel().biasInitStreamSize()));
         return ret;
     }
 

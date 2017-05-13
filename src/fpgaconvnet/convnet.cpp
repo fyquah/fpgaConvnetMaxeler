@@ -171,18 +171,49 @@ uint64_t calc_total_rom_size(const protos::LayerParameter & layer)
 static uint64_t calc_weights_vector_size(
         const protos::LayerParameter & layer)
 {
+    int stream_chunk_size = 384 / sizeof(fixed_point_t);
     uint64_t weights_per_iter =
             layer.conv().worker_factor()
             * layer.conv().conv_folding_factor()
             * layer.conv().kernel_folding_factor();
-    return div_ceil(weights_per_iter, 96) * 96;
+    return div_ceil(weights_per_iter, stream_chunk_size) * stream_chunk_size;
 }
 
 
 
 static bool is_layer_cpu_initialized(const protos::LayerParameter & layer)
 {
-    return layer.conv().bram_factor() >= (layer.num_inputs() * layer.num_outputs());
+    return layer.conv().bram_factor()
+        >= (layer.num_inputs() * layer.num_outputs());
+}
+
+static uint64_t calc_bias_stream_size(const protos::LayerParameter & layer)
+{
+    uint64_t stream_chunk_size = 16 / sizeof(fixed_point_t);
+    return div_ceil(layer.num_outputs(), stream_chunk_size)
+        * stream_chunk_size;
+}
+
+
+static void copy_float_to_fixed(fixed_point_t *dest, float *src, int size)
+{
+    const int num_frac_bits = 12;
+    const int num_int_bits = 4;
+    const float fixed_point_one = (1 << num_frac_bits);
+
+    for (int i = 0 ; i < size ; i++) {
+        int x = (int) (src[i] * fixed_point_one);
+
+        /* GCC gurantees that a right shift is a ASR rather than a LSR
+         * for signed integers.
+         */
+        uint16_t int_bits = (uint16_t) (x >> num_frac_bits);
+        uint16_t frac_bits = (x & ((1 << num_frac_bits) - 1));
+
+        dest[i] =
+            ((uint16_t) (int_bits << num_frac_bits))
+            | (frac_bits);
+    }
 }
 
 
@@ -435,7 +466,7 @@ void special_allign_and_place_kernel_weights(
 
 void allign_and_place_cpu_initialized_kernel_weights(
         const protos::LayerParameter & layer,
-        float *dest_base,
+        fixed_point_t *dest_base,
         float *src_base
 )
 {
@@ -462,10 +493,10 @@ void allign_and_place_cpu_initialized_kernel_weights(
                         + (worker * rom_per_worker)
                         + (conv * rom_per_conv);
 
-                std::memcpy(
+                copy_float_to_fixed(
                         dest_base + addr,
                         tmp + offset,
-                        sizeof(float) * layer.conv().kernel_folding_factor());
+                        layer.conv().kernel_folding_factor());
                 addr += layer.conv().kernel_folding_factor();
             }
         }
@@ -475,10 +506,9 @@ void allign_and_place_cpu_initialized_kernel_weights(
 }
 
 
-
 void allign_and_place_lmem_initialized_kernel_weights(
         const protos::LayerParameter & layer,
-        float *dest_base,
+        fixed_point_t *dest_base,
         float *src_base
 )
 {
@@ -505,10 +535,10 @@ void allign_and_place_lmem_initialized_kernel_weights(
                         + (worker * rom_per_worker)
                         + (conv * rom_per_conv);
 
-                std::memcpy(
+                copy_float_to_fixed(
                         dest_base + addr,
                         tmp + offset,
-                        sizeof(float) * layer.conv().kernel_folding_factor());
+                        layer.conv().kernel_folding_factor());
                 addr += layer.conv().kernel_folding_factor();
             }
         }
@@ -538,8 +568,8 @@ void Convnet::randomize_weights()
 void Convnet::set_layer_weights(
         max_actions_t *action,
         const protos::LayerParameter & layer,
-        float *worker_kernels,
-        float *bias
+        fixed_point_t *worker_kernels,
+        fixed_point_t *bias
 )
 {
     /* Requirements:
@@ -587,8 +617,9 @@ void Convnet::set_layer_weights(
         }
 
         sprintf(buffer, "bias_%d", layer.layer_id());
-        max_queue_input(action, buffer, bias,
-                        sizeof(float) * div_ceil(layer.num_outputs(), 4) * 4);
+        max_queue_input(
+                action, buffer, bias,
+                sizeof(fixed_point_t) * calc_bias_stream_size(layer));
     }
 
 }
@@ -643,11 +674,12 @@ void Convnet::constructor(
         if (it->has_conv()) {
             uint64_t worker_kernel_total_size =
                     calc_weights_vector_size(*it) * calc_total_iterations(*it);
+            uint64_t bias_total_size = calc_bias_stream_size(*it);
 
             conv_layer_params.push_back(*it);
             kernels.push_back(new float[calc_total_kernel_weights(*it)]);
-            bias.push_back(new float[div_ceil(it->num_outputs(), 4) * 4]);
-            worker_kernels.push_back(new float[worker_kernel_total_size]);
+            bias.push_back(new fixed_point_t[bias_total_size]);
+            worker_kernels.push_back(new fixed_point_t[worker_kernel_total_size]);
         }
 
         fpga_output_size[it->fpga_id()] =
@@ -697,13 +729,25 @@ void Convnet::load_weights_from_files(std::vector<std::string> filenames, file_f
 {
     log_stdout(INFO) << "Loading weights from file." << std::endl;
     for (int i = 0 ; i < conv_layer_params.size(); i++) {
+        float *bias_tmp = new float[calc_bias_stream_size(
+                conv_layer_params[i])];
+
         if (file_type == FORMAT_TXT) {
-            load_kernels_from_file(filenames[2 * i], conv_layer_params[i], kernels[i]);
-            load_bias_from_file(filenames[2 * i + 1], conv_layer_params[i], bias[i]);
+            load_kernels_from_file(
+                    filenames[2 * i], conv_layer_params[i], kernels[i]);
+            load_bias_from_file(
+                    filenames[2 * i + 1], conv_layer_params[i], bias_tmp);
         } else {
-            load_kernels_from_binary_file(filenames[2 * i], conv_layer_params[i], kernels[i]);
-            load_bias_from_binary_file(filenames[2 * i + 1], conv_layer_params[i], bias[i]);
+            load_kernels_from_binary_file(
+                    filenames[2 * i], conv_layer_params[i], kernels[i]);
+            load_bias_from_binary_file(
+                    filenames[2 * i + 1], conv_layer_params[i], bias_tmp);
         }
+
+        copy_float_to_fixed(
+                bias[i], bias_tmp, calc_bias_stream_size(conv_layer_params[i]));
+
+        delete[] bias_tmp;
     }
     log_stdout(INFO) << "Alligning weights." << std::endl;
     for (int i = 0; i < conv_layer_params.size() ; i++) {

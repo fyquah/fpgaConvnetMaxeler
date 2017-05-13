@@ -31,7 +31,7 @@ public class ConvolutionAccumulator extends KernelLib {
     private final DFEVectorType<DFEVar> outputVectorType;
     private final IterationCounter ctr;
     private final DFEVar batchCounter;
-    private final DFEVar rawBiasInput;
+    private final DFEVar biasInput;
     private final DFEVar isInitializingWeights;
     private final DFEVar enableSignal;
     private final DFEVar initWeightsFlag;
@@ -65,8 +65,8 @@ public class ConvolutionAccumulator extends KernelLib {
         }
     }
 
-    public void setRawBiasInput(DFEVar x) {
-        rawBiasInput <== x;
+    public void setBiasInput(DFEVar x) {
+        biasInput <== x;
     }
 
     public DFEVar getIsInitializingWeights() {
@@ -265,8 +265,7 @@ public class ConvolutionAccumulator extends KernelLib {
         outputControlFlag.simWatch("outputControlFlag");
 
         // Kernel IO interfaces
-        rawBiasInput = GlobalConfig.cpuType.newInstance(this);
-        DFEVar biasInput = rawBiasInput.cast(GlobalConfig.dataType);
+        biasInput = GlobalConfig.dataType.newInstance(this);
 
         for (int i = 0 ; i < layerParams.getConv().getWorkerFactor() ; i++) {
             inputVectors.add(inputVectorType.newInstance(this));

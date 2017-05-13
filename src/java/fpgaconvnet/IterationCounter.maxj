@@ -81,6 +81,34 @@ public class IterationCounter {
     /* The number of cycles required to populate the bias. */
     public int getBiasInitCycles() {
         // maxeler requires streams to be a multiple of 16 bytes = 4 * 4 bytes.
-        return Utils.divCeil(layerParams.getNumOutputs(), 4) * 4;
+        int bias_bytes = (GlobalConfig.fracBits + GlobalConfig.intBits) / 8;
+        int stream_chunk_size = 16 / bias_bytes;
+        return Utils.divCeil(layerParams.getNumOutputs(), stream_chunk_size)
+            * stream_chunk_size;
+    }
+
+    /* The number of cycles required to populate the BRAM weights (relevant only
+     * if we are storing all weights in BRAM
+     */
+    public int getWeightsRealInitCycles() {
+        return layerParams.getConv().getWorkerFactor()
+                * layerParams.getConv().getConvFoldingFactor()
+                * getSchedulerIterations()
+                * getConvolutionIterations()
+                * getKernelIterations();
+    }
+
+    /* The number of cycles required to populate the BRAM weights, including
+     * cycles where the FPGA simply stalls and do nothing (to cope with the
+     * stream size multiple requirements).
+     */
+    public int getWeightsInitCycles() {
+        int bias_bytes = (GlobalConfig.fracBits + GlobalConfig.intBits) / 8;
+        int stream_chunk_size = 16 / bias_bytes;
+        int multipleBase =
+                ((int) Utils.lcm(stream_chunk_size, layerParams.getConv().getKernelFoldingFactor()))
+                / layerParams.getConv().getKernelFoldingFactor();
+        return Utils.divCeil(getWeightsRealInitCycles(), multipleBase) * multipleBase;
+
     }
 }

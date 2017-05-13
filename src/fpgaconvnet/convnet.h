@@ -77,6 +77,8 @@ public:
     virtual const char* what() const throw();
 };
 
+typedef uint16_t fixed_point_t;
+
 
 /* On most cases, this is the class abstracts most of the crazy reallignment
  * calls that is needed.
@@ -85,8 +87,8 @@ class Convnet {
 private:
     protos::Network network_params;
     std::vector<float*> kernels;
-    std::vector<float*> worker_kernels;
-    std::vector<float*> bias;
+    std::vector<fixed_point_t*> worker_kernels;
+    std::vector<fixed_point_t*> bias;
     std::vector<float*> queue_weights;
     std::vector<protos::LayerParameter> conv_layer_params;
 
@@ -106,8 +108,8 @@ private:
     void set_layer_weights(
         max_actions_t *action,
         const protos::LayerParameter & layer,
-        float *kernels,
-        float *bias
+        fixed_point_t *kernels,
+        fixed_point_t *bias
     );
     void constructor(
             const protos::Network & network_params,
