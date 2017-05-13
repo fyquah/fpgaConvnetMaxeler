@@ -166,7 +166,7 @@ def conv_layer_bram(layer):
         pixels_bram = math.ceil(layer.conv.look_ahead * kernel_iterations / 20480)
     else:
         accumulator = 5  # Pessimistic estimates
-        pixels_bram = 2
+        pixels_bram = 0
 
     scheduler_kernel = (
             math.ceil(layer.num_inputs * NUM_BITS / 32.)
@@ -174,7 +174,7 @@ def conv_layer_bram(layer):
             * layer.conv.kernel_size)
     unit_kernel = (
             max(0, 0.09187 * kff - 5.8784)
-            + (7.0248 * (layer.conv.kernel_size ** 2))
+            + (7.0248 * layer.conv.kernel_size)
             + estimate_mem_alloc_bram(
                 type_length=wf * cff * kff,
                 num_units=calc_total_iters(layer))
