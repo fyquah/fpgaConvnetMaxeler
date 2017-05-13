@@ -25,6 +25,7 @@ public class CpuInitWeightsCounter extends KernelLib {
     final DFEVar initializationComplete;
     final DFEVar isInitializingWeights;
     final DFEVar isPaddingInit;
+    final DFEVar isDoneReadingBias;
     final DFEVar convIter;
     final DFEVar kernelIter;
     final int totalAddressCount;
@@ -50,7 +51,8 @@ public class CpuInitWeightsCounter extends KernelLib {
     }
 
     public DFEVar getEnableSignal() {
-        return ~isInitializingWeights;
+        return (initWeightsFlag & initializationComplete)
+            | (~initWeightsFlag & isDoneReadingBias);
     }
 
     public CpuInitWeightsCounter(ConvolutionUnitKernel kernel, LayerParameter argLayerParams) {
@@ -86,6 +88,16 @@ public class CpuInitWeightsCounter extends KernelLib {
                 .withEnable(initAddress.eq(totalAddressCount - 1)
                             & initConvIter.eq(layerParams.getConv().getConvFoldingFactor() - 1)
                             & initWorkerIter.eq(layerParams.getConv().getWorkerFactor() - 1)));
+        DFEVar numOutputCounter = control.count.simpleCounter(
+                Utils.ceilLog2(layerParams.getNumOutputs()),
+                layerParams.getNumOutputs());
+        isDoneReadingBias = control.count.makeCounter(
+                control.count.makeParams(1)
+                .withInc(1)
+                .withMax(1)
+                .withWrapMode(Count.WrapMode.STOP_AT_MAX)
+                .withEnable(numOutputCounter.eq(layerParams.getNumOutputs() - 1)))
+            .getCount();
 
         initWeightsFlag = dfeBool().newInstance(this);
         initializationComplete = initializationCompleteCtr.getCount();
@@ -93,12 +105,12 @@ public class CpuInitWeightsCounter extends KernelLib {
         isPaddingInit = paddingInitCtr.getCount();
 
         // Runtime
-        CounterChain chain = control.count.makeCounterChain(~isInitializingWeights);
+        CounterChain chain = control.count.makeCounterChain(getEnableSignal());
         convIter = Utils.chainCounterOrZero(this, chain, iterCounter.getConvolutionIterations());
         kernelIter = Utils.chainCounterOrZero(this, chain, iterCounter.getKernelIterations());
         weightAddress = makeSimpleEnableCounter(
                 totalAddressCount,
-                ~isInitializingWeights);
+                getEnableSignal());
     }
 
     public DFEVar getWeightAddress() {
@@ -124,11 +136,11 @@ public class CpuInitWeightsCounter extends KernelLib {
     }
 
     public DFEVar getInputControlFlag() {
-        return ~isInitializingWeights & convIter.eq(0) & kernelIter.eq(0);
+        return getEnableSignal() & convIter.eq(0) & kernelIter.eq(0);
     }
 
     public DFEVar getOutputControlFlag() {
-        return ~isInitializingWeights;
+        return getEnableSignal();
     }
 
     public DFEVar getKernelIter() {

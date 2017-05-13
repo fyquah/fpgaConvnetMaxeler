@@ -83,7 +83,7 @@ public class ConvolutionLayer implements ComputationChain {
         int initCycles = convolutionUnit.getKernel().initCycles();
         convUnitTicks =
                 numberOfImages * convolutionUnit.getKernel().cyclesPerImage()
-                + (init ? initCycles : 0);
+                + (init ? initCycles : layer.getNumOutputs());
         ei.setTicks(convolutionUnit.getKernel().getName(), convUnitTicks);
     }
 

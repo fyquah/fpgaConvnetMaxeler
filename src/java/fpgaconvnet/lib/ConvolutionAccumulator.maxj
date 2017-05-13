@@ -8,8 +8,8 @@ import java.util.ArrayList;
 import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
 import com.maxeler.maxcompiler.v2.kernelcompiler.KernelLib;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Count;
-import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Count.Counter;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.CounterChain;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.memory.Memory;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEType;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVector;
@@ -25,6 +25,7 @@ import fpgaconvnet.protos.Parameters.ConvolutionParameter;
 public class ConvolutionAccumulator extends KernelLib {
 
     private final List<DFEVector<DFEVar>> inputVectors;
+    private final Memory<DFEVar> biasStore;  /* Used for reloading when not initializing. */
     private final LayerParameter layerParams;
     private final ConvolutionParameter convParams;
     private final DFEVectorType<DFEVar> inputVectorType;
@@ -182,20 +183,39 @@ public class ConvolutionAccumulator extends KernelLib {
         output = outputVectorType.newInstance(this);
         inputVectors = new ArrayList<DFEVector<DFEVar>>();
 
-        // Counters for initialization
+        /* Counters for initialization and loading
+         *
+         * Notion of loading and initization is similar, but different. Loading
+         * is done when bias are not loaded directly from the CPU, but rather,
+         * from the BRAM on the FPGA.
+         *
+         * This will take fewer cycles as there is no stream size to allign to.
+         * (Hence, the number of loading cycles will be exactly numOutputs)
+         */
         DFEVar initChannel = control.count.simpleCounter(
                 Utils.ceilLog2(ctr.getBiasInitCycles()),
                 ctr.getBiasInitCycles());
-        Counter initializationCompleteCtr = control.count.makeCounter(
+        DFEVar loadChannel = control.count.simpleCounter(
+                Utils.ceilLog2(layerParams.getNumOutputs()),
+                layerParams.getNumOutputs());
+        DFEVar weightsAllInitialized = control.count.makeCounter(
                 control.count.makeParams(1)
                 .withInc(1)
                 .withMax(1)
                 .withWrapMode(Count.WrapMode.STOP_AT_MAX)
-                .withEnable(initChannel.eq(ctr.getBiasInitCycles() - 1)));
+                .withEnable(initChannel.eq(ctr.getBiasInitCycles() - 1)))
+            .getCount();
+        DFEVar weightsAllLoaded = control.count.makeCounter(
+                control.count.makeParams(1)
+                .withInc(1)
+                .withMax(1)
+                .withWrapMode(Count.WrapMode.STOP_AT_MAX)
+                .withEnable(loadChannel.eq(layerParams.getNumOutputs() - 1)))
+            .getCount();
  
         initWeightsFlag = dfeBool().newInstance(this);
-        DFEVar initializationComplete = initializationCompleteCtr.getCount();
-        isInitializingWeights = initWeightsFlag & ~initializationComplete;
+        isInitializingWeights = initWeightsFlag & ~weightsAllInitialized;
+        DFEVar isLoadingWeightsFromBram = ~initWeightsFlag & ~weightsAllLoaded;
 
         // Runtime Counters and loop variables
         batchCounter = makeSimpleEnableCounter(
@@ -208,7 +228,9 @@ public class ConvolutionAccumulator extends KernelLib {
 
         if (convParams.getLookAhead() == 1) {
             final int totalIter =
-                    ctr.getKernelIterations() * ctr.getConvolutionIterations() * ctr.getSchedulerIterations();
+                    ctr.getKernelIterations()
+                    * ctr.getConvolutionIterations()
+                    * ctr.getSchedulerIterations();
             CounterChain chain = control.count.makeCounterChain(enableSignal);
             Utils.chainCounterOrZero(this, chain, ctr.getSchedulerIterations());
             convIter = Utils.chainCounterOrZero(this, chain, ctr.getConvolutionIterations());
@@ -272,12 +294,20 @@ public class ConvolutionAccumulator extends KernelLib {
         }
 
         DFEVector<DFEVar> biasBuffer = biasVectorType.newInstance(this);
+
+        biasStore = mem.alloc(GlobalConfig.dataType, params.getNumOutputs());
+        biasStore.write(loadChannel, biasInput, ~weightsAllLoaded);
+        DFEVar biasRead = biasStore.read(loadChannel);
+
         optimization.pushPipeliningFactor(0.0);
         for (int i = 0 ; i < params.getNumOutputs() ; i++) {
+            DFEVar prev = stream.offset(biasBuffer[i], -1);
             biasBuffer[i] <== (
                     (isInitializingWeights & initChannel.eq(i))
                     ? biasInput
-                    : stream.offset(biasBuffer[i], -1));
+                    : (isLoadingWeightsFromBram & initChannel.eq(i)
+                        ? biasRead
+                        : prev));
         }
         optimization.popPipeliningFactor();
 
