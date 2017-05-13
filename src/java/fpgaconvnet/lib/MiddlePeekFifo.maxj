@@ -1,77 +1,92 @@
 package fpgaconvnet.lib;
 
-import java.lang.RuntimeException;
-
-import java.util.List;
-import java.util.ArrayList;
-
 import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
 import com.maxeler.maxcompiler.v2.kernelcompiler.KernelLib;
-import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Count;
-import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Count.Counter;
-import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.CounterChain;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
-import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEType;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVector;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVectorType;
 
-import fpgaconvnet.IterationCounter;
-import fpgaconvnet.GlobalConfig;
-import fpgaconvnet.Utils;
-import fpgaconvnet.protos.Parameters.LayerParameter;
-import fpgaconvnet.protos.Parameters.ConvolutionParameter;
 
-
-/* input.size == elementSize
- * output[height][peekWidth].size == elementSize
+/* input.size == elementType.size
+ * output[height][peekWidth].size == elementType.size
  */
 public class MiddlePeekFifo extends KernelLib {
-
-    private final int width;
-    private final int height;
-    private final int peekWidth;
-    private final int elementSize;
 
     public static class Builder {
         private int width;
         private int height;
         private int peekWidth;
-        private int elementSize;
+        private DFEVectorType<DFEVar> elementType;
 
         public Builder() {}
         public Builder setHeight(int x) { height = x; return this; }
         public Builder setWidth(int x) { width = x; return this; }
         public Builder setPeekWidth(int x) { peekWidth = x; return this; }
-        public Builder setElementSize(int x) { elementSize = x; return this; }
+        public Builder setElementType(DFEVectorType<DFEVar> x) {
+            elementType = x;
+            return this;
+        }
         public int getHeight() { return height; }
         public int getWidth() { return width; }
         public int getPeekWidth() { return peekWidth; }
-        public int getElementSize() { return elementSize; }
+        public DFEVectorType<DFEVar> getElementType() { return elementType; }
 
-        public MiddlePeekFifo build () {
-            return new MiddlePeekFifo(height, width, peekWidth, elementSize);
+        public MiddlePeekFifo build (Kernel owner) {
+            return new MiddlePeekFifo(owner, this);
         }
     }
+    
+    private int height;
+    private int width;
+    private int peekWidth;
+    private DFEVectorType<DFEVar> elementType;
 
     private DFEVector<DFEVar> input;
     private DFEVector<DFEVar>[][] outputWindow;
-    private  bramFifos;
-    private DFEVar[] bramIndices;
+    private BramFifo bramFifos[];
 
-    private void joinLutFifos() {
+    public MiddlePeekFifo(KernelLib owner, Builder builder) {
+        super(owner);
+        height = builder.getHeight();
+        width = builder.getWidth();
+        peekWidth = builder.getPeekWidth();
+        elementType = builder.getElementType();
+        input = elementType.newInstance(this);
+
+        bramFifos = new BramFifo[height - 1];
+        for (int i = 0 ; i < bramFifos.length ; i++) {
+            bramFifos[i] = new BramFifo(this, elementType, width - peekWidth);
+        }
+
+        pushToBramFifos();
+        joinOutputWindow();
+    }
+
+    private void pushToBramFifos() {
+        for (int i = 0 ; i < height - 1 ; i++) {
+            if (i == 0) {
+                bramFifos[i].getInput() <== stream.offset(input, -peekWidth);
+            } else {
+                bramFifos[i].getInput() <== stream.offset(
+                        bramFifos[i - 1].getOutput(), -peekWidth);
+            }
+        }
+    }
+
+    private void joinOutputWindow() {
         for (int i = 0 ; i < height ;  i++) {
-            for (int j = 0 ; j < peekWidth j++) {
+            for (int j = 0 ; j < peekWidth; j++) {
                 if (i == 0) {
                     outputWindow[i][j] = stream.offset(input, -j);
                 } else {
-                    
+                    outputWindow[i][j] = stream.offset(
+                            bramFifos[i - 1].getOutput(), -j);
                 }
             }
         }
-
     }
 
-    public void getInput() {
+    public DFEVector<DFEVar> getInput() {
         return input;
     }
 }

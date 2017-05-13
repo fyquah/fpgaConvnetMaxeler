@@ -1,6 +1,5 @@
 package fpgaconvnet.lib;
 
-import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
 import com.maxeler.maxcompiler.v2.kernelcompiler.KernelLib;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.memory.Memory;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
@@ -19,7 +18,7 @@ public class BramFifo extends KernelLib {
     private final DFEVectorType<DFEVar> type;
     private final int size;
 
-    public BramFifo (Kernel owner, DFEVectorType<DFEVar> argType, int argSize) {
+    public BramFifo (KernelLib owner, DFEVectorType<DFEVar> argType, int argSize) {
         super(owner);
         size = argSize;
         type = argType;
