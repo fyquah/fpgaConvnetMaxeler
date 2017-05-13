@@ -314,8 +314,11 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
                 layerParams.getConv().getWorkerFactor()
                 * layerParams.getConv().getConvFoldingFactor()
                 * layerParams.getConv().getKernelFoldingFactor();
-        return Utils.divCeil(size, GlobalConfig.burstSizeBytes / 4)
-                * (GlobalConfig.burstSizeBytes / 4);
+        final int element_byte_size =
+            (GlobalConfig.fracBits + GlobalConfig.intBits) / 8;
+
+        return Utils.divCeil(size, GlobalConfig.burstSizeBytes / element_byte_size)
+                * (GlobalConfig.burstSizeBytes / element_byte_size);
     }
 
     private DFEVector<DFEVar> getLMemWeightsInput() {
@@ -329,6 +332,10 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
 
         } else if (getWeightsLoadStrategy() == WeightsLoadStrategy.WITH_CACHE
                 || getWeightsLoadStrategy() == WeightsLoadStrategy.STREAM_FROM_LMEM) {
+            System.out.println(
+                    "LMem input size in bytes = "
+                    + getWeightInputSize());
+
             lmemWeightsInput = io.input(
                     getLMemWeightName(),
                     weightInputType,

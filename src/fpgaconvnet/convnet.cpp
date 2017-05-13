@@ -793,10 +793,12 @@ void Convnet::max_init_weights()
         auto & layer = conv_layer_params[i];
         max_actions_t *write_action = max_actions_init(
                 max_files[conv_layer_params[i].fpga_id()], "writeLMem");
-        const uint64_t address = conv_layer_params[i].conv().weight_address_base();
+        const uint64_t address =
+                conv_layer_params[i].conv().weight_address_base();
         const uint64_t stream_size =
-                calc_total_iterations(layer) * calc_weights_vector_size(layer)
-                * sizeof(float);
+                calc_total_iterations(layer)
+                * calc_weights_vector_size(layer)
+                * sizeof(fixed_point_t);
 
         log_stdout(INFO) << "Initializing weights in LMEM at layer "
             << conv_layer_params[i].layer_id()
