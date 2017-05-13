@@ -76,14 +76,27 @@ public class LookAheadCounter extends KernelLib {
 
         DFEVar initCycleIter = control.count.simpleCounter(
                 Utils.ceilLog2(initCycles()), initCycles());
+        DFEVar biasLoadIter = control.count.simpleCounter(
+                Utils.ceilLog2(layerParams.getNumOutputs()), layerParams.getNumOutputs());
         DFEVar initializationComplete = control.count.makeCounter(
                 control.count.makeParams(1)
                 .withInc(1)
                 .withMax(1)
                 .withWrapMode(Count.WrapMode.STOP_AT_MAX)
-                .withEnable(initCycleIter.eq(initCycles() - 1))).getCount();
+                .withEnable(initCycleIter.eq(initCycles() - 1))
+                ).getCount();
+        DFEVar doneLoadingBiasFromBram = control.count.makeCounter(
+                control.count.makeParams(1)
+                .withInc(1)
+                .withMax(1)
+                .withWrapMode(Count.WrapMode.STOP_AT_MAX)
+                .withEnable(biasLoadIter.eq(layerParams.getNumOutputs() - 1))
+                ).getCount();
+
         initWeightsFlag = dfeBool().newInstance(this);
-        enableSignal = ~initWeightsFlag | initializationComplete;
+        enableSignal =
+            (initWeightsFlag & initializationComplete)
+            | (~initWeightsFlag & doneLoadingBiasFromBram);
 
         DFEVar batchCounter = makeSimpleEnableCounter(
                 convParams.getLookAhead() * ctr.getTotalIterations(), enableSignal);
