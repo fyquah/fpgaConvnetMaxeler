@@ -34,7 +34,7 @@ import fpgaconvnet.protos.Parameters.LayerParameter;
 
 public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
     private final DFEVectorType<DFEVar> inputVectorType, outputVectorType;
-    private final SlidingWindow[] slidingWindows;
+    private final SlidingWindow slidingWindows;
     private final DFEVector<DFEVar> input;
     private final List<DFEVector<DFEVar>> output_y;
     private final Dimension inputDimension;
@@ -57,20 +57,20 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
         outputVectorType = new DFEVectorType<DFEVar>(GlobalConfig.dataType, kernelDim * kernelDim);
         input = inputVectorType.newInstance(this);
         output_y = new ArrayList<DFEVector<DFEVar>>();;
-        slidingWindows = new SlidingWindow[inputDimension.channels()];
-        for (int i = 0 ; i < workerFactor; i++) {
-            output_y.add(outputVectorType.newInstance(this));
-        }
-        for (int i = 0 ; i < inputDimension.channels() ; i++) {
-            slidingWindows[i] = new SlidingWindow(
+        slidingWindows = new SlidingWindow(
                 this,
-                input[i],
+                input,
                 inputDimension.height(),
                 inputDimension.width(),
                 kernelDim,
                 getSchedulerIterations(),
                 constant.var(GlobalConfig.dataType, 0.0),
                 -(kernelDim / 2));
+
+        for (int i = 0 ; i < workerFactor; i++) {
+            output_y.add(outputVectorType.newInstance(this));
+        }
+        for (int i = 0 ; i < inputDimension.channels() ; i++) {
         }
         row = Utils.chainCounterOrZero(this, masterChain, inputDimension.height());
         col = Utils.chainCounterOrZero(this, masterChain, inputDimension.width());
@@ -153,13 +153,13 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
         Utils.assertTrue(channels.size() != 0);
 
         if (channels.size() == 1) {
-            return slidingWindows[channels[0]].output;
+            return slidingWindows.getChannelOutput(channels[0]);
         }
 
         List<DFEVector<DFEVar>> arr = new ArrayList<DFEVector<DFEVar>>();
         for (int chan : channels) {
             if (chan != -1) {
-                arr.add(slidingWindows[chan].output);
+                arr.add(slidingWindows.getChannelOutput(chan));
             } else {
                 arr.add(zeroVector(outputVectorType));
             }

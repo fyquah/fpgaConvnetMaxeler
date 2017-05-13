@@ -34,7 +34,7 @@ import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.CounterChain;
  */
 
 public class SlidingWindow extends KernelLib {
-    public final DFEVector<DFEVar> output;
+    private final List<DFEVector<DFEVar>> output;
     private final DFEVar row;
     private final DFEVar col;
     private final CounterChain chain;
@@ -43,7 +43,7 @@ public class SlidingWindow extends KernelLib {
     // around a input stream
     public SlidingWindow(
         Kernel argKernel,
-        DFEVar input,
+        DFEVector<DFEVar> input,
         int inputHeight,
         int inputWidth,
         int kernelDim,
@@ -52,10 +52,10 @@ public class SlidingWindow extends KernelLib {
         int offset
     ) {
         super(argKernel);
-        DFEVectorType<DFEVar> vectorType = new DFEVectorType<DFEVar>(
-                input.getType(),
-                kernelDim * kernelDim);
-        output = vectorType.newInstance(argKernel);
+        output = new ArrayList<DFEVector<DFEVar>>();
+        for (int i = 0 ; i < kernelDim * kernelDim ; i++) {
+            output.add(input.getType().newInstance(this));
+        }
 
         chain = control.count.makeCounterChain();
         row = Utils.chainCounterOrZero(this, chain, inputHeight);
@@ -66,6 +66,11 @@ public class SlidingWindow extends KernelLib {
                 Utils.ceilLog2(inputHeight + kernelDim - 1 + offset) + 1);
         final DFEType colType = dfeInt(
                 Utils.ceilLog2(inputWidth + kernelDim - 1 + offset) + 1);
+        final DFEVector<DFEVar> paddedVector =
+                input.getType().newInstance(this);
+        for (int i = 0 ; i < input.getSize() ; i++) {
+            paddedVector[i] <== paddedPixels;
+        }
 
 
         for (int i = 0 ; i < kernelDim ; i++) {
@@ -79,16 +84,24 @@ public class SlidingWindow extends KernelLib {
                          & (col.cast(colType) + (j + offset) < inputWidth));
 
                 output[i * kernelDim + j] <==
-                        flag ? stream.offset(input, streamOffset) : paddedPixels;
+                        flag ? stream.offset(input, streamOffset) : paddedVector;
             }
         }
     }
 
-    public List<DFEVar> asList() {
-        List<DFEVar> l = new ArrayList<DFEVar>();
-        for (int i = 0 ; i < output.getSize() ; i++) {
-            l.add(output[i]);
+    public DFEVector<DFEVar> getChannelOutput(int channel) {
+        /* The variable output has dimensions window_size * channels, we
+         * want to transpose it in this return value.
+         */
+        int windowSize = output.size();
+        DFEVectorType<DFEVar> returnType = new DFEVectorType<DFEVar>(
+                GlobalConfig.dataType, windowSize);
+        DFEVector<DFEVar> ret = returnType.newInstance(this);
+
+        for (int i = 0 ; i < windowSize ; i++) {
+            ret[i] <== output[i][channel];
         }
-        return l;
+
+        return ret;
     }
 }

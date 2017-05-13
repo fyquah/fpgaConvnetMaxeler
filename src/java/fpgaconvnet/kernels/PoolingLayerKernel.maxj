@@ -31,7 +31,7 @@ public class PoolingLayerKernel extends Kernel {
     DFEVector<DFEVar> output;
     LayerParameter layerParams;
     DFEVar[] poolingUnits;
-    SlidingWindow[] slidingWindows;
+    SlidingWindow slidingWindows;
 
     private static final AssociativeOp<DFEVar> dfeMaxOp = new AssociativeOp<DFEVar>(){
         @Override
@@ -123,30 +123,42 @@ public class PoolingLayerKernel extends Kernel {
         }
 
         poolingUnits = new DFEVar[channelFoldingFactor];
-        slidingWindows = new SlidingWindow[channelFoldingFactor];
+        DFEVector<DFEVar> poolerInput =
+            new DFEVectorType<DFEVar>(
+                    GlobalConfig.dataType, channelFoldingFactor)
+            .newInstance(this);
+        for (int i = 0 ; i < channelFoldingFactor ; i++) {
+            poolerInput[i] <== toMuxedPixel(poolingIter, i);
+        }
+
+        slidingWindows = new SlidingWindow(
+            this,
+            poolerInput,
+            inputDimension.height(),
+            inputDimension.width(),
+            poolingDim,
+            getPixelIterations(),
+            constant.var(GlobalConfig.dataType, (double) paddedPixel),
+            0
+        );
+
         for (int i = 0 ; i < channelFoldingFactor ; i++) {
 
             DFEVar poolerOutput = null;
-            DFEVar poolerInput = toMuxedPixel(poolingIter, i);
-
-            slidingWindows[i] = new SlidingWindow(
-                this,
-                poolerInput,
-                inputDimension.height(),
-                inputDimension.width(),
-                poolingDim,
-                getPixelIterations(),
-                constant.var(GlobalConfig.dataType, (double) paddedPixel),
-                0
-            );
 
             if (poolingType.equals(PoolingParameter.PoolingType.Average)) {
                 op = dfeSumOp;
-                poolerOutput = TreeReduce.reduce(op, slidingWindows[i].asList()) * dividend;
+                poolerOutput =
+                    TreeReduce.reduce(op,
+                            Utils.vectorToList(
+                                slidingWindows.getChannelOutput(i)))
+                    * dividend;
 
             } else if (poolingType.equals(PoolingParameter.PoolingType.Max)) {
                 op = dfeMaxOp;
-                poolerOutput = TreeReduce.reduce(op, slidingWindows[i].asList());
+                poolerOutput = TreeReduce.reduce(
+                        op,
+                        Utils.vectorToList(slidingWindows.getChannelOutput(i)));
 
             } else {
                 throw new RuntimeException("Unknown Pooling type!");

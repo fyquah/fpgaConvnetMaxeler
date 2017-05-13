@@ -15,6 +15,7 @@ import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
 import com.maxeler.maxcompiler.v2.kernelcompiler.KernelLib;
 import com.maxeler.maxcompiler.v2.utils.Bits;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVector;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.CounterChain;
 
 import fpgaconvnet.protos.Parameters;
@@ -452,5 +453,15 @@ public class Utils {
 
     public static DFEVar modInc(DFEVar x, int cap) {
         return (x.eq(cap - 1) ? 0 : x + 1);
+    }
+
+    public static List<DFEVar> vectorToList(DFEVector<DFEVar> v) {
+        List<DFEVar> ret = new ArrayList<DFEVar>();
+
+        for (int i = 0 ; i < v.getSize() ; i++) {
+            ret.add(v[i]);
+        }
+
+        return ret;
     }
 }
