@@ -1,0 +1,62 @@
+package fpgaconvnet.lib;
+
+import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
+import com.maxeler.maxcompiler.v2.kernelcompiler.KernelLib;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.memory.Memory;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVector;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVectorType;
+
+import fpgaconvnet.Utils;
+
+
+public class BramFifo extends KernelLib {
+    private final Memory<DFEVector<DFEVar>> bram;
+
+    private final DFEVar enable;
+    private final DFEVector<DFEVar> read;
+    private final DFEVector<DFEVar> input;
+    private final DFEVectorType<DFEVar> type;
+    private final int size;
+
+    public BramFifo (Kernel owner, DFEVectorType<DFEVar> argType, int argSize) {
+        super(owner);
+        size = argSize;
+        type = argType;
+
+        enable = dfeBool().newInstance(this);
+        input = type.newInstance(this);
+
+        DFEVar writeAddr =
+            control.count.makeCounter(
+                control.count.makeParams(Utils.ceilLog2(size))
+                .withInitValue(0l)
+                .withInc(1l)
+                .withMax(size)
+                .withEnable(enable)).getCount();
+        DFEVar readAddr =
+            control.count.makeCounter(
+                control.count.makeParams(Utils.ceilLog2(size))
+                .withInitValue(1l)
+                .withInc(1l)
+                .withMax(size)
+                .withEnable(enable)).getCount();
+        bram = mem.alloc(type, size);
+
+        bram.write(writeAddr, input, enable);
+        read = bram.read(readAddr);
+    }
+
+    public DFEVar getEnable() {
+        return enable;
+    }
+
+    public DFEVector<DFEVar> getInput() {
+        return input;
+    }
+
+    public DFEVector<DFEVar> getOutput() {
+        return read;
+    }
+}
+
