@@ -276,7 +276,7 @@ public class ConvolutionAccumulator extends KernelLib {
         optimization.pushPipeliningFactor(0.0);
         for (int i = 0 ; i < params.getNumOutputs() ; i++) {
             biasBuffer[i] <== (
-                    initChannel.eq(i)
+                    (isInitializingWeights & initChannel.eq(i))
                     ? biasInput
                     : stream.offset(biasBuffer[i], -1));
         }
