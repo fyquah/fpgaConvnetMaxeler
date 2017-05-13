@@ -194,6 +194,25 @@ static uint64_t calc_bias_stream_size(const protos::LayerParameter & layer)
         * stream_chunk_size;
 }
 
+static uint64_t calc_cpu_weights_stream_size(
+        const protos::LayerParameter & layer)
+{
+    uint64_t stream_chunk_size = 16 / sizeof(fixed_point_t);
+    uint64_t multiple_base =
+        lcm(stream_chunk_size, layer.conv().kernel_folding_factor())
+        / layer.conv().kernel_folding_factor();
+
+    uint64_t total_rom_size = calc_total_rom_size(layer);
+    uint64_t num_iters =
+        total_rom_size / layer.conv().kernel_folding_factor();
+    uint64_t padded_num_iters =
+        div_ceil(num_iters, multiple_base) * multiple_base;
+    uint64_t padded_rom_size =
+        padded_num_iters * layer.conv().kernel_folding_factor();
+
+    return padded_rom_size;
+}
+
 
 static void copy_float_to_fixed(fixed_point_t *dest, float *src, int size)
 {
@@ -578,14 +597,6 @@ void Convnet::set_layer_weights(
      *   kff.
      */
     char buffer[30];
-    uint64_t multiple_base = lcm(4, layer.conv().kernel_folding_factor())
-            / layer.conv().kernel_folding_factor();
-    uint64_t total_rom_size = calc_total_rom_size(layer);
-    uint64_t num_iters = total_rom_size / layer.conv().kernel_folding_factor();
-    uint64_t padded_num_iters = div_ceil(num_iters, multiple_base) * multiple_base;
-    uint64_t padded_rom_size =
-            padded_num_iters * layer.conv().kernel_folding_factor();
-
     sprintf(buffer, "kernel_%d", layer.layer_id());
 
     if (initialized_weights) {
@@ -605,14 +616,17 @@ void Convnet::set_layer_weights(
                 << std::endl;
 
         if (is_layer_cpu_initialized(layer)) {
-            float *values = new float[padded_rom_size];
+            uint64_t stream_size = calc_cpu_weights_stream_size(layer);
+            uint16_t *values = new uint16_t[stream_size];
+
             queue_weights.push_back(values);
-            std::memcpy(values, worker_kernels, sizeof(float) * total_rom_size);
-            max_queue_input(
-                    action,
-                    buffer,
+            std::memcpy(
                     values,
-                    sizeof(float) * padded_rom_size);
+                    worker_kernels,
+                    sizeof(fixed_point_t) * stream_size);
+            max_queue_input(
+                    action, buffer, values,
+                    sizeof(fixed_point_t) * stream_size);
 
         }
 

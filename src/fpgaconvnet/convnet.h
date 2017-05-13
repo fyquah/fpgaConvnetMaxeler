@@ -89,7 +89,7 @@ private:
     std::vector<float*> kernels;
     std::vector<fixed_point_t*> worker_kernels;
     std::vector<fixed_point_t*> bias;
-    std::vector<float*> queue_weights;
+    std::vector<fixed_point_t*> queue_weights;
     std::vector<protos::LayerParameter> conv_layer_params;
 
     uint64_t input_size;

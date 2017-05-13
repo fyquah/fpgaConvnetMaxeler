@@ -197,11 +197,13 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
 
     public int kernelsInitStreamSize() {
         // size of every weight input Vector.
-        return cpuInitWeightsCounter.initCycles() * layerParams.getConv().getKernelFoldingFactor();
+        return cpuInitWeightsCounter.initCycles()
+            * layerParams.getConv().getKernelFoldingFactor();
     }
 
     public int cyclesPerImage() {
-        int totalOutputPixels = layerParams.getOutputHeight() * layerParams.getOutputWidth();
+        int totalOutputPixels = layerParams.getOutputHeight()
+                                * layerParams.getOutputWidth();
         int cyclesPerPixel = getSchedulerIterations()
                 * getConvolutionIterations()
                 * getKernelIterations();

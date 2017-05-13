@@ -103,12 +103,15 @@ public class IterationCounter {
      * stream size multiple requirements).
      */
     public int getWeightsInitCycles() {
-        int bias_bytes = (GlobalConfig.fracBits + GlobalConfig.intBits) / 8;
-        int stream_chunk_size = 16 / bias_bytes;
+        int number_bytes = (GlobalConfig.fracBits + GlobalConfig.intBits) / 8;
+        int stream_chunk_size = 16 / number_bytes;
         int multipleBase =
-                ((int) Utils.lcm(stream_chunk_size, layerParams.getConv().getKernelFoldingFactor()))
+                ((int) Utils.lcm(
+                    stream_chunk_size,
+                    layerParams.getConv().getKernelFoldingFactor()))
                 / layerParams.getConv().getKernelFoldingFactor();
-        return Utils.divCeil(getWeightsRealInitCycles(), multipleBase) * multipleBase;
+        return Utils.divCeil(
+                getWeightsRealInitCycles(), multipleBase) * multipleBase;
 
     }
 }
