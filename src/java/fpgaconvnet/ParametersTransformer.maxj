@@ -236,6 +236,11 @@ public class ParametersTransformer {
                         "Worker factor in convolution layer must be strictly between "
                         + "inclusive 1 and num_inputs");
             }
+            if (layer.getNumInputs() % layer.getConv().getWorkerFactor() != 0) {
+                raiseError(layer.getLayerId(),
+                        "worker factor must divide num inputs. This is required to optimize"
+                        + " fifo usage.");
+            }
             if (checkOutOfRange(layer.getConv().getConvFoldingFactor(), layer.getNumOutputs())) {
                 raiseError(layer.getLayerId(),
                         "Conv folding factor in convolution layer must be strictly between "

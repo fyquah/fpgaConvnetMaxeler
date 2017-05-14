@@ -93,9 +93,9 @@ run_large_layer_test_dfe: large_layer_test_dfe $(LARGE_LAYER_TEST_DATA) $(LARGE_
 
 # ---- Debug ----
 
-debug:
+debugsim:
 	maxdebug -v -g LARGE_LAYER_TESTGraph -s LARGE_LAYER_TESTGraph -c -d $(USER)a0:$(USER)a \
-	    LARGE_LAYER_TEST_SIM_MAXFILE
+	    $(LARGE_LAYER_TEST_SIM_MAXFILE)
 
 sim: large_layer_test_sim
 

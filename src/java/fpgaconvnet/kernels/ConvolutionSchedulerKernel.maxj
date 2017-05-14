@@ -53,8 +53,9 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
         masterChain = control.count.makeCounterChain();
         inputVectorType = new DFEVectorType<DFEVar>(
                 GlobalConfig.dataType,
-                inputDimension.channels());
-        outputVectorType = new DFEVectorType<DFEVar>(GlobalConfig.dataType, kernelDim * kernelDim);
+                layerParams.getConv().getWorkerFactor());
+        outputVectorType = new DFEVectorType<DFEVar>(
+                GlobalConfig.dataType, kernelDim * kernelDim);
         input = inputVectorType.newInstance(this);
         output_y = new ArrayList<DFEVector<DFEVar>>();;
         slidingWindows = new SlidingWindow(
@@ -92,20 +93,19 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
         if (layerParams.getIsFirstLayer()) {
             /* First layer - cast from dfefloat to fixed point. */
             DFEVectorType<DFEVar> rawInputVectorType = new DFEVectorType<DFEVar>(
-                    GlobalConfig.cpuType, inputDimension.channels());
+                    GlobalConfig.cpuType, layerParams.getConv().getWorkerFactor());
             DFEVector<DFEVar> rawInput = io.input(
-                    getInputName(), rawInputVectorType, iter.eq(0));
+                    getInputName(), rawInputVectorType);
 
-            for (int i = 0 ; i < inputDimension.channels() ; i++) {
+            for (int i = 0 ; i < rawInput.getSize() ; i++) {
                 input[i] <== rawInput[i].cast(GlobalConfig.dataType);
             }
         } else {
-            input <== io.input(getInputName(), inputVectorType, iter.eq(0));
+            input <== io.input(getInputName(), inputVectorType);
         }
 
         for (int workerId = 0 ; workerId < workerFactor ; workerId++) {
-            List<Integer> channelList = getSchedulerChannels(workerId);
-            DFEVector<DFEVar> pixelWindow = toMuxedPixelChecked(iter, channelList);
+            DFEVector<DFEVar> pixelWindow = slidingWindows.getChannelOutput(workerId);
 
             io.output(getOutputName(workerId), pixelWindow, outputVectorType, outputControlFlag);
         }
@@ -143,29 +143,4 @@ public class ConvolutionSchedulerKernel extends ConvolutionKernelBase {
 
         return newVector;
     }
-
-    protected DFEVector<DFEVar> toMuxedPixelChecked(DFEVar iter, List<Integer> channels) {
-        Utils.assertTrue(channels.size() == getSchedulerIterations());
-        return toMuxedPixel(iter, channels);
-    }
-
-    protected DFEVector<DFEVar> toMuxedPixel(DFEVar iter, List<Integer> channels) {
-        Utils.assertTrue(channels.size() != 0);
-
-        if (channels.size() == 1) {
-            return slidingWindows.getChannelOutput(channels[0]);
-        }
-
-        List<DFEVector<DFEVar>> arr = new ArrayList<DFEVector<DFEVar>>();
-        for (int chan : channels) {
-            if (chan != -1) {
-                arr.add(slidingWindows.getChannelOutput(chan));
-            } else {
-                arr.add(zeroVector(outputVectorType));
-            }
-        }
-        return control.mux(iter, arr);
-    }
-
-
 }
