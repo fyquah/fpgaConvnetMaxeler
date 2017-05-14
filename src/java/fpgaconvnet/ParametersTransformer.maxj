@@ -4,6 +4,8 @@ package fpgaconvnet;
 
 import java.lang.RuntimeException;
 
+import java.util.ArrayList;
+
 import fpgaconvnet.protos.Parameters;
 import fpgaconvnet.protos.Parameters.LayerParameter;
 import fpgaconvnet.protos.Parameters.ConvolutionParameter;
@@ -328,6 +330,69 @@ public class ParametersTransformer {
         return fullOnChipBramFactor == layerParams.getConv().getBramFactor();
     }
 
+    private LayerParameter allignIOWidth(
+            LayerParameter prev,
+            LayerParameter cur,
+            LayerParameter next) {
+
+        LayerParameter.Builder builder = LayerParameter.newBuilder();
+        builder.mergeFrom(cur);
+        builder.setOutputVectorWidth(cur.getNumOutputs());
+
+        // TODO(fyq14): Figure out how to apply this to optimize FIFO usage
+        //              for maxring. The difficulty lies in getting it right
+        //              such that we don't have the input stream to be a
+        //              multiple of a ridiculous number of multiples.
+        if (!cur.getParamsCase().equals(LayerParameter.ParamsCase.CONV)
+                || (next != null && next.getFpgaId() != cur.getFpgaId())) {
+            return builder.build();
+        }
+
+        if (next == null) {
+            // allign width with PCIe (128 bits) and 32 bits output (at the
+            // last layer, the numbers are casted to floating point).
+            int size = 128 / 32;
+            builder.setOutputVectorWidth(size);
+
+        } else if (next.getParamsCase().equals(LayerParameter.ParamsCase.CONV)) {
+            // allign width with next layer's worker factor
+            builder.setOutputVectorWidth(next.getConv().getWorkerFactor());
+
+        }
+
+        if (builder.getOutputVectorWidth() >= cur.getNumOutputs()) {
+            builder.setOutputVectorWidth(cur.getNumOutputs());
+        } else {
+            int convIterations = new IterationCounter(cur).getTotalIterations();
+            int conversionCycles = -1;
+
+            /*
+             * find the largest divisor of numOutputs which is
+             * <= output_vector_width
+             */
+            for (int i = builder.getOutputVectorWidth(); i >= 1 ; i--) {
+                if (cur.getNumOutputs() % i == 0) {
+                    conversionCycles = cur.getNumOutputs() / i;
+                    break;
+                }
+            }
+            if (conversionCycles == -1) {
+                throw new RuntimeException("this shouldn't happen.");
+            }
+
+            /* This condition checks if it is difficult to efficiently pipeline the
+             * size conversion. (It is very much possible tho - I am just lazy
+             * to implement that for now as i don't see it happening really
+             * often with large nets).
+             */
+            if (conversionCycles >= convIterations) {
+                builder.setOutputVectorWidth(cur.getNumOutputs());
+            }
+        }
+
+        return builder.build();
+    }
+
     public Parameters.Network transform() throws RuntimeException {
         Parameters.Network.Builder networkBuilder = Parameters.Network.newBuilder();
         int weightAddressBase = 0;
@@ -335,10 +400,12 @@ public class ParametersTransformer {
         if (layerCount == 0) {
             raiseError(0, "Number of layers in networkParameters must be greater than 1");
         }
+
+        ArrayList<LayerParameter> layersTemporal = new ArrayList<LayerParameter>();
         LayerParameter previousLayer = parseLayer(
                 0, networkParameters.getLayer(0), null, weightAddressBase);
         verifyLayerParameters(previousLayer);
-        networkBuilder.addLayer(previousLayer);
+        layersTemporal.add(previousLayer);
 
         for (int i = 1; i < layerCount ; i++) {
             if (previousLayer.getParamsCase().equals(LayerParameter.ParamsCase.CONV)
@@ -347,7 +414,23 @@ public class ParametersTransformer {
             }
             previousLayer = parseLayer(i, networkParameters.getLayer(i), previousLayer, weightAddressBase);
             verifyLayerParameters(previousLayer);
-            networkBuilder.addLayer(previousLayer);
+            layersTemporal.add(previousLayer);
+        }
+
+        for (int i = 0 ; i < layerCount ; i++) {
+            LayerParameter cur = layersTemporal[i];
+            LayerParameter prev = null;
+            LayerParameter next = null;
+
+            if (i != 0) {
+                prev = layersTemporal[i - 1];
+            }
+
+            if (i != layerCount - 1) {
+                next = layersTemporal[i + 1];
+            }
+
+            networkBuilder.addLayer(allignIOWidth(prev, cur, next));
         }
 
         networkBuilder.setFrequency(networkParameters.getFrequency());

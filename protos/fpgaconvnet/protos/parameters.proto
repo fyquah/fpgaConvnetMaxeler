@@ -42,6 +42,7 @@ message LayerParameter
     optional bool is_first_layer = 12 [default = false];
     optional bool is_last_layer = 13 [default = false];
     optional uint32 fpga_id = 15 [default = 0];
+    optional uint32 output_vector_width = 16;
 }
 
 
