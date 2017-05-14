@@ -8,7 +8,10 @@ import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVector;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVectorType;
 import com.maxeler.maxcompiler.v2.kernelcompiler.KernelParameters;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Count;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.memory.Memory;
+
+import maxpower.kernel.io.AspectChangeIO;
 
 import fpgaconvnet.GlobalConfig;
 import fpgaconvnet.IterationCounter;
@@ -164,6 +167,96 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
 
         }
 
+        if (layerParams.getOutputVectorWidth() == layerParams.getNumOutputs()) {
+            normalOutput(accumulator.getOutput(), outputControlFlag);
+        } else {
+            aspectOutput(accumulator.getOutput(), outputControlFlag);
+        }
+
+    }
+
+    /* Translates the output in some number of clock cycles to a output vector size
+     * that can be consumed by AspectIO.
+     *
+     * time is forwarded here - because I want to keep numTicks to be the same
+     * regardless of this aspectOutput magic.
+     */
+    private void aspectOutput(DFEVector<DFEVar> output, DFEVar enable) {
+        final int numOutputs = layerParams.getNumOutputs();
+        int aspectOutputSize = -1;
+
+        for (int i = layerParams.getOutputVectorWidth(); i >= 1 ; i--) {
+            if (numOutputs % i == 0) {
+                aspectOutputSize = i;
+                break;
+            }
+        }
+        final int aspectTranslationCycles = numOutputs / aspectOutputSize;
+        enable = stream.offset(enable, aspectTranslationCycles - 1);
+        output = stream.offset(output, aspectTranslationCycles - 1);
+
+        DFEVar aspectCounter = control.count.makeCounter(
+                    control.count.makeParams(Utils.ceilLog2(aspectTranslationCycles) + 1)
+                    .withInitValue(0l)
+                    .withInc(1l)
+                    .withMax(aspectTranslationCycles)
+                    .withWrapMode(Count.WrapMode.STOP_AT_MAX)
+                    .withReset(enable)
+                ).getCount();
+        DFEVar signedAspectCounter =
+                aspectCounter.cast(dfeInt(Utils.ceilLog2(aspectTranslationCycles) + 1));
+        DFEVar aspectCounterDone = control.count.makeCounter(
+                    control.count.makeParams(1)
+                    .withInitValue(0)
+                    .withInc(1l)
+                    .withMax(1)
+                    .withWrapMode(Count.WrapMode.STOP_AT_MAX)
+                    .withEnable(aspectCounter.eq(aspectTranslationCycles - 1))
+                    .withReset(enable)
+                ).getCount();
+
+        DFEVectorType<DFEVar> aspectVectorType =
+                new DFEVectorType<DFEVar>(GlobalConfig.dataType, aspectOutputSize);
+        DFEVector<DFEVar> aspectOutput = aspectVectorType.newInstance(this);
+
+        for (int i = 0 ; i < aspectOutputSize ; i++) {
+            List<DFEVar> choices = new ArrayList<DFEVar>();
+
+            for (int j = 0 ; j < aspectTranslationCycles ; j++) {
+                choices.add(
+                        stream.offset(
+                            output[j * aspectOutputSize + i],
+                            -signedAspectCounter,
+                            -aspectTranslationCycles,
+                            0));
+            }
+
+            aspectOutput[i] <== control.mux(aspectCounter, choices);
+        }
+        DFEVar aspectOutputEnable = enable | ~aspectCounterDone;
+
+        AspectChangeIO aspectIO = new AspectChangeIO(
+                this,
+                layerParams.getOutputVectorWidth()
+                * (layerParams.getIsLastLayer() ? 4 : 2));
+
+        if (layerParams.getIsLastLayer()) {
+            DFEVectorType<DFEVar> rawAspectOutputType = 
+                new DFEVectorType<DFEVar>(GlobalConfig.cpuType, aspectOutputSize);
+
+            aspectIO.output(
+                    getOutputName(),
+                    rawAspectOutputType,
+                    aspectOutputEnable)
+                <== aspectOutput.cast(rawAspectOutputType);
+        } else {
+            aspectIO.output(getOutputName(), aspectVectorType, aspectOutputEnable)
+                <== aspectOutput;
+        }
+
+    }
+
+    private void normalOutput(DFEVector<DFEVar> output, DFEVar enable) {
         if (layerParams.getIsLastLayer()) {
             /* Last layer - cast from fixed point to dfe float. */
             DFEVectorType<DFEVar> rawOutputVectorType = new DFEVectorType<DFEVar>(
@@ -171,13 +264,14 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
             DFEVector<DFEVar> rawOutput = rawOutputVectorType.newInstance(this);
 
             for (int i = 0 ; i < layerParams.getNumOutputs() ; i++) {
-                rawOutput[i] <== accumulator.getOutput()[i].cast(GlobalConfig.cpuType);
+                rawOutput[i] <== output[i].cast(GlobalConfig.cpuType);
             }
-            io.output(getOutputName(), rawOutput, rawOutputVectorType, outputControlFlag);
+            io.output(getOutputName(), rawOutput, rawOutputVectorType, enable);
 
         } else {
-            io.output(getOutputName(), accumulator.getOutput(), outputVectorType, outputControlFlag);
+            io.output(getOutputName(), output, outputVectorType, enable);
         }
+
     }
 
     /* initCycles used only in CPU initialization. */
