@@ -2,6 +2,7 @@ WHEREISROOT=../../..
 
 include $(WHEREISROOT)/Makefile.base
 
+CXXFLAGS+= -Ilarge_layer_test_MAIA_DFE/results/
 LARGE_LAYER_TEST_NAME=large_layer_test
 LARGE_LAYER_TEST_SIMMAXDIR=$(MAXCOMPILER_BUILD_DIR)/$(LARGE_LAYER_TEST_NAME)_$(DFEModel)_DFE_SIM/results
 LARGE_LAYER_TEST_DFEMAXDIR=$(MAXCOMPILER_BUILD_DIR)/$(LARGE_LAYER_TEST_NAME)_$(DFEModel)_DFE/results
@@ -82,7 +83,8 @@ fpgaconvnet/large_layer_test_main_dfe.o: fpgaconvnet/large_layer_test_main.cpp $
 
 
 large_layer_test_dfe: $(FPGACONVNET_OBJ_FILES) \
-	    fpgaconvnet/large_layer_test_dfe.o fpgaconvnet/large_layer_test_main_dfe.o \
+	    fpgaconvnet/large_layer_test_dfe.o \
+	    main.o \
 	    fpgaconvnet/protos/parameters.pb.o
 	$(CPUCOMPILER) $(ALL_FLAGS) -o $@ $^ $(LFLAGS)
 
