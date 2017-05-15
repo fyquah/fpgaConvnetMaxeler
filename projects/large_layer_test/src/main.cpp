@@ -32,7 +32,11 @@ std::vector<float> run_feature_extraction(
     std::vector<float> extracted_features;
     fpgaconvnet::Convnet convnet(network_parameters, max_file, "");
 
-    /* TODO: load the weights from somewhere. */
+    std::vector<std::string> filenames = {
+        "../test_data/weights.bin",
+        "../test_data/bias.bin",
+    };
+    convnet.load_weights_from_files(filenames, fpgaconvnet::FORMAT_BINARY);
     convnet.randomize_weights();
     convnet.max_init_weights();
 
@@ -40,19 +44,18 @@ std::vector<float> run_feature_extraction(
     extracted_features = convnet.max_run_inference(N, images, false);
     extracted_features = convnet.max_run_inference(N, images, false);
 
-    /* TODO: Verify the output is correct. You can use the
-     * fpgaconvnet::verify_conv_out function for this.
-     */
-
+    fpgaconvnet::verify_conv_output(
+            network_parameters,
+            N,
+            &extracted_features[0],
+            "../test_data/data_output.bin",
+            fpgaconvnet::FORMAT_BINARY);
     return extracted_features;
 }
 
 
 int main(int argc, char **argv)
 {
-    std::vector<int> labels;
-    std::vector<float> pixel_stream;
-
     if (argc < 2) {
 	std::cout << "Missing network descriptor" << std::endl;
 	return 1;
@@ -62,17 +65,30 @@ int main(int argc, char **argv)
     fpgaconvnet::protos::Network network_parameters =
 	    fpgaconvnet::load_network_proto(argv[1]);
 
-    /* TODO: Code to load images here. Code below is a stub to load random
-     *       data as image input.
-     */
     std::cout << "Reading images ..." << std::endl;
-    for (unsigned i = 0 ; i < N ; i++) {
-	for (unsigned j = 0;
-		j < fpgaconvnet::calc_conv_in_size(network_parameters);
-		j++) {
-	    pixel_stream.push_back((float(rand()) / float(RAND_MAX)));
-	}
-    } 
+    const int input_array_size = 100 * 16 * 16 * 512;
+    std::vector<float> pixel_stream(input_array_size, 0);
+    fpgaconvnet::load_float_array_from_binary_file(
+            "../test_data/data_input.bin",
+            input_array_size,
+            (float*) &pixel_stream[0]);
+
+
+    if (N < 100) {
+        pixel_stream.resize(N * 16 * 16 * 512);
+
+    } else if (N > 100) {
+        std::vector<float> ret;
+        for (int i = 0 ; i < (N / 100) ; i++) {
+            std::memcpy(
+                    &ret[i * pixel_stream.size()],
+                    &pixel_stream[0],
+                    sizeof(float) * pixel_stream.size());
+        }
+        pixel_stream = ret;
+
+    }
+
 
     std::vector<float> conv_out = run_feature_extraction(
 	    network_parameters, pixel_stream);
