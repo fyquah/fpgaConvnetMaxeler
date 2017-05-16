@@ -191,6 +191,8 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
             }
         }
         final int aspectTranslationCycles = numOutputs / aspectOutputSize;
+        System.out.println("aspect_translation_cycles = " + aspectTranslationCycles);
+        System.out.println("aspect_output_size = " + aspectOutputSize);
         enable = stream.offset(enable, aspectTranslationCycles - 1);
         output = stream.offset(output, aspectTranslationCycles - 1);
 
@@ -198,7 +200,7 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
                     control.count.makeParams(Utils.ceilLog2(aspectTranslationCycles))
                     .withInitValue(0l)
                     .withInc(1l)
-                    .withMax(aspectTranslationCycles)
+                    .withMax(aspectTranslationCycles - 1)
                     .withWrapMode(Count.WrapMode.STOP_AT_MAX)
                     .withReset(enable)
                 ).getCount();
@@ -206,7 +208,7 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
                 aspectCounter.cast(dfeInt(Utils.ceilLog2(aspectTranslationCycles) + 1));
         DFEVar aspectCounterDone = control.count.makeCounter(
                     control.count.makeParams(1)
-                    .withInitValue(0)
+                    .withInitValue(1l)
                     .withInc(1l)
                     .withMax(1)
                     .withWrapMode(Count.WrapMode.STOP_AT_MAX)
@@ -233,6 +235,9 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
             aspectOutput[i] <== control.mux(aspectCounter, choices);
         }
         DFEVar aspectOutputEnable = enable | ~aspectCounterDone;
+        aspectCounter.simWatch("aspect_counter");
+        aspectCounterDone.simWatch("aspect_done");
+        aspectOutputEnable.simWatch("aspect_output_enable");
 
         AspectChangeIO aspectIO = new AspectChangeIO(
                 this,
