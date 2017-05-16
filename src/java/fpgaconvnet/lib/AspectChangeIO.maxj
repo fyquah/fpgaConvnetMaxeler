@@ -1,0 +1,451 @@
+package fpgaconvnet.lib;
+
+import com.maxeler.maxcompiler.v2.kernelcompiler.KernelLib;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.Reductions;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Count.Params;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Count.WrapMode;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.KernelObject;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.KernelType;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEType;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVector;
+import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVectorType;
+import com.maxeler.maxcompiler.v2.utils.MathUtils;
+
+/**
+ * A way to create inputs and outputs just like {@link com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.IO IO}, except that you can specify the
+ * width of that port and the required aspect change is done inside the kernel, rather than leaving it to the manager.
+ * <p>
+ * This can be useful for if you want to save the BRAMs used by the extra FIFO added after the aspect change in the manager, but the far more useful
+ * case is when you want to do a non-multiple aspect change, where the manager will do a very inefficient job.
+ */
+public class AspectChangeIO extends KernelLib {
+	private final int m_portWidth;
+	private final boolean m_pushToManager;
+
+	/**
+	 * Create an IO port of a given width so that inputs and outputs can be created that handle aspect changes and padding.
+	 * @param owner The Kernel or KernelLib this is being used in.
+	 * @param portWidth The width of the port (e.g. 128 for PCIe, or 1536 for LMem).
+	 */
+	public AspectChangeIO(KernelLib owner, int portWidth) {
+		super(owner);
+		m_portWidth = portWidth;
+		m_pushToManager = false;
+	}
+
+	/**
+	 * Create an IO port of a given width so that inputs and outputs can be created that handle aspect changes and padding.
+	 * @param owner The Kernel or KernelLib this is being used in.
+	 * @param portWidth The width of the port (e.g. 128 for PCIe, or 1536 for LMem).
+	 * @param pushMultiplesToManager Push the simple multiple aspect changes into the manager (may help timing on wide ports).
+	 */
+	public AspectChangeIO(KernelLib owner, int portWidth, boolean pushMultiplesToManager) {
+		super(owner);
+		m_portWidth = portWidth;
+		m_pushToManager = pushMultiplesToManager;
+	}
+
+
+	/**
+	 * Create an output just like io.output, but with the required aspect changes done inside the kernel.
+	 * @param <T> The type of the output (DFEVar, DFEVector, DFEStruct).
+	 * @param name The name of the output port (how it is referred to in the manager).
+	 * @param outputType The type of the data you wish to output.
+	 * @return A stream that one can connect their output data to.
+	 */
+	public <T extends KernelObject<T>> T output(String name, KernelType<T> outputType) {
+		return output(name, outputType, constant.var(true));
+	}
+
+	/**
+	 * Create an output just like io.output, but with the required aspect changes done inside the kernel.
+	 * @param <T> The type of the output (DFEVar, DFEVector, DFEStruct).
+	 * @param name The name of the output port (how it is referred to in the manager).
+	 * @param outputType The type of the data you wish to output.
+	 * @param enable The enable signal for the output (when the data is valid and you wish to output it).
+	 * @return A stream that one can connect their output data to.
+	 */
+	public <T extends KernelObject<T>> T output(String name, KernelType<T> outputType, DFEVar enable) {
+		return output(name, outputType, enable, constant.var(false));
+	}
+
+	/**
+	 * Create an output just like io.output, but with the required aspect change and padding done inside the kernel.
+	 * @param <T> The type of the output (DFEVar, DFEVector, DFEStruct).
+	 * @param name The name of the output port (how it is referred to in the manager).
+	 * @param outputType The type of the data you wish to output.
+	 * @param enable The enable signal for the output (when the data is valid and you wish to output it).
+	 * @param flushNow Output data on this cycle, adding padding if required.
+	 * @return A stream that one can connect their output data to.
+	 */
+	public <T extends KernelObject<T>> T output(String name, KernelType<T> outputType, DFEVar enable, DFEVar flushNow) {
+		T output = outputType.newInstance(this);
+		output(name, output, enable, flushNow);
+		return output;
+	}
+
+	/**
+	 * Create an output just like io.output, but with the required aspect changes done inside the kernel.
+	 * @param <T> The type of the output (DFEVar, DFEVector, DFEStruct).
+	 * @param name The name of the output port (how it is referred to in the manager).
+	 * @param output The data you wish to output.
+	 */
+	public <T extends KernelObject<T>> void output(String name, T output) {
+		output(name, output, constant.var(true));
+	}
+
+	/**
+	 * Create an output just like io.output, but with the required aspect changes done inside the kernel.
+	 * @param <T> The type of the output (DFEVar, DFEVector, DFEStruct).
+	 * @param name The name of the output port (how it is referred to in the manager).
+	 * @param output The data you wish to output.
+	 * @param enable The enable signal for the output (when the data is valid and you wish to output it).
+	 */
+	public <T extends KernelObject<T>> void output(String name, T output, DFEVar enable) {
+		output(name, output, enable, null);
+	}
+
+	/**
+	 * Create an output just like io.output, but with the required aspect change and padding done inside the kernel.
+	 * @param <T> The type of the output (DFEVar, DFEVector, DFEStruct).
+	 * @param name The name of the output port (how it is referred to in the manager).
+	 * @param output The data you wish to output.
+	 * @param enable The enable signal for the output (when the data is valid and you wish to output it).
+	 * @param flushNow Output data on this cycle, adding padding if required.
+	 */
+	public <T extends KernelObject<T>> void output(String name, T output, DFEVar enable, DFEVar flushNow) {
+		if (m_pushToManager && flushNow != null) {
+			throw new RuntimeException("Cannot flush input if part of the aspect change is handled in the manager. Set pushMultiplesToManager to false.");
+		}
+		DFEVar flush = flushNow == null ? constant.var(false) : flushNow;
+		final int typeWidth = output.getType().getTotalBits();
+		if (typeWidth > m_portWidth) {
+			throw new RuntimeException("Width of output port ("+m_portWidth+") must be at least as wide as the output type ("+typeWidth+").");
+		}
+
+		// compute the highest common factor so we can figure out the aspect ratio of the change
+		final int hcf = MathUtils.greatestCommonDivisor(typeWidth, m_portWidth);
+		// Figure out how much of the change could be done with an exact multiple change, and how much has to be done with rotates etc.
+		// e.g. if doing a 10 to 4 aspect change multiple would be 2 as we can split this into a 2 to 1 change followed by a 5 to 4 change.
+		final int multiple = getMultipleOut(typeWidth, hcf);
+
+		if (m_portWidth == typeWidth * multiple) { // exact multiple case (no need for complicated non-multiple aspect change logic)
+			final DataWithEnable changedOutput = removeOutputMultiples(new DataWithEnable(output.pack(), enable), multiple, flush);
+			io.output(name, changedOutput.data, changedOutput.data.getType(), changedOutput.enable);
+		} else {
+			final int inputRatio = typeWidth / hcf;
+			final int outputRatio = m_portWidth / (multiple * hcf);
+
+			// perform the non-multiple aspect change, e.g. 3 to 4, 4 to 5, etc
+			final DataWithEnable nonMultiplesRemoved = nonMultipleAspectChangeOutput(new DataWithEnable(output.pack(), enable), inputRatio, outputRatio, flush);
+
+			// perform the simple multiple aspect change, e.g. 1 to 2, 1 to 3, etc
+			// if either multiple is 1 (so there is nothing to do) or we are pushing this change into the manager then this does nothing
+			final DataWithEnable changedOutput = removeOutputMultiples(nonMultiplesRemoved, multiple, flush);
+
+			io.output(name, changedOutput.data, changedOutput.data.getType(), changedOutput.enable);
+		}
+	}
+
+	/**
+	 * Create an input just like io.input, but with the required aspect changes done inside the kernel.
+	 * @param <T> The type of the input (DFEVar, DFEVector, DFEStruct).
+	 * @param name The name of the input port (how it is referred to in the manager).
+	 * @param inputType The type of the input data.
+	 * @return The input data you asked for.
+	 */
+	public <T extends KernelObject<T>> T input(String name, KernelType<T> inputType) {
+		return input(name, inputType, constant.var(true));
+	}
+
+	/**
+	 * Create an input just like io.input, but with the required aspect changes done inside the kernel.
+	 * @param <T> The type of the input (DFEVar, DFEVector, DFEStruct).
+	 * @param name The name of the input port (how it is referred to in the manager).
+	 * @param inputType The type of the input data.
+	 * @param enable The enable signal for the input (when you are ready to receive more data).
+	 * @return The input data you asked for.
+	 */
+	public <T extends KernelObject<T>> T input(String name, KernelType<T> inputType, DFEVar enable) {
+		return input(name, inputType, enable, null);
+	}
+
+	/**
+	 * Create an input just like io.input, but with the required aspect change and padding removal done inside the kernel.
+	 * @param <T> The type of the input (DFEVar, DFEVector, DFEStruct).
+	 * @param name The name of the input port (how it is referred to in the manager).
+	 * @param inputType The type of the input data.
+	 * @param enable The enable signal for the input (when you are ready to receive more data).
+	 * @param flushNow Get new input data from the manager on this cycle, removing padding if required.
+	 * @return The input data you asked for.
+	 */
+	public <T extends KernelObject<T>> T input(String name, KernelType<T> inputType, DFEVar enable, DFEVar flushNow) {
+		if (m_pushToManager && flushNow != null) {
+			throw new RuntimeException("Cannot flush input if part of the aspect change is handled in the manager. Set pushMultiplesToManager to false.");
+		}
+		DFEVar flush = flushNow == null ? constant.var(false) : flushNow;
+		int typeWidth = inputType.getTotalBits();
+		if (typeWidth > m_portWidth) {
+			throw new RuntimeException("Width of input type ("+typeWidth+") cannot be wider than the input port ("+m_portWidth+").");
+		}
+		// compute the highest common factor so we can figure out the aspect ratio of the change
+		int hcf = MathUtils.greatestCommonDivisor(m_portWidth, typeWidth);
+		// Figure out how much of the change could be done with an exact multiple change, and how much has to be done with rotates etc.
+		// e.g. if doing a 10 to 4 aspect change, multiple = 2 as we can split this into a 2 to 1 aspect change followed by a 5 to 4 change .
+		int multiple = getMultipleOut(typeWidth, hcf);
+		if (typeWidth == hcf) { //exact multiple case
+			return inputType.unpack(removeInputMultiples(name, m_portWidth, typeWidth, multiple, enable, flush));
+		}
+
+		// calculate the parameters for the non-multiple aspect change
+		final int demultipledInputWidth = m_pushToManager ? m_portWidth : m_portWidth / multiple;
+		final int inputRatio  = demultipledInputWidth  / hcf;
+		final int outputRatio = typeWidth / hcf;
+		// generate all the control logic for the non-multiple aspect change (this counter needs to be chained to the one controlling the input).
+		final DataWithEnable nonMultCounter = nonMultipleCounter(inputRatio, outputRatio, enable, true, flush);
+
+		DFEVector<DFEVar> partShiftedValues;
+		// perform the simple multiple aspect change, e.g. 2 to 1, 3 to 1, etc
+		// if either multiple is 1 (so there is nothing to do) or we are pushing this change into the manager then this just creates an ordinary input
+		if (multiple > 1 & !m_pushToManager) {
+			DFEVectorType<DFEVar> intermediateType = new DFEVectorType<DFEVar>(dfeRawBits(hcf), inputRatio);
+			partShiftedValues  = intermediateType.unpack(removeInputMultiples(name, m_portWidth, typeWidth, multiple, nonMultCounter.enable, flush));
+		} else {
+			DFEVectorType<DFEVar> portType = new DFEVectorType<DFEVar>(dfeRawBits(hcf), inputRatio);
+			io.pushInputRegistering(true);
+			partShiftedValues = io.input(name, portType, nonMultCounter.enable);
+			io.popInputRegistering();
+		}
+
+		// perform the non-multiple aspect change, e.g. 4 to 3, 5 to 4, etc
+		final DFEVector<DFEVar> paddedOutput  = mergeArrays(partShiftedValues, nonMultCounter.data === 0, stream.offset(partShiftedValues, -1), nonMultCounter.data);
+		final DFEVector<DFEVar> rotatedOutput = paddedOutput.rotateElementsRight(nonMultCounter.data);
+		final DFEVector<DFEVar> output        = trimArray(rotatedOutput, outputRatio);
+
+		// Note: this streamHold is optimised away if enable is constant.var(true)
+		// We only need to streamHold up to outputRatio-1 elements of the DFEVector output
+		return inputType.unpack(partialStreamHold(output, enable, outputRatio-1).pack());
+	}
+
+	private class DataWithEnable {
+		public final DFEVar data;
+		public final DFEVar enable;
+		public final DFEVar extraData;
+		public final DFEVar extraEnable;
+		protected DataWithEnable(DFEVar data, DFEVar enable) {
+			this.data = data;
+			this.enable = enable;
+			extraData = null;
+			extraEnable = null;
+		}
+		protected DataWithEnable(DFEVar data, DFEVar enable, DFEVar extraData, DFEVar extraEnable) {
+			this.data = data;
+			this.enable = enable;
+			this.extraData = extraData;
+			this.extraEnable = extraEnable;
+		}
+	}
+
+	private DataWithEnable exactMultipleCounter(final int maximum, final DFEVar enable, final boolean isInput, final DFEVar resetEverything) {
+		final Params counterParams = control.count.makeParams(MathUtils.bitsToAddress(maximum))
+		                                          .withEnable(enable)
+		                                          .withMax(maximum)
+		                                          .withReset(resetEverything);
+		final DFEVar counter = control.count.makeCounter(counterParams).getCount();
+
+		DFEVar outputCounter;
+		DFEVar outputEnable;
+
+		if (isInput) {
+			outputCounter = Reductions.streamHold(counter, enable);
+			outputEnable  = (outputCounter === 0) & enable;
+		} else {
+			outputCounter = counter;
+			final DFEVar getEnoughToOutput = ((counter === maximum - 1) & (enable | stream.offset(resetEverything, 1)))
+			                               | (stream.offset(resetEverything, 1) & counter === 0 & enable);
+			//in the case where we don't have padding, most of the following logic should be optimised away
+			final DFEVar outputPadding = stream.offset(resetEverything, 1) & counter !== 0;//output only if we have data to output
+			outputEnable = getEnoughToOutput | outputPadding;
+		}
+
+		return new DataWithEnable(outputCounter, outputEnable);
+	}
+
+	private DataWithEnable removeOutputMultiples(final DataWithEnable input, final int multiple, final DFEVar resetEverything) {
+		if (multiple > 1 && !m_pushToManager) { // deal with the multiple inside the kernel rather than the manager
+			DataWithEnable counter = exactMultipleCounter(multiple, input.enable, false, stream.offset(resetEverything, -1));
+
+			final int inputWidth = input.data.getType().getTotalBits();
+			final DFEVectorType<DFEVar> outputType = new DFEVectorType<DFEVar>(dfeRawBits(inputWidth), multiple);
+			final DFEVector<DFEVar> output = outputType.newInstance(this);
+			for (int i = 0; i < multiple - 1 ; i++) {
+				output[i] <== Reductions.streamHold(input.data, counter.data === i & input.enable);
+			}
+			output[multiple-1] <== input.data;
+
+			return new DataWithEnable(output.pack(), counter.enable);
+		} else {
+			return input;
+		}
+	}
+
+	private DataWithEnable nonMultipleCounter(final int maximum, final int increment, final DFEVar enable, final boolean isInput, final DFEVar resetEverything) {
+		final int counterBits = MathUtils.bitsToAddress(maximum);
+		final Params params = control.count.makeParams(counterBits)
+		                                   .withInc(increment)
+		                                   .withMax(maximum)
+		                                   .withWrapMode(WrapMode.MODULO_MAX_OF_COUNT)
+		                                   .withEnable(enable)
+		                                   .withReset(resetEverything);
+		final DFEVar counter = control.count.makeCounter(params).getCount();
+
+		DataWithEnable output;
+
+		if (isInput) {
+			final DFEVar outputCounter = Reductions.streamHold(counter, enable);
+
+			final DFEVar nextValue  = stream.offset(counter, 1);
+			final DFEVar isZero     = counter === 0;
+			final DFEVar hasWrapped = nextValue < counter;
+			final DFEVar notAtEnd   = (nextValue > 0);
+			optimization.pushPipeliningFactor(0.0);
+			final DFEVar outputEnable = ((hasWrapped & notAtEnd) | isZero) & enable;
+			optimization.popPipeliningFactor();
+			output = new DataWithEnable(outputCounter, outputEnable);
+		} else {
+			final DFEVar nextValue = counter.cast(dfeUInt(counterBits+1)) + increment;
+			final DFEVar outputEnable = (nextValue >= maximum & (enable | stream.offset(resetEverything, 1)))
+			                          | (stream.offset(resetEverything, 1) & nextValue > 0 & enable);
+
+			//in the case where we don't have padding, most of the following logic should be optimised away
+			//If we do have padding the extra outputs are to cope with the fact that we might have more data
+			//than we can output in one cycle. The following logic deals with this.
+			final DFEVar outputPadding = stream.offset(resetEverything, 1) & nextValue !== maximum;//output only if we have data to output
+			final DFEVar tooMuchDataForThisCycle = nextValue > maximum & enable;
+			final DFEVar outputRemainder = tooMuchDataForThisCycle & outputPadding;
+			final DFEVar counterWithoutReset = (nextValue - maximum).cast(dfeUInt(MathUtils.bitsToAddress(increment)));
+
+			output = new DataWithEnable(counter, outputEnable, counterWithoutReset, outputRemainder);
+		}
+
+		return output;
+	}
+
+	private DataWithEnable nonMultipleAspectChangeOutput(final DataWithEnable input, int inputRatio, int outputRatio, DFEVar resetEverything) {
+		DataWithEnable counter = nonMultipleCounter(outputRatio, inputRatio, input.enable, false, stream.offset(resetEverything,-1));
+
+		final int chunkWidth = input.data.getType().getTotalBits() / inputRatio;
+		final DFEVectorType<DFEVar> inputType = new DFEVectorType<DFEVar>(dfeUInt(chunkWidth), inputRatio);
+
+		final DFEVector<DFEVar> paddedInput  = padArray(inputType.unpack(input.data), outputRatio);
+		final DFEVector<DFEVar> rotatedInput = paddedInput.rotateElementsLeft(counter.data);
+
+		final DFEVector<DFEVar> buffer = rotatedInput.getType().newInstance(this);
+		buffer <== mergeArrays(stream.offset(buffer, -1), rotatedInput, ~counter.enable, counter.data);
+
+		final DFEVector<DFEVar> merged = mergeArrays(stream.offset(buffer, -1), rotatedInput, counter.data);
+
+		//If we are being forced to output on a cycle where we would have done so anyway, and we will have
+		//data left over, then we need to output the remainder on the following cycle.
+		//Since we know that we won't output on the first cycle, we offset everything by one, so that we
+		//have a spare cycle at the end to deal with this. The following code deals with this.
+		final DFEVar outputEnable = stream.offset(counter.enable, 1) | counter.extraEnable;
+
+		DFEVar specialOutput = inputType.unpack(input.data.pack()).rotateElementsLeft(counter.extraData).pack();//TODO: we know that we don't need the first element of input
+		specialOutput = padVar(specialOutput, merged.getType().getTotalBits());
+		final DFEVar output = counter.extraEnable ? specialOutput : stream.offset(merged.pack(), 1);
+
+		return new DataWithEnable(output, outputEnable, counter.extraData, counter.extraEnable);
+	}
+
+	private DFEVar removeInputMultiples(final String name, final int inputWidth, final int outputWidth, final int multiple, DFEVar enable, DFEVar resetEverything) {
+		if (outputWidth == inputWidth) {
+			return io.input(name, dfeRawBits(outputWidth), enable | resetEverything);
+		}
+		DataWithEnable counter = exactMultipleCounter(multiple, enable, true, resetEverything);
+		DFEType rawType = dfeRawBits(inputWidth / multiple);
+		io.pushInputRegistering(true);
+		DFEVector<DFEVar> input = io.input(name, new DFEVectorType<DFEVar>(rawType, multiple), counter.enable);
+		io.popInputRegistering();
+		return control.mux(counter.data, input.getElementsAsList());
+	}
+
+	private DFEVector<DFEVar> mergeArrays(final DFEVector<DFEVar> firstArray, final DFEVector<DFEVar> secondArray, final DFEVar sizeOfFirstSection) {
+		return mergeArrays(firstArray, secondArray, constant.var(true), sizeOfFirstSection);
+	}
+
+	private DFEVector<DFEVar> mergeArrays(final DFEVector<DFEVar> firstArray, final DFEVar useFirstArray, final DFEVector<DFEVar> secondArray, final DFEVar sizeOfFirstSection) {
+		return mergeArrays(firstArray, useFirstArray, secondArray, constant.var(true), sizeOfFirstSection);
+	}
+
+	private DFEVector<DFEVar> mergeArrays(final DFEVector<DFEVar> firstArray, final DFEVector<DFEVar> secondArray, final DFEVar useSecondArray, final DFEVar sizeOfFirstSection) {
+		return mergeArrays(firstArray, constant.var(false), secondArray, useSecondArray, sizeOfFirstSection);
+	}
+
+	private DFEVector<DFEVar> mergeArrays(final DFEVector<DFEVar> firstArray, final DFEVar useFirstArray, final DFEVector<DFEVar> secondArray, final DFEVar useSecondArray, final DFEVar sizeOfFirstSection) {
+		final DFEVector<DFEVar> output = firstArray.getType().newInstance(this);
+
+		for (int i = 0; i < output.getSize(); i++) {
+			optimization.pushPipeliningFactor(0.0);
+			final DFEVar select = (i < sizeOfFirstSection & useSecondArray) | useFirstArray;
+			optimization.popPipeliningFactor();
+			output[i] <== select ? firstArray[i] : secondArray[i];
+		}
+
+		return output;
+	}
+
+
+	private DFEVector<DFEVar> partialStreamHold(final DFEVector<DFEVar> input, final DFEVar enable, final int widthToHold) {
+		if (!io.peekInputRegistering()) {//If input registering is turned off, then the user doesn't need this behaviour.
+			return input;
+		}
+		DFEVector<DFEVar> output = input.getType().newInstance(this);
+		for (int i = 0; i < input.getType().getSize(); i++) {
+			output[i] <== i < widthToHold ? Reductions.streamHold(input[i], enable) : input[i];
+		}
+		return output;
+	}
+
+
+	private DFEVector<DFEVar> padArray(DFEVector<DFEVar> input, int paddedWidth) {
+		final DFEType containedType = input[0].getType();
+		final DFEVectorType<DFEVar> paddedType = new DFEVectorType<DFEVar>(containedType, paddedWidth);
+		final DFEVector<DFEVar> paddedInput = paddedType.newInstance(this);
+		for (int i = 0; i < paddedInput.getSize(); i++) {
+			paddedInput[i] <== i < input.getSize() ? input[i] : constant.var(containedType, 0);
+		}
+		return paddedInput;
+	}
+
+
+	private DFEVector<DFEVar> trimArray(DFEVector<DFEVar> input, int trimmedWidth) {
+		final DFEType containedType = input[0].getType();
+		final DFEVectorType<DFEVar> trimmedType = new DFEVectorType<DFEVar>(containedType, trimmedWidth);
+		final DFEVector<DFEVar> trimmedInput = trimmedType.newInstance(this);
+		for (int i = 0; i < trimmedInput.getSize(); i++) {
+			trimmedInput[i] <== input[i];
+		}
+		for (int i = trimmedInput.getSize(); i < input.getSize(); i++) {
+			input[i].setReportOnUnused(false);
+		}
+		return trimmedInput;
+	}
+
+
+	private int getMultipleOut(int typeWidth, int hcf) {
+		for (int i = 0; i < m_portWidth - typeWidth; i += hcf) {
+			if (m_portWidth % (typeWidth + i) == 0)
+				return m_portWidth / (typeWidth + i);
+		}
+		return 1;
+	}
+
+
+	private DFEVar padVar(DFEVar input, int totalBits) {
+		int paddingBits = totalBits - input.getType().getTotalBits();
+		DFEVar padding = constant.var(dfeUInt(paddingBits), 0);
+		return padding # input;
+	}
+}

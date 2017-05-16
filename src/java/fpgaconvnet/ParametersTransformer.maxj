@@ -343,15 +343,15 @@ public class ParametersTransformer {
         //              for maxring. The difficulty lies in getting it right
         //              such that we don't have the input stream to be a
         //              multiple of a ridiculous number of multiples.
-        if (!cur.getParamsCase().equals(LayerParameter.ParamsCase.CONV)
-                || (next != null && next.getFpgaId() != cur.getFpgaId())) {
-            return builder.build();
-        }
 
         if (next == null) {
             // allign width with PCIe (128 bits) and 32 bits output (at the
             // last layer, the numbers are casted to floating point).
             int size = 128 / 32;
+            builder.setOutputVectorWidth(size);
+
+        } else if (next != null && next.getFpgaId() != cur.getFpgaId()) {
+            int size = 512 / 16;
             builder.setOutputVectorWidth(size);
 
         } else if (next.getParamsCase().equals(LayerParameter.ParamsCase.CONV)) {
@@ -360,10 +360,26 @@ public class ParametersTransformer {
 
         }
 
-        if (builder.getOutputVectorWidth() >= cur.getNumOutputs()) {
-            builder.setOutputVectorWidth(cur.getNumOutputs());
-        } else {
-            int convIterations = new IterationCounter(cur).getTotalIterations();
+        if (builder.getOutputVectorWidth() < cur.getNumOutputs()) {
+            int runIterations = 0;
+
+            if (cur.getParamsCase().equals(LayerParameter.ParamsCase.CONV)) {
+                runIterations =
+                    new IterationCounter(cur).getTotalIterations()
+                    * cur.getConv().getStride();
+
+            } else if (cur.getParamsCase().equals(LayerParameter.ParamsCase.POOL)) {
+                runIterations =
+                    Utils.divCeil(
+                            cur.getNumOutputs(), cur.getPool().getChannelFoldingFactor())
+                    * cur.getPool().getStride();
+
+            } else if (cur.getParamsCase().equals(LayerParameter.ParamsCase.LRN)) {
+                runIterations =
+                    Utils.divCeil(
+                            cur.getNumOutputs(), cur.getLrn().getChannelFoldingFactor());
+
+            }
             int conversionCycles = -1;
 
             /*
@@ -385,7 +401,10 @@ public class ParametersTransformer {
              * to implement that for now as i don't see it happening really
              * often with large nets).
              */
-            if (conversionCycles >= convIterations) {
+            System.out.println(
+                    "conversion cycles = " + conversionCycles
+                    + ", runIterations = " + runIterations);
+            if (conversionCycles >= runIterations) {
                 builder.setOutputVectorWidth(cur.getNumOutputs());
             }
         }

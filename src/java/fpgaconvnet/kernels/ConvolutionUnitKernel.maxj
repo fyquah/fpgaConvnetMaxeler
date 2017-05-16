@@ -11,13 +11,12 @@ import com.maxeler.maxcompiler.v2.kernelcompiler.KernelParameters;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Count;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.memory.Memory;
 
-import maxpower.kernel.io.AspectChangeIO;
-
 import fpgaconvnet.GlobalConfig;
 import fpgaconvnet.IterationCounter;
 import fpgaconvnet.Utils;
 import fpgaconvnet.protos.Parameters.LayerParameter;
 import fpgaconvnet.protos.Parameters.ConvolutionParameter;
+import fpgaconvnet.lib.AspectChangeIO;
 import fpgaconvnet.lib.CpuInitWeightsCounter;
 import fpgaconvnet.lib.LookAheadCounter;
 import fpgaconvnet.lib.ConvolutionAccumulator;
@@ -196,7 +195,7 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
         output = stream.offset(output, aspectTranslationCycles - 1);
 
         DFEVar aspectCounter = control.count.makeCounter(
-                    control.count.makeParams(Utils.ceilLog2(aspectTranslationCycles) + 1)
+                    control.count.makeParams(Utils.ceilLog2(aspectTranslationCycles))
                     .withInitValue(0l)
                     .withInc(1l)
                     .withMax(aspectTranslationCycles)
@@ -238,7 +237,8 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
         AspectChangeIO aspectIO = new AspectChangeIO(
                 this,
                 layerParams.getOutputVectorWidth()
-                * (layerParams.getIsLastLayer() ? 4 : 2));
+                * (layerParams.getIsLastLayer() ? 4 : 2)
+                * 8);
 
         if (layerParams.getIsLastLayer()) {
             DFEVectorType<DFEVar> rawAspectOutputType = 
