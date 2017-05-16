@@ -11,7 +11,7 @@ include $(WHEREISROOT)/Makefile.base
 {PRJ}_OPTIMIZED_DESCRIPTOR={prj}.optimized.prototxt
 
 
-$({PRJ}_OPTIMIZED_DESCRIPTOR): fpgaconvnet/optimizer.py $({PRJ}_DESCRIPTOR) $(PYTHON_PROTOS)
+$({PRJ}_OPTIMIZED_DESCRIPTOR): fpgaconvnet/modelling/optimizer.py $({PRJ}_DESCRIPTOR) $(PYTHON_PROTOS)
 	python $< --resource-bench $(WHEREISROOT)/results/resource_bench.yaml --output $@ \
 	    $({PRJ}_DESCRIPTOR)
 
@@ -72,14 +72,15 @@ fpgaconvnet/{prj}_dfe.o: $({PRJ}_DFE_MAXFILE)
 	$(SLICCOMPILE) $< $@
 
 
-fpgaconvnet/{prj}_main_dfe.o: fpgaconvnet/{prj}_main.cpp $({PRJ}_DFE_MAXFILE)
+fpgaconvnet/{prj}_main_dfe.o: main.cpp $({PRJ}_DFE_MAXFILE)
 	$(CPUCOMPILER) $< $(ALL_FLAGS) \
 		-I$(MAXCOMPILER_BUILD_DIR) -I$({PRJ}_DFEMAXDIR) \
 		-DDESIGN_NAME=$({PRJ}_NAME) -c -o $@
 
 
 {prj}_dfe: $(FPGACONVNET_OBJ_FILES) \
-	    fpgaconvnet/{prj}_dfe.o fpgaconvnet/{prj}_main_dfe.o \
+	    fpgaconvnet/{prj}_dfe.o \
+	    {prj}_main_dfe.o \
 	    fpgaconvnet/protos/parameters.pb.o
 	$(CPUCOMPILER) $(ALL_FLAGS) -o $@ $^ $(LFLAGS)
 
@@ -90,9 +91,9 @@ run_{prj}_dfe: {prj}_dfe $({PRJ}_DATA) $({PRJ}_OPTIMIZED_DESCRIPTOR)
 
 # ---- Debug ----
 
-debug:
+debugsim:
 	maxdebug -v -g {PRJ}Graph -s {PRJ}Graph -c -d $(USER)a0:$(USER)a \
-	    {PRJ}_SIM_MAXFILE
+	    $({PRJ}_SIM_MAXFILE)
 
 sim: {prj}_sim
 

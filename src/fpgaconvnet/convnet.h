@@ -22,6 +22,11 @@ enum file_format_t {
 protos::Network load_network_proto(const std::string & filename);
 
 
+void load_float_array_from_binary_file(
+    std::string filename,
+    const int size,
+    float *output);
+
 void load_kernels_from_file(
     std::string filename,
     const protos::LayerParameter & layer,
