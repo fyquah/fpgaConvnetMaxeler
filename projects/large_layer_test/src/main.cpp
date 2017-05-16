@@ -37,7 +37,6 @@ std::vector<float> run_feature_extraction(
         "../test_data/bias.bin",
     };
     convnet.load_weights_from_files(filenames, fpgaconvnet::FORMAT_BINARY);
-    convnet.randomize_weights();
     convnet.max_init_weights();
 
     /* warm up the DFE with the weights. */
