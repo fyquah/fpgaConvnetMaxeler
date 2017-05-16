@@ -72,19 +72,19 @@ $(LARGE_LAYER_TEST_DFE_MAXFILE): $(ENGINEFILES) $(JAVA_PROTOS) $(LARGE_LAYER_TES
 		  enableMPCX=$(MPCX)
 
 
-fpgaconvnet/large_layer_test_dfe.o: $(LARGE_LAYER_TEST_DFE_MAXFILE)
+large_layer_test_dfe.o: $(LARGE_LAYER_TEST_DFE_MAXFILE)
 	$(SLICCOMPILE) $< $@
 
 
-fpgaconvnet/large_layer_test_main_dfe.o: fpgaconvnet/large_layer_test_main.cpp $(LARGE_LAYER_TEST_DFE_MAXFILE)
+large_layer_test_main_dfe.o: main.cpp
 	$(CPUCOMPILER) $< $(ALL_FLAGS) \
 		-I$(MAXCOMPILER_BUILD_DIR) -I$(LARGE_LAYER_TEST_DFEMAXDIR) \
 		-DDESIGN_NAME=$(LARGE_LAYER_TEST_NAME) -c -o $@
 
 
 large_layer_test_dfe: $(FPGACONVNET_OBJ_FILES) \
-	    fpgaconvnet/large_layer_test_dfe.o \
-	    main.o \
+	    large_layer_test_dfe.o \
+	    large_layer_test_main_dfe.o \
 	    fpgaconvnet/protos/parameters.pb.o
 	$(CPUCOMPILER) $(ALL_FLAGS) -o $@ $^ $(LFLAGS)
 

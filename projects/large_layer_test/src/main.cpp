@@ -41,7 +41,7 @@ std::vector<float> run_feature_extraction(
 
     /* warm up the DFE with the weights. */
     extracted_features = convnet.max_run_inference(N, images, false);
-    extracted_features = convnet.max_run_inference(N, images, false);
+    extracted_features = convnet.max_run_inference(N, images, true);
 
     fpgaconvnet::verify_conv_output(
             network_parameters,
@@ -65,20 +65,20 @@ int main(int argc, char **argv)
 	    fpgaconvnet::load_network_proto(argv[1]);
 
     std::cout << "Reading images ..." << std::endl;
-    const int input_array_size = 100 * 16 * 16 * 512;
+    const uint64_t examples = 20;
+    const uint64_t input_array_size = examples * 16 * 16 * 512;
     std::vector<float> pixel_stream(input_array_size, 0);
     fpgaconvnet::load_float_array_from_binary_file(
             "../test_data/data_input.bin",
             input_array_size,
             (float*) &pixel_stream[0]);
 
-
-    if (N < 100) {
+    if (N < examples) {
         pixel_stream.resize(N * 16 * 16 * 512);
 
-    } else if (N > 100) {
-        std::vector<float> ret;
-        for (int i = 0 ; i < (N / 100) ; i++) {
+    } else if (N > examples) {
+        std::vector<float> ret(N * 16 * 16 * 512);
+        for (uint64_t i = 0 ; i < (N / examples) ; i++) {
             std::memcpy(
                     &ret[i * pixel_stream.size()],
                     &pixel_stream[0],
