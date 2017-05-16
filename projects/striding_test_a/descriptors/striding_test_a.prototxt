@@ -1,0 +1,12 @@
+layer {
+    input_height: 28
+    input_width: 28
+    num_inputs: 33
+    num_outputs: 32
+
+    conv: {
+        pad: 2
+        kernel_size: 7
+        stride: 5
+    }
+}

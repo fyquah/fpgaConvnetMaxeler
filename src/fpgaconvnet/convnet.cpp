@@ -297,7 +297,7 @@ void load_float_array_from_binary_file(
     const int size,
     float *output)
 {
-    generic_load(filename, size, output);
+    generic_load_binary(filename, size, output);
 }
 
 
