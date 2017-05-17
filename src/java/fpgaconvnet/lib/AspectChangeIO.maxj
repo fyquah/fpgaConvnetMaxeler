@@ -2,6 +2,7 @@ package fpgaconvnet.lib;
 
 import com.maxeler.maxcompiler.v2.kernelcompiler.KernelLib;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.Reductions;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Count;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Count.Params;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Count.WrapMode;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.KernelObject;
@@ -11,6 +12,14 @@ import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVector;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVectorType;
 import com.maxeler.maxcompiler.v2.utils.MathUtils;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import fpgaconvnet.Functional;
+import fpgaconvnet.Utils;
+import fpgaconvnet.GlobalConfig;
+
 
 /**
  * A way to create inputs and outputs just like {@link com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.IO IO}, except that you can specify the
@@ -105,6 +114,95 @@ public class AspectChangeIO extends KernelLib {
 	public <T extends KernelObject<T>> void output(String name, T output, DFEVar enable) {
 		output(name, output, enable, null);
 	}
+
+	/**
+	 * Multiplexes an output over time to fit a large output type through a smaller port.
+         *
+         * Note that this method assumes that the enable flag is asserted at a cycle
+         * rate lower than the number of cycles it takes to multiplex the output.
+         *
+         * @param name The name of the output port (how it is referred to in the manager).
+         * @param outputType The data type of the output vector.
+         * @param output The output vector to be multiplexed on.
+         * @param enable The enable signal for the output (when the data is valid and you wish to output it).
+         * @param vectorOutputWidth The maximum number of elements that can fit through
+         *                          fit in port_width.
+         *                          num_bits(vectorOuputWidth * postProcess(aspectOutput))
+         *                          must be less than or euqal m_portWidth.
+         * @param postProcess A post processing function to be called on the aspectOutput.
+         *                    This post processing function can change the type of the
+         *                    output, but must not introduce any cycles in the compute
+         *                    graph.
+         * @return The number of cycles it takes to multiplexed the output
+	 */
+        public void outputScheduled(
+                String outputName,
+                DFEVectorType<DFEVar> outputType,
+                DFEVector<DFEVar> output,
+                DFEVar enable,
+                final int vectorOutputWidth,
+                Functional.F1<DFEVector<DFEVar>, DFEVector<DFEVar>> postProcess
+            ) {
+            final int numOutputs = output.getSize();
+            int aspectOutputSize = -1;
+
+            for (int i = vectorOutputWidth; i >= 1 ; i--) {
+                if (numOutputs % i == 0) {
+                    aspectOutputSize = i;
+                    break;
+                }
+            }
+            final int aspectTranslationCycles = numOutputs / aspectOutputSize;
+            System.out.println("aspect_translation_cycles = " + aspectTranslationCycles);
+            System.out.println("aspect_output_size = " + aspectOutputSize);
+            enable = stream.offset(enable, aspectTranslationCycles - 1);
+            output = stream.offset(output, aspectTranslationCycles - 1);
+
+            DFEVar aspectCounter = control.count.makeCounter(
+                    control.count.makeParams(Utils.ceilLog2(aspectTranslationCycles))
+                    .withInitValue(0l)
+                    .withInc(1l)
+                    .withMax(aspectTranslationCycles - 1)
+                    .withWrapMode(Count.WrapMode.STOP_AT_MAX)
+                    .withReset(enable)
+                    ).getCount();
+            DFEVar signedAspectCounter =
+                aspectCounter.cast(dfeInt(Utils.ceilLog2(aspectTranslationCycles) + 1));
+            DFEVar aspectCounterDone = control.count.makeCounter(
+                    control.count.makeParams(1)
+                    .withInitValue(1l)
+                    .withInc(1l)
+                    .withMax(1)
+                    .withWrapMode(Count.WrapMode.STOP_AT_MAX)
+                    .withEnable(aspectCounter.eq(aspectTranslationCycles - 1))
+                    .withReset(enable)
+                    ).getCount();
+
+            DFEVectorType<DFEVar> aspectVectorType =
+                new DFEVectorType<DFEVar>(GlobalConfig.dataType, aspectOutputSize);
+            DFEVector<DFEVar> aspectOutput = aspectVectorType.newInstance(this);
+
+            for (int i = 0 ; i < aspectOutputSize ; i++) {
+                List<DFEVar> choices = new ArrayList<DFEVar>();
+
+                for (int j = 0 ; j < aspectTranslationCycles ; j++) {
+                    choices.add(
+                            stream.offset(
+                                output[j * aspectOutputSize + i],
+                                -signedAspectCounter,
+                                -aspectTranslationCycles,
+                                0));
+                }
+
+                aspectOutput[i] <== control.mux(aspectCounter, choices);
+            }
+            DFEVar aspectOutputEnable = enable | ~aspectCounterDone;
+
+            DFEVector<DFEVar> postProcessedOutput = postProcess.call(aspectOutput);
+
+            output(outputName, postProcessedOutput.getType(), aspectOutputEnable)
+                <== postProcessedOutput;
+        }
 
 	/**
 	 * Create an output just like io.output, but with the required aspect change and padding done inside the kernel.

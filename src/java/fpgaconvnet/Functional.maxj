@@ -1,0 +1,8 @@
+package fpgaconvnet;
+
+
+public class Functional {
+    public static interface F1<T,S> {
+        public S call(T x);
+    }
+}
