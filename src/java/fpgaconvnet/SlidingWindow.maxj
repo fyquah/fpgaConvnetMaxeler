@@ -63,9 +63,9 @@ public class SlidingWindow extends KernelLib {
         Utils.chainCounterOrZero(this, chain, cyclesToHoldWindow);
 
         final DFEType rowType = dfeInt(
-                Utils.ceilLog2(inputHeight + kernelDim - 1 + offset) + 1);
+                Utils.ceilLog2(inputHeight + kernelDim - 1 + Math.max(offset, 0)) + 1);
         final DFEType colType = dfeInt(
-                Utils.ceilLog2(inputWidth + kernelDim - 1 + offset) + 1);
+                Utils.ceilLog2(inputWidth + kernelDim - 1 + Math.max(offset, 0)) + 1);
         final DFEVector<DFEVar> paddedVector =
                 input.getType().newInstance(this);
         for (int i = 0 ; i < input.getSize() ; i++) {

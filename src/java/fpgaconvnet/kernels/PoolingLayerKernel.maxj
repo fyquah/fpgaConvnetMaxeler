@@ -143,8 +143,9 @@ public class PoolingLayerKernel extends Kernel {
             poolingDim,
             getPixelIterations(),
             constant.var(GlobalConfig.dataType, (double) paddedPixel),
-            0
+            -(poolingDim / 2)
         );
+        System.out.println("Sliding window offset = " + (-(poolingDim / 2)));
 
         for (int i = 0 ; i < channelFoldingFactor ; i++) {
 
@@ -211,11 +212,11 @@ public class PoolingLayerKernel extends Kernel {
 
         }
 
-        DFEVar outputFlag = rowStride.eq(0)
-                & colStride.eq(0)
+        DFEVar outputFlag = rowStride.eq(poolingDim / 2)
+                & colStride.eq(poolingDim / 2)
                 & poolingIter.eq(getPixelIterations() - 1);
 
-        int colLimit = (outputDimension.width() - 1) * stride;
+        int colLimit = (outputDimension.width() - 1) * stride + (poolingDim / 2);
         DFEVar inputColBarrier = control.count.makeCounter(
                 control.count.makeParams(1)
                 .withReset(inputCol.eq(0))
@@ -227,7 +228,7 @@ public class PoolingLayerKernel extends Kernel {
                     & poolingIter.eq(getPixelIterations() - 1)))
             .getCount();
 
-        int rowLimit = (layerParams.getOutputHeight() - 1) * stride;
+        int rowLimit = (layerParams.getOutputHeight() - 1) * stride + (poolingDim / 2);
         DFEVar inputRowBarrier = control.count.makeCounter(
                 control.count.makeParams(1)
                 .withReset(inputCol.eq(0) & inputRow.eq(0))
@@ -309,10 +310,12 @@ public class PoolingLayerKernel extends Kernel {
     }
 
     private DFEVar poolDividend(DFEVar row, DFEVar col) {
-        int lastRow = (outputDimension.height() - 1) * stride;
-        int lastCol = (outputDimension.width() - 1) * stride;
-        int heightResidue = inputDimension.height() - lastRow;
-        int widthResidue = inputDimension.width() - lastCol;
+        int lastRowTopLeft = (outputDimension.height() - 1) * stride;
+        int lastColTopLeft = (outputDimension.width() - 1) * stride;
+        int heightResidue = inputDimension.height() - lastRowTopLeft;
+        int widthResidue = inputDimension.width() - lastColTopLeft;
+        int lastRow = lastRowTopLeft + poolingDim / 2;
+        int lastCol = lastColTopLeft + poolingDim / 2;
 
         final DFEVar fullDim = constant.var(
                 GlobalConfig.dataType, 1.0 / ((double) poolingDim * poolingDim));
