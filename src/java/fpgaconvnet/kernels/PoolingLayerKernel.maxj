@@ -5,6 +5,7 @@ import java.util.ArrayList;
 
 import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
 import com.maxeler.maxcompiler.v2.kernelcompiler.KernelParameters;
+import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.Count;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.CounterChain;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEVar;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVector;
@@ -16,8 +17,11 @@ import fpgaconvnet.Dimension;
 import fpgaconvnet.GlobalConfig;
 import fpgaconvnet.SlidingWindow;
 import fpgaconvnet.Utils;
+import fpgaconvnet.Functional;
 import fpgaconvnet.protos.Parameters.LayerParameter;
 import fpgaconvnet.protos.Parameters.PoolingParameter;
+
+import fpgaconvnet.lib.AspectChangeIO;
 
 
 public class PoolingLayerKernel extends Kernel {
@@ -206,19 +210,102 @@ public class PoolingLayerKernel extends Kernel {
             input <== io.input("x", inputType, poolingIter.eq(0));
 
         }
+
         DFEVar outputFlag = rowStride.eq(0)
                 & colStride.eq(0)
                 & poolingIter.eq(getPixelIterations() - 1);
+
+        int colLimit = (outputDimension.width() - 1) * stride;
+        DFEVar inputColBarrier = control.count.makeCounter(
+                control.count.makeParams(1)
+                .withReset(inputCol.eq(0))
+                .withInc(1)
+                .withMax(1)
+                .withWrapMode(Count.WrapMode.STOP_AT_MAX)
+                .withEnable(
+                    inputCol.eq(colLimit) 
+                    & poolingIter.eq(getPixelIterations() - 1)))
+            .getCount();
+
+        int rowLimit = (layerParams.getOutputHeight() - 1) * stride;
+        DFEVar inputRowBarrier = control.count.makeCounter(
+                control.count.makeParams(1)
+                .withReset(inputCol.eq(0) & inputRow.eq(0))
+                .withInc(1)
+                .withMax(1)
+                .withWrapMode(Count.WrapMode.STOP_AT_MAX)
+                .withEnable(
+                    inputRow.eq(rowLimit)
+                    & inputCol.eq(inputDimension.width() - 1)
+                    & poolingIter.eq(getPixelIterations() - 1)))
+            .getCount();
+        outputFlag = outputFlag & inputColBarrier.eq(0) & inputRowBarrier.eq(0);
+
+        System.out.println("colLimit = " + colLimit);
+        System.out.println("rowLimit = " + rowLimit);
+        inputColBarrier.simWatch("input_col_barrier");
+        inputRowBarrier.simWatch("input_row_barrier");
         outputFlag.simWatch("output_flag");
 
+
+        if (layerParams.getOutputVectorWidth() == layerParams.getNumOutputs()) {
+            normalOutput(output, outputFlag);
+        } else {
+            aspectOutput(output, outputFlag);
+        }
+
+    }
+
+    private void normalOutput(DFEVector<DFEVar> output, DFEVar outputFlag) {
         if (layerParams.getIsLastLayer()) {
             /* Last layer - cast from fixed point to dfe float. */
             DFEVectorType<DFEVar> rawOutputVectorType = new DFEVectorType<DFEVar>(
                     GlobalConfig.cpuType, outputDimension.channels());
-            io.output("y", output.cast(rawOutputVectorType), rawOutputVectorType, outputFlag);
+            io.output(getOutputName(), output.cast(rawOutputVectorType), rawOutputVectorType, outputFlag);
         } else {
-            io.output("y", output, outputType, outputFlag);
+            io.output(getOutputName(), output, outputType, outputFlag);
         }
+    }
+
+    private void aspectOutput(DFEVector<DFEVar> output, DFEVar enable) {
+
+        AspectChangeIO aspectIO = new AspectChangeIO(
+                this,
+                layerParams.getOutputVectorWidth()
+                * (layerParams.getIsLastLayer() ? 4 : 2)
+                * 8);
+        Functional.F1<DFEVector<DFEVar>, DFEVector<DFEVar>> postProcess = null;
+
+        if (layerParams.getIsLastLayer()) {
+            postProcess = new Functional.F1<DFEVector<DFEVar>, DFEVector<DFEVar>>() {
+                public DFEVector<DFEVar> call(DFEVector<DFEVar> v) {
+                    DFEVectorType<DFEVar> rawAspectOutputType = 
+                        new DFEVectorType<DFEVar>(GlobalConfig.cpuType, v.getSize());
+                    return v.cast(rawAspectOutputType);
+                }
+            };
+
+        } else {
+            postProcess = new Functional.F1<DFEVector<DFEVar>, DFEVector<DFEVar>>() {
+                public DFEVector<DFEVar> call(DFEVector<DFEVar> v) {
+                    return v;
+                }
+            };
+
+        }
+
+        DFEVectorType<DFEVar> outputVectorType = new DFEVectorType<DFEVar>(
+                GlobalConfig.dataType, layerParams.getNumOutputs());
+
+        aspectIO.outputScheduled(
+                getOutputName(), outputVectorType, output, enable,
+                layerParams.getOutputVectorWidth(),
+                postProcess);
+
+    }
+
+    private String getOutputName() {
+        return "y";
     }
 
     private DFEVar poolDividend(DFEVar row, DFEVar col) {

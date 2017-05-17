@@ -1,0 +1,13 @@
+layer {
+    input_height: 32
+    input_width: 32
+    num_inputs: 17
+    num_outputs: 17
+
+    pool: {
+        type: Max
+        dim: 7
+        channel_folding_factor: 17
+        stride: 5
+    }
+}

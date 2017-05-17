@@ -1,0 +1,72 @@
+#include <algorithm>
+#include <fstream>
+#include <iostream>
+#include <cstring>
+
+#include "fpgaconvnet/protos/parameters.pb.h"
+#include "fpgaconvnet/mnist.h"
+#include "fpgaconvnet/convnet.h"
+#include "fpgaconvnet/feedforward.h"
+
+#include "aspect_io_pooling_test.h"
+
+
+static const uint64_t N = 1;
+
+template<typename T>
+static T max(T a, T b) {
+    return a > b ? a : b ;
+}
+
+std::vector<float> run_feature_extraction(
+        const fpgaconvnet::protos::Network & network_parameters,
+        const std::vector<float> & images
+)
+{
+    max_file_t *max_file = aspect_io_pooling_test_init();
+    std::vector<float> extracted_features;
+    fpgaconvnet::Convnet convnet(network_parameters, max_file, "");
+
+    convnet.max_init_weights();
+
+    /* warm up the DFE with the weights. */
+    extracted_features = convnet.max_run_inference(N, images, false);
+
+    fpgaconvnet::verify_conv_output(
+            network_parameters,
+            N,
+            &extracted_features[0],
+            "../test_data/data_output.bin",
+            fpgaconvnet::FORMAT_BINARY);
+
+    return extracted_features;
+}
+
+
+int main(int argc, char **argv)
+{
+    std::vector<int> labels;
+
+    if (argc < 2) {
+	std::cout << "Missing network descriptor" << std::endl;
+	return 1;
+    }
+
+    std::cout << "Loading netowork parameters from " << argv[1] << std::endl;
+    fpgaconvnet::protos::Network network_parameters =
+	    fpgaconvnet::load_network_proto(argv[1]);
+
+    std::cout << "Reading images ..." << std::endl;
+    int input_array_size =
+            N * fpgaconvnet::calc_conv_in_size(network_parameters);
+    std::cout << input_array_size << std::endl;
+    std::vector<float> pixel_stream(input_array_size, 0.0f);
+    fpgaconvnet::load_float_array_from_binary_file(
+            "../test_data/data_input.bin",
+            input_array_size,
+            (float*) &pixel_stream[0]);
+
+    std::vector<float> conv_out = run_feature_extraction(
+	    network_parameters, pixel_stream);
+    return 0;
+}

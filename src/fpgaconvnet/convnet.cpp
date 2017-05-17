@@ -273,9 +273,12 @@ protos::Network load_network_proto(const std::string & filename)
 
             }
 
+            uint32_t unstrided_height = it->input_height() - it->pool().dim();
+            uint32_t unstrided_width = it->input_width() - it->pool().dim();
+
             it->set_num_outputs(it->num_inputs());
-            it->set_output_height(div_ceil(it->input_height(), stride));
-            it->set_output_width(div_ceil(it->input_width(), stride));
+            it->set_output_height(div_ceil(unstrided_height, stride) + 1);
+            it->set_output_width(div_ceil(unstrided_width, stride) + 1);
 
         } else if (it->has_lrn()) {
             it->set_num_outputs(it->num_inputs());
@@ -401,6 +404,7 @@ void verify_conv_output(
                                final_layer.num_outputs());
 
     for (uint32_t i = 0 ; i < std::min(N, 10ul) ; i++) {
+        std::cout << "verify_conv_output IMAGE_NUMBER : " << i << std::endl;
         for (uint32_t j = 0 ; j < conv_out_size; j++) {
             float expected;
             float obtained = conv_out[conv_out_size * i + j];
