@@ -41,6 +41,7 @@ namespace math {
 double rng(const double lo, const double hi);
 uint64_t gcd(uint64_t a, uint64_t b);
 uint64_t lcm(uint64_t a, uint64_t b);
+uint64_t div_ceil(uint64_t a, uint64_t b);
 
 
 }  // math

@@ -6,16 +6,6 @@
 #include "fpgaconvnet/protos/parameters.pb.h"
 
 
-static uint64_t div_ceil(uint64_t a, uint64_t b)
-{
-    if (a % b == 0) {
-        return a / b;
-    } else {
-        return a / b + 1;
-    }
-}
-
-
 
 namespace fpgaconvnet
 {
@@ -61,8 +51,8 @@ protos::Network load_network_proto(const std::string & filename)
             uint32_t unstrided_width = it->input_width() - it->pool().dim();
 
             it->set_num_outputs(it->num_inputs());
-            it->set_output_height(div_ceil(unstrided_height, stride) + 1);
-            it->set_output_width(div_ceil(unstrided_width, stride) + 1);
+            it->set_output_height(math::div_ceil(unstrided_height, stride) + 1);
+            it->set_output_width(math::div_ceil(unstrided_width, stride) + 1);
 
         } else if (it->has_lrn()) {
             it->set_num_outputs(it->num_inputs());
@@ -151,6 +141,18 @@ uint64_t lcm(uint64_t a, uint64_t b)
     return a / gcd(a, b) * b;
 }
 
+
+uint64_t div_ceil(uint64_t a, uint64_t b)
+{
+    if (a % b == 0) {
+        return a / b;
+    } else {
+        return a / b + 1;
+    }
+}
+
+
+
 }  // math
 
 
@@ -167,13 +169,13 @@ uint64_t total_multipliers(const protos::LayerParameter & layer)
 uint64_t kernel_iterations(const protos::LayerParameter & layer)
 {
     uint64_t kernelDim = layer.conv().kernel_size();
-    return div_ceil(kernelDim * kernelDim, layer.conv().kernel_folding_factor());
+    return math::div_ceil(kernelDim * kernelDim, layer.conv().kernel_folding_factor());
 }
 
 
 uint64_t convolution_iterations(const protos::LayerParameter & layer)
 {
-    return div_ceil(layer.num_outputs(),
+    return math::div_ceil(layer.num_outputs(),
                     layer.conv().conv_folding_factor()); 
 }
 
@@ -188,7 +190,7 @@ uint64_t total_iterations(const protos::LayerParameter &layer)
 
 uint64_t scheduler_iterations(const protos::LayerParameter & layer)
 {
-    return div_ceil(layer.num_inputs(), layer.conv().worker_factor());
+    return math::div_ceil(layer.num_inputs(), layer.conv().worker_factor());
 }
 
 
@@ -227,7 +229,7 @@ uint64_t calc_weights_vector_size(
             layer.conv().worker_factor()
             * layer.conv().conv_folding_factor()
             * layer.conv().kernel_folding_factor();
-    return div_ceil(weights_per_iter, stream_chunk_size) * stream_chunk_size;
+    return math::div_ceil(weights_per_iter, stream_chunk_size) * stream_chunk_size;
 }
 
 
@@ -242,7 +244,7 @@ bool is_layer_cpu_initialized(const protos::LayerParameter & layer)
 uint64_t calc_bias_stream_size(const protos::LayerParameter & layer)
 {
     uint64_t stream_chunk_size = 16 / sizeof(fixed_point_t);
-    return div_ceil(layer.num_outputs(), stream_chunk_size)
+    return math::div_ceil(layer.num_outputs(), stream_chunk_size)
         * stream_chunk_size;
 }
 
@@ -257,7 +259,7 @@ uint64_t calc_cpu_weights_stream_size(
     uint64_t num_iters =
         total_rom_size(layer) / layer.conv().kernel_folding_factor();
     uint64_t padded_num_iters =
-        div_ceil(num_iters, multiple_base) * multiple_base;
+        math::div_ceil(num_iters, multiple_base) * multiple_base;
     uint64_t padded_rom_size =
         padded_num_iters * layer.conv().kernel_folding_factor();
 
