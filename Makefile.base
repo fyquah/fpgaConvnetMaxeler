@@ -98,10 +98,9 @@ all: runsim build
 
 # Rules for protobufs
 $(ALL_GENERATED_PROTOS): $(PROTOS)
-	mkdir -p java/
-	$(PROTOC) $< -I$(WHEREISROOT)/protos --java_out=./java --python_out=./ --cpp_out=./
+	mkdir -p java/ fpgaconvnet/modelling/ fpgaconvnet/protos/
 	touch fpgaconvnet/__init__.py fpgaconvnet/protos/__init__.py
-	ln -sf $(abspath $(WHEREISROOT)/src/fpgaconvnet/modelling/) ./fpgaconvnet/ 
+	$(PROTOC) $< -I$(WHEREISROOT)/protos --java_out=./java --python_out=./ --cpp_out=./
 
 protos: $(ALL_GENERATED_PROTOS)
 
