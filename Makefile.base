@@ -107,6 +107,15 @@ protos: $(ALL_GENERATED_PROTOS)
 
 fpgaconvnet/convnet.o: fpgaconvnet fpgaconvnet/protos/parameters.pb.h
 
+fpgaconvnet/modelling/optimizer.o: fpgaconvnet \
+				   fpgaconvnet/protos/parameters.pb.h \
+				   fpgaconvnet/protos/parameters.pb.o
+
+fpgaconvnet/modelling/optimizer: fpgaconvnet/modelling/optimizer.o \
+				 fpgaconvnet/protos/parameters.pb.o \
+				 fpgaconvnet/common.o
+	$(CPUCOMPILER) $(ALL_FLAGS) -o $@ $^ -lprotobuf
+
 fpgaconvnet/feedforward.o: fpgaconvnet
 
 fpgaconvnet/convnet_sim.o: fpgaconvnet/convnet.cpp fpgaconvnet/protos/parameters.pb.h
@@ -118,6 +127,7 @@ fpgaconvnet/convnet_sim.o: fpgaconvnet/convnet.cpp fpgaconvnet/protos/parameters
 
 FPGACONVNET_OBJ_FILES=fpgaconvnet/protos/parameters.pb.o \
 		      fpgaconvnet/feedforward.o fpgaconvnet/convnet.o \
-		      fpgaconvnet/mnist.o
+		      fpgaconvnet/mnist.o \
+		      fpgaconvnet/common.o
 
 FPGACONVNET_SIM_OBJ_FILES=fpgaconvnet/feedforward.o fpgaconvnet/convnet_sim.o fpgaconvnet/mnist.o
