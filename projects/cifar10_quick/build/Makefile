@@ -16,12 +16,10 @@ $(CIFAR10_QUICK_DATA):
 	curl "https://www.cs.toronto.edu/~kriz/cifar-10-binary.tar.gz" >cifar10-binary.tar.gz
 	tar xzvf cifar10-binary.tar.gz
 
-
-$(CIFAR10_QUICK_OPTIMIZED_DESCRIPTOR): fpgaconvnet/modelling/optimizer.py $(CIFAR10_QUICK_DESCRIPTOR) $(PYTHON_PROTOS)
-	python fpgaconvnet/modelling/optimizer.py \
-		--resource-bench $(WHEREISROOT)/results/resource_bench.yaml \
-		--output $@ \
-		$(CIFAR10_QUICK_DESCRIPTOR)
+$(CIFAR10_QUICK_OPTIMIZED_DESCRIPTOR): fpgaconvnet/modelling/optimizer \
+				       $(CIFAR10_QUICK_DESCRIPTOR)
+	touch $@
+	./$< $(CIFAR10_QUICK_DESCRIPTOR) $@
 
 
 # ==============================
