@@ -219,7 +219,7 @@ double throughput(const protos::Network & network)
             layer_throughput = std::min(
                     scheduler_throughput, computation_throughput);
 
-        } else if (layer.has_conv()) {
+        } else if (layer.has_pool()) {
             layer_throughput =
                 1.0 / (calculation::total_iterations(layer) * input_size);
 
@@ -233,6 +233,30 @@ double throughput(const protos::Network & network)
     }
 
     return throughput * frequency;
+}
+
+
+double ops(const protos::Network & network)
+{
+    double total_ops = 0.0;
+
+    for (auto it = network.layer().begin() ; it != network.layer().end() ; it++) {
+        if (it->has_conv()) {
+            total_ops += (
+                    2 * double(it->conv().kernel_size() * it->conv().kernel_size())
+                    * double(it->output_height() * it->output_width())
+                    * double(it->num_inputs() * it->num_outputs()));
+        } else if (it->has_pool()) {
+            total_ops += it->output_height() * it->output_width() * it->num_inputs();
+
+        } else if (it->has_lrn()) {
+            total_ops += it->input_height() * it->input_width() * it->num_inputs();
+
+        }
+    }
+
+    return total_ops;
+
 }
 
 
@@ -260,9 +284,24 @@ uint64_t convolution_iterations(const protos::LayerParameter & layer)
 
 uint64_t total_iterations(const protos::LayerParameter &layer)
 {
-    return scheduler_iterations(layer)
-            * convolution_iterations(layer)
-            * kernel_iterations(layer);
+    if (layer.has_conv()) {
+        return scheduler_iterations(layer)
+                * convolution_iterations(layer)
+                * kernel_iterations(layer);
+
+    } else if (layer.has_pool()) {
+        return math::div_ceil(
+                layer.num_inputs(),
+                layer.pool().channel_folding_factor());
+
+
+    } else if (layer.has_lrn()) {
+        return math::div_ceil(
+                layer.num_inputs(),
+                layer.lrn().channel_folding_factor());
+
+
+    }
 }
 
 

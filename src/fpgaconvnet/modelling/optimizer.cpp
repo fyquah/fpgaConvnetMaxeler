@@ -273,7 +273,7 @@ solve_for_ideal_worker_factors(
 
 
 static fpgaconvnet::protos::Network
-search_design_space(const fpgaconvnet::protos::Network & network)
+search_design_space(const fpgaconvnet::protos::Network & network, bool *success)
 {
     const optimizer_t optimizer = build_initial_optimizer(network);
     const std::vector<double> relative_worker_factors = 
@@ -299,7 +299,7 @@ search_design_space(const fpgaconvnet::protos::Network & network)
         double reference_wf;
         double lo = 0.0;
         double hi = network.layer(reference_layer_index).num_inputs();
-        while (hi - lo > 0.001) {
+        while (hi - lo > 0.0001) {
             double reference_wf = (lo + hi) / 2.0;
 
             std::vector<double> ideal_worker_factors =
@@ -319,9 +319,14 @@ search_design_space(const fpgaconvnet::protos::Network & network)
             bool meets_resource_constraints =
                 ::fpgaconvnet::resource_model::meets_resource_constraints(resources);
 
-            fpgaconvnet::logging::stdout()
-                << "\nResource usage:\n"
-                << fpgaconvnet::resource_model::resource_to_string(resources);
+            fpgaconvnet::logging::stdout() << "Resource usage:\n";
+
+            for (int i = 0 ; i < resources.size() ; i++) {
+                fpgaconvnet::logging::stdout()
+                    << "fpga " << i
+                    << fpgaconvnet::resource_model::resource_to_string(resources[i])
+                    << "\n";
+            }
 
             fpgaconvnet::logging::stdout()
                 << "Meets constraints: "
@@ -346,6 +351,7 @@ search_design_space(const fpgaconvnet::protos::Network & network)
         fpgaconvnet::logging::dedent();
     }
 
+    *success = is_best_solution_set;
     return best_solution;
 }
 
@@ -359,11 +365,29 @@ int main (int argc, char **argv)
     fpgaconvnet::logging::stdout()
         << "Running Design Space Exploration:"
         << std::endl;
-    fpgaconvnet::protos::Network optimized_network =
-            search_design_space(network);
+    bool success = false;
+    fpgaconvnet::protos::Network solution =
+            search_design_space(network, &success);
 
-    // fpgaconvnet::logging::stdout() << "Optimized descriptor:" << std::endl;
-    // fpgaconvnet::logging::stdout() << optimized_network.DebugString() << std::endl;
+    if (success) {
+        double throughput = fpgaconvnet::calculation::throughput(solution);
+        double ops = fpgaconvnet::calculation::ops(network);
+        fpgaconvnet::logging::stdout() << "Found an optimal solution!\n";
+        fpgaconvnet::logging::stdout() << solution.DebugString();
+        fpgaconvnet::logging::stdout()
+            << "Network ops = " << ops << '\n';
+        fpgaconvnet::logging::stdout()
+            << "Projected Throughput = " << throughput << '\n';
+        fpgaconvnet::logging::stdout()
+            << "Projected total GOps = " << ops * throughput * 1e-9 << '\n';
+        return 0;
+    }
+    else {
+        fpgaconvnet::logging::stdout()
+            << "Failed to find a solution" << std::endl;
+        return 1;
+
+    }
 
     return 0;
 }
