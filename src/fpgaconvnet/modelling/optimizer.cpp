@@ -116,13 +116,7 @@ static void log_vector(const std::vector<double> & v)
 
 /* Rounds up x such that ceil % x == 0 */
 static uint64_t ceil_divisible(double x, uint64_t ceil) {
-    uint64_t ret;
-
-    if (std::fmod(x, 1.0) > 0.0001) {
-        ret = ((uint64_t) x) + 1;
-    } else {
-        ret  = uint64_t(x);
-    }
+    uint64_t ret = std::ceil(x);
 
     if (ret >= ceil) {
         return ceil;
@@ -234,7 +228,7 @@ solve_for_ideal_worker_factors(
         if (layer->has_conv()) {
             uint64_t worker_factor = ceil_divisible(
                         ideal_worker_factors[i], layer->num_inputs());
-            uint64_t size_out = layer->output_height()  * layer->output_width();
+            uint64_t size_out = layer->output_height() * layer->output_width();
             uint64_t size_in  = layer->input_height()  * layer->input_width();
             uint64_t target_total_iterations = std::ceil(
                     double(layer->num_inputs() * size_in)
@@ -279,7 +273,7 @@ solve_for_ideal_worker_factors(
 
 
 static fpgaconvnet::protos::Network
-search_design_space(fpgaconvnet::protos::Network network)
+search_design_space(const fpgaconvnet::protos::Network & network)
 {
     const optimizer_t optimizer = build_initial_optimizer(network);
     const std::vector<double> relative_worker_factors = 
@@ -320,9 +314,19 @@ search_design_space(fpgaconvnet::protos::Network network)
                 solve_for_ideal_worker_factors(
                         optimizer, network, ideal_worker_factors);
 
+            std::vector<fpgaconvnet::resource_model::resource_t> resources =
+                ::fpgaconvnet::resource_model::project(local_solution);
             bool meets_resource_constraints =
-                ::fpgaconvnet::resource_model::meets_resource_constraints(
-                        local_solution);
+                ::fpgaconvnet::resource_model::meets_resource_constraints(resources);
+
+            fpgaconvnet::logging::stdout()
+                << "\nResource usage:\n"
+                << fpgaconvnet::resource_model::resource_to_string(resources);
+
+            fpgaconvnet::logging::stdout()
+                << "Meets constraints: "
+                << (meets_resource_constraints ?  "YES" : "NO")
+                << "\n";
 
             if (meets_resource_constraints) {
                 if (!is_best_solution_set ||

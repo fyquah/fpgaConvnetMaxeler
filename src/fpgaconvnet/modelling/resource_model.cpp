@@ -1,5 +1,7 @@
 #include <cmath>
+#include <cstring>
 
+#include <sstream>
 #include <vector>
 
 #include <fpgaconvnet/modelling/resource_model.h>
@@ -16,6 +18,30 @@ resource_add(const resource_t left, const resource_t right)
         .bram = left.bram + right.bram,
         .dsp  = left.dsp + right.dsp,
     };
+}
+
+
+std::string
+resource_to_string(const resource_t & res)
+{
+    thread_local static char buffer[1000];
+    std::sprintf(
+            buffer, "[resource lut = %.3f, dsp = %.3f, bram = %.3f]",
+            res.lut, res.dsp, res.bram);
+    return std::string(buffer);
+}
+
+std::string
+resource_to_string(const std::vector<resource_t> & resources)
+{
+    std::stringstream ss;
+
+    for (int i = 0 ; i < resources.size() ; i++) {
+        ss << "- [fpga "  << i << ": "
+            << resource_to_string(resources[i]) << "]\n";
+    }
+
+    return ss.str();
 }
 
 
@@ -195,11 +221,12 @@ project_single_fpga(
 }
 
 
-bool
-meets_resource_constraints(const fpgaconvnet::protos::Network & network)
+std::vector<resource_t>
+project(const protos::Network & network)
 {
     std::vector<std::vector<fpgaconvnet::protos::LayerParameter>>
         layers_by_fpga(network.num_fpga_used());
+    std::vector<resource_t> resources;
 
     for (auto & layer : network.layer()) {
         layers_by_fpga[layer.fpga_id()].push_back(layer);
@@ -213,9 +240,19 @@ meets_resource_constraints(const fpgaconvnet::protos::Network & network)
         const stream_t output_stream =
             (i == network.num_fpga_used()) ? STREAM_PCIE : STREAM_MAX_RING;
 
-        const resource_t resource = project_single_fpga(
-                input_stream, layers, output_stream);
+        resources.push_back(project_single_fpga(
+                input_stream, layers, output_stream));
 
+    }
+
+    return resources;
+}
+
+
+bool
+meets_resource_constraints(const std::vector<resource_t> & resources)
+{
+    for (const resource_t & resource : resources) {
         if (resource.dsp > MAX_DSP
                 || resource.dsp > MAX_BRAM
                 || resource.lut >= 0.6 * MAX_LUT) {

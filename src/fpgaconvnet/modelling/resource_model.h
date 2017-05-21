@@ -24,8 +24,16 @@ const double MAX_BRAM = 2567;
 const double MAX_LUT = 524800;
 const double MAX_FF = 1049600;
 
+
 bool
-meets_resource_constraints(const fpgaconvnet::protos::Network & network);
+meets_resource_constraints(const std::vector<resource_t> & resources);
+
+std::vector<resource_t> project(const protos::Network & network);
+
+std::string
+resource_to_string(const std::vector<resource_t> & resources);
+
+std::string resource_to_string(const resource_t & res);
 
 
 }  // resource_model
