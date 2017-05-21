@@ -124,7 +124,7 @@ static uint64_t ceil_divisible(double x, uint64_t ceil) {
     }
 
     if (ret >= ceil) {
-        return ret;
+        return ceil;
     }
 
     for (; ret < ceil ; ret++) {
@@ -168,11 +168,16 @@ solve_minimal_cff_kff(
      * are not exactly cheap!
      */
     bool is_best_initialized = false;
-    fpgaconvnet::protos::LayerParameter best = layer;
-    fpgaconvnet::protos::LayerParameter tmp_container = layer;
+    ::fpgaconvnet::protos::LayerParameter best = layer;
+    ::fpgaconvnet::protos::LayerParameter tmp_container = layer;
+    ::fpgaconvnet::logging::Indentation indent;
 
     best.mutable_conv()->set_worker_factor(worker_factor);
     tmp_container.mutable_conv()->set_worker_factor(worker_factor);
+
+    ::fpgaconvnet::logging::stdout()
+        << "Target iterations = "
+        << target_iterations << '\n';
 
     for (auto cff : layer_valid_values.conv_factors) {
         for (auto kff : layer_valid_values.kernel_factors) {
@@ -182,8 +187,13 @@ solve_minimal_cff_kff(
             uint64_t total_iterations =
                 ::fpgaconvnet::calculation::total_iterations(tmp_container);
 
-            if (total_iterations > target_iterations) {
-                if (is_best_initialized == false) {
+            if (total_iterations <= target_iterations) {
+                int best_total_multipliers =
+                    best.conv().conv_folding_factor()
+                    * best.conv().kernel_folding_factor();
+
+                if (is_best_initialized == false
+                        || cff * kff < best_total_multipliers) {
                     is_best_initialized = true;
                     best.mutable_conv()->set_conv_folding_factor(cff);
                     best.mutable_conv()->set_kernel_folding_factor(kff);
@@ -193,6 +203,11 @@ solve_minimal_cff_kff(
 
         }
     }
+
+    ::fpgaconvnet::logging::stdout() << "Best cff = "
+        << best.conv().conv_folding_factor() << '\n';
+    ::fpgaconvnet::logging::stdout() << "Best kff = "
+        << best.conv().kernel_folding_factor() << '\n';
 
     return best;
 }
@@ -207,14 +222,11 @@ solve_for_ideal_worker_factors(
 )
 {
     fpgaconvnet::protos::Network optimized_network = network;
+    ::fpgaconvnet::logging::Indentation indent;
 
     for (int i = 0 ; i < optimized_network.layer_size() ; i++)
     {
-        // 1. set worker_factor here based on the ceil given.
-        // 2. brute force cff and kff to find the minimum
-        //    (or just cff in the case of pooling)
-        // 3. max out cff and kff such that we don't use more than one BRAM
-        //    per multiplier
+        ::fpgaconvnet::logging::stdout() << "Layer " << i << '\n';
         ::fpgaconvnet::protos::LayerParameter* layer =
             optimized_network.mutable_layer(i);
 
@@ -225,7 +237,7 @@ solve_for_ideal_worker_factors(
             uint64_t size_in  = layer->input_height()  * layer->input_width();
             uint64_t target_total_iterations = std::ceil(
                     double(layer->num_inputs() * size_in)
-                    / double(worker_factor * size_out));
+                    / double(ideal_worker_factors[i] * size_out));
 
             *layer = solve_minimal_cff_kff(
                         optimizer.layer_valid_values[i],
@@ -234,16 +246,30 @@ solve_for_ideal_worker_factors(
                         target_total_iterations);
 
         } else if (layer->has_pool()) {
-            layer->mutable_pool()->set_channel_folding_factor(
-                    ceil_divisible(
+            uint64_t channel_folding_factor = 
+                ceil_divisible(
                         ideal_worker_factors[i],
-                        layer->num_inputs()));
+                        layer->num_inputs());
+            layer->mutable_pool()->set_channel_folding_factor(
+                    channel_folding_factor);
+
+            ::fpgaconvnet::logging::Indentation indent;
+            ::fpgaconvnet::logging::stdout()
+                << "Channel folding factor = "
+                << channel_folding_factor << '\n';
 
         } else if (layer->has_lrn()) {
-            layer->mutable_lrn()->set_channel_folding_factor(
-                    ceil_divisible(
+            uint64_t channel_folding_factor = 
+                ceil_divisible(
                         ideal_worker_factors[i],
-                        layer->num_inputs()));
+                        layer->num_inputs());
+            layer->mutable_lrn()->set_channel_folding_factor(
+                    channel_folding_factor);
+
+            ::fpgaconvnet::logging::Indentation indent;
+            ::fpgaconvnet::logging::stdout()
+                << "Channel folding factor = "
+                << channel_folding_factor << '\n';
         }
     }
 
@@ -268,11 +294,17 @@ search_design_space(fpgaconvnet::protos::Network network)
 
         auto& layer = network.layer(reference_layer_index);
 
-        for (uint64_t reference_wf = 0
-                ; reference_wf < network.layer(reference_layer_index).num_inputs()
-                ; reference_wf++) {
-            if (layer.num_inputs() % reference_wf != 0)
-                continue;
+        fpgaconvnet::logging::stdout()
+            << "Bottleneck layer = layer " << reference_layer_index << '\n';
+
+        fpgaconvnet::logging::indent();
+
+        // Do a binary search for the ideal bottleneck reference working factor.
+        double reference_wf;
+        double lo = 0.0;
+        double hi = network.layer(reference_layer_index).num_inputs();
+        while (hi - lo > 0.001) {
+            double reference_wf = (lo + hi) / 2.0;
 
             std::vector<double> ideal_worker_factors =
                 compute_ideal_worker_factors(
@@ -280,10 +312,27 @@ search_design_space(fpgaconvnet::protos::Network network)
                         reference_layer_index,
                         reference_wf,
                         relative_worker_factors);
-            optimized_network = solve_for_ideal_worker_factors(
-                    optimizer, network, ideal_worker_factors);
+            fpgaconvnet::logging::stdout ()
+                << "Bottleneck worker factor = " << reference_wf << '\n';
+            fpgaconvnet::logging::Network local_solution =
+                solve_for_ideal_worker_factors(
+                        optimizer, network, ideal_worker_factors);
+            bool meets_resource_constraints =
+                ::fpgaconvnet::resource_model::meets_resource_constraints(
+                        local_solution);
 
+            if (meets_resource_constraints) {
+                if (better_than_optimized_solution)
+                    optimized_network = local_solution;
+
+                lo = reference_wf;
+
+            } else {
+                hi = reference_wf;
+            }
         }
+        
+        fpgaconvnet::logging::dedent();
     }
 
     return optimized_network;
@@ -302,8 +351,8 @@ int main (int argc, char **argv)
     fpgaconvnet::protos::Network optimized_network =
             search_design_space(network);
 
-    fpgaconvnet::logging::stdout() << "Optimized descriptor:" << std::endl;
-    fpgaconvnet::logging::stdout() << optimized_network.DebugString() << std::endl;
+    // fpgaconvnet::logging::stdout() << "Optimized descriptor:" << std::endl;
+    // fpgaconvnet::logging::stdout() << optimized_network.DebugString() << std::endl;
 
     return 0;
 }

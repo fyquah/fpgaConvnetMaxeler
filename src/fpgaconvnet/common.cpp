@@ -95,6 +95,7 @@ static const char* level_strings[] = {
 };
 
 static std::string LOG_PREFIX = "default";
+static std::string INDENTATION = "";
 
 std::ostream& stdout(int level)
 {
@@ -104,13 +105,34 @@ std::ostream& stdout(int level)
         level = 0;
     }
     return std::cout << "[" << LOG_PREFIX << "\t "
-            << level_strings[level] << "]\t";
+            << level_strings[level] << "]\t" << INDENTATION;
 }
-
 
 void log_prefix(const std::string & prefix)
 {
     LOG_PREFIX = prefix;
+}
+
+void indent()
+{
+    INDENTATION.append("  ");
+}
+
+void dedent()
+{
+    INDENTATION.pop_back();
+    INDENTATION.pop_back();
+}
+
+
+Indentation::Indentation()
+{
+    indent();
+}
+
+Indentation::~Indentation()
+{
+    dedent();
 }
 
 }  // logging

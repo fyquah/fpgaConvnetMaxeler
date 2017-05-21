@@ -32,7 +32,15 @@ const int WARNING = 2;
 const int ERROR = 3;
 
 std::ostream& stdout(int level = INFO);
+void indent();
+void dedent();
 void log_prefix(const std::string & prefix);
+
+class Indentation {
+public:
+    Indentation();
+    ~Indentation();
+};
 
 }  // logging
 
