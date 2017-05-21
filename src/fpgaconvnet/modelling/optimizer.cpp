@@ -74,7 +74,8 @@ build_initial_optimizer(const fpgaconvnet::protos::Network & network)
         layer_valid_values.push_back(valid_values);
     }
 
-    optimizer_t optimizer = {.layer_valid_values = layer_valid_values};
+    optimizer_t optimizer;
+    optimizer.layer_valid_values = layer_valid_values;
     return optimizer;
 }
 
@@ -107,8 +108,8 @@ calculate_relative_worker_factors(const fpgaconvnet::protos::Network & network)
 static void log_vector(const std::vector<double> & v)
 {
     fpgaconvnet::logging::stdout() << "[ ";
-    for (auto x : v) {
-        std::cout << x << " ; ";
+    for (int i = 0 ; i < v.size() ; i++) {
+        std::cout << v[i] << " ; ";
     }
     std::cout << "]" << std::endl;
 }
@@ -174,8 +175,11 @@ solve_minimal_cff_kff(
         << "Target iterations = "
         << target_iterations << '\n';
 
-    for (auto cff : layer_valid_values.conv_factors) {
-        for (auto kff : layer_valid_values.kernel_factors) {
+    for (int i = 0 ; i < layer_valid_values.conv_factors.size() ; i++) {
+        for (int j = 0 ; j < layer_valid_values.kernel_factors.size(); j++) {
+            auto cff = layer_valid_values.conv_factors[i];
+            auto kff = layer_valid_values.kernel_factors[j];
+
             tmp_container.mutable_conv()->set_conv_folding_factor(cff);
             tmp_container.mutable_conv()->set_kernel_folding_factor(kff);
 
@@ -380,16 +384,12 @@ int main (int argc, char **argv)
             << "Projected Throughput = " << throughput << '\n';
         fpgaconvnet::logging::stdout()
             << "Projected total GOps = " << ops * throughput * 1e-9 << '\n';
-<<<<<<< HEAD
         return 0;
     }
     else {
         fpgaconvnet::logging::stdout()
             << "Failed to find a solution" << std::endl;
         return 1;
-
-=======
->>>>>>> 32acfec403e2faab61d0a585da038ae044bc4c91
     }
 
     return 0;

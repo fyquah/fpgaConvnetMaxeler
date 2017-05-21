@@ -122,8 +122,7 @@ void indent()
 
 void dedent()
 {
-    INDENTATION.pop_back();
-    INDENTATION.pop_back();
+    INDENTATION = INDENTATION.substr(0, INDENTATION.length() - 2);
 }
 
 
@@ -199,7 +198,8 @@ double throughput(const protos::Network & network)
     double throughput = PCIE_BANDWIDTH / input_image_bytes * cycle_length;
 
     /* TODO(fyq14): Consider cross-FPGA boundary. */
-    for (auto layer : network.layer()) {
+    for (int i = 0 ; i < network.layer_size() ; i++) {
+        auto layer = network.layer(i);
         const double input_size =
                 layer.input_height() * layer.input_width();
 

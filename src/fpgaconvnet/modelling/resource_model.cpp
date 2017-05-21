@@ -13,11 +13,10 @@ namespace resource_model {
 static resource_t
 resource_add(const resource_t left, const resource_t right)
 {
-    resource_t ret = {
-        .lut  = left.lut + right.lut,
-        .bram = left.bram + right.bram,
-        .dsp  = left.dsp + right.dsp,
-    };
+    resource_t ret;
+    ret.lut  = left.lut + right.lut;
+    ret.bram = left.bram + right.bram;
+    ret.dsp  = left.dsp + right.dsp;
     return ret;
 }
 
@@ -25,7 +24,7 @@ resource_add(const resource_t left, const resource_t right)
 std::string
 resource_to_string(const resource_t & res)
 {
-    thread_local static char buffer[1000];
+    static char buffer[1000];
     std::sprintf(
             buffer, "[resource lut = %.3f, dsp = %.3f, bram = %.3f]",
             res.lut, res.dsp, res.bram);
@@ -107,7 +106,10 @@ conv_resource(const protos::LayerParameter & layer)
     const double lut_streams = (2 * wf + 1) * (402 + 100);
     const double lut = lut_scheduler + lut_streams + lut_unit + lut_acc;
 
-    resource_t ret =  {.lut = lut , .bram = bram, .dsp = dsp};
+    resource_t ret;
+    ret.lut = lut;
+    ret.bram = bram;
+    ret.dsp = dsp;
     return ret;
 }
 
@@ -127,7 +129,10 @@ pool_resource(const protos::LayerParameter & layer)
         34.9 * dim * dim * channel_folding_factor
         + 1.6152 * layer.input_width() * layer.num_inputs();
 
-    resource_t ret = {.lut = lut, .bram = bram, .dsp = double(0.0)};
+    resource_t ret;
+    ret.lut = lut;
+    ret.bram = bram;
+    ret.dsp = double(0.0);
     return ret;
 }
 
@@ -147,8 +152,9 @@ lrn_resource(const protos::LayerParameter & layer)
         34.9 * dim * dim * channel_folding_factor
         + 1.6152 * layer.input_width() * layer.num_inputs();
 
-    resource_t resource = {.lut = lut, .bram = bram, .dsp = 0.0};
-
+    resource_t resource;
+    resource.lut = lut;
+    resource.bram = bram;
     resource.dsp = channel_folding_factor;
     return resource;
 }
@@ -160,7 +166,10 @@ project_single_fpga(
         const std::vector<protos::LayerParameter> & layers,
         const stream_t output_stream) 
 {
-    resource_t resource = {.lut = 0.0, .bram = 0.0, .dsp = 0.0};
+    resource_t resource;
+    resource.lut = 0.0;
+    resource.bram = 0.0;
+    resource.dsp = 0.0;
 
     for (int i = 0 ; i < layers.size() ; i++) {
         const protos::LayerParameter layer = layers[i];
@@ -227,8 +236,10 @@ project(const protos::Network & network)
         layers_by_fpga(network.num_fpga_used());
     std::vector<resource_t> resources;
 
-    for (auto & layer : network.layer()) {
-        layers_by_fpga[layer.fpga_id()].push_back(layer);
+    for (auto it = network.layer().begin()
+            ; it != network.layer().end()
+            ; it++) {
+        layers_by_fpga[it->fpga_id()].push_back(*it);
     }
 
     for (int i = 0; i < layers_by_fpga.size() ; i++) {
@@ -251,7 +262,8 @@ project(const protos::Network & network)
 bool
 meets_resource_constraints(const std::vector<resource_t> & resources)
 {
-    for (const resource_t & resource : resources) {
+    for (int i = 0 ; i < resources.size(); i++) {
+        auto resource = resources[i];
         if (resource.dsp > MAX_DSP
                 || resource.dsp > MAX_BRAM
                 || resource.lut > MAX_LUT) {
