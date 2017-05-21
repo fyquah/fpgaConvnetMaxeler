@@ -1,3 +1,5 @@
+#include <fcntl.h>
+
 #include <cmath>
 
 #include <iostream>
@@ -365,6 +367,7 @@ int main (int argc, char **argv)
     fpgaconvnet::logging::stdout() << "Loading convnet descriptor:" << std::endl;
     fpgaconvnet::protos::Network network =
 	    fpgaconvnet::load_network_proto(argv[1]);
+    const char *output_filename = argv[2];
 
     fpgaconvnet::logging::stdout()
         << "Running Design Space Exploration:"
@@ -375,7 +378,7 @@ int main (int argc, char **argv)
 
     if (success) {
         double throughput = fpgaconvnet::calculation::throughput(solution);
-        double ops = fpgaconvnet::calculation::ops(network);
+        double ops = fpgaconvnet::calculation::ops(solution);
         fpgaconvnet::logging::stdout() << "Found an optimal solution!\n";
         fpgaconvnet::logging::stdout() << solution.DebugString();
         fpgaconvnet::logging::stdout()
@@ -384,9 +387,14 @@ int main (int argc, char **argv)
             << "Projected Throughput = " << throughput << '\n';
         fpgaconvnet::logging::stdout()
             << "Projected total GOps = " << ops * throughput * 1e-9 << '\n';
+
+        int fd = open(output_filename, O_WRONLY);
+        google::protobuf::io::FileOutputStream fstream(fd);
+        google::protobuf::TextFormat::Print(solution, &fstream);
+
         return 0;
-    }
-    else {
+
+    } else {
         fpgaconvnet::logging::stdout()
             << "Failed to find a solution" << std::endl;
         return 1;

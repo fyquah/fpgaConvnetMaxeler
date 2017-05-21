@@ -338,7 +338,7 @@ uint64_t total_rom_size(const protos::LayerParameter & layer)
             * total_iterations(layer);
 }
 
-uint64_t calc_weights_vector_size(
+uint64_t weights_vector_size(
         const protos::LayerParameter & layer)
 {
     int stream_chunk_size = 384 / sizeof(fixed_point_t);
@@ -352,20 +352,22 @@ uint64_t calc_weights_vector_size(
 
 bool is_layer_cpu_initialized(const protos::LayerParameter & layer)
 {
-    return layer.conv().bram_factor()
-        >= (layer.num_inputs() * layer.num_outputs());
+    return
+        !layer.conv().has_bram_factor()
+        || (layer.conv().bram_factor()
+                >= (layer.num_inputs() * layer.num_outputs()));
 }
 
 
 
-uint64_t calc_bias_stream_size(const protos::LayerParameter & layer)
+uint64_t bias_stream_size(const protos::LayerParameter & layer)
 {
     uint64_t stream_chunk_size = 16 / sizeof(fixed_point_t);
     return math::div_ceil(layer.num_outputs(), stream_chunk_size)
         * stream_chunk_size;
 }
 
-uint64_t calc_cpu_weights_stream_size(
+uint64_t cpu_weights_stream_size(
         const protos::LayerParameter & layer)
 {
     uint64_t stream_chunk_size = 16 / sizeof(fixed_point_t);
