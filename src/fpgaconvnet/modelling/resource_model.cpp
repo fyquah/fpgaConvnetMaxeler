@@ -123,7 +123,7 @@ pool_resource(const protos::LayerParameter & layer)
 
     const double lut =
         34.9 * dim * dim * channel_folding_factor
-        * + 1.6152 * layer.input_width() * layer.num_inputs();
+        + 1.6152 * layer.input_width() * layer.num_inputs();
 
     return (resource_t) {
         .bram = bram,
@@ -135,9 +135,9 @@ pool_resource(const protos::LayerParameter & layer)
 static resource_t
 lrn_resource(const protos::LayerParameter & layer)
 {
-    const uint64_t dim = layer.pool().dim();
+    const uint64_t dim = layer.lrn().local_size();
     const uint64_t channel_folding_factor =
-        layer.pool().channel_folding_factor();
+        layer.lrn().channel_folding_factor();
 
     const double bram =
         layer.input_width()
@@ -146,7 +146,7 @@ lrn_resource(const protos::LayerParameter & layer)
 
     const double lut =
         34.9 * dim * dim * channel_folding_factor
-        * + 1.6152 * layer.input_width() * layer.num_inputs();
+        + 1.6152 * layer.input_width() * layer.num_inputs();
 
     resource_t resource = {.bram = bram, .lut = lut, .dsp = 0.0};
 

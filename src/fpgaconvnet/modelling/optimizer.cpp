@@ -299,7 +299,7 @@ search_design_space(const fpgaconvnet::protos::Network & network)
         double reference_wf;
         double lo = 0.0;
         double hi = network.layer(reference_layer_index).num_inputs();
-        while (hi - lo > 0.001) {
+        while (hi - lo > 0.0001) {
             double reference_wf = (lo + hi) / 2.0;
 
             std::vector<double> ideal_worker_factors =
@@ -319,9 +319,14 @@ search_design_space(const fpgaconvnet::protos::Network & network)
             bool meets_resource_constraints =
                 ::fpgaconvnet::resource_model::meets_resource_constraints(resources);
 
-            fpgaconvnet::logging::stdout()
-                << "\nResource usage:\n"
-                << fpgaconvnet::resource_model::resource_to_string(resources);
+            fpgaconvnet::logging::stdout() << "Resource usage:\n";
+
+            for (int i = 0 ; i < resources.size() ; i++) {
+                fpgaconvnet::logging::stdout()
+                    << "fpga " << i
+                    << fpgaconvnet::resource_model::resource_to_string(resources[i])
+                    << "\n";
+            }
 
             fpgaconvnet::logging::stdout()
                 << "Meets constraints: "
