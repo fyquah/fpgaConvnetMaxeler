@@ -156,17 +156,8 @@ void report_conv_performance(
     double end = double(t_end.tv_sec) * 1000000 + double(t_end.tv_usec);
     double delta = end - begin;
     double throughput = double(N) / delta * 1000000;
-    double total_ops = 0.0;
+    double total_ops = calculation::total_ops(network);
    
-    for (auto it = network.layer().begin() ; it != network.layer().end() ; it++) {
-        if (it->has_conv()) {
-            total_ops += (
-                    2 * double(it->conv().kernel_size() * it->conv().kernel_size())
-                    * double(it->output_height() * it->output_width())
-                    * double(it->num_inputs() * it->num_outputs()));
-        }
-    }
-
     logging::stdout(INFO) << "Time taken for " << N << " feature extractions  = "
              << delta << std::endl;
     logging::stdout(INFO) << "Throughput (images per second) = "

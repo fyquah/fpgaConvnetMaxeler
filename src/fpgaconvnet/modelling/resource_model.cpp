@@ -13,11 +13,12 @@ namespace resource_model {
 static resource_t
 resource_add(const resource_t left, const resource_t right)
 {
-    return (resource_t) {
+    resource_t ret = {
         .lut  = left.lut + right.lut,
         .bram = left.bram + right.bram,
         .dsp  = left.dsp + right.dsp,
     };
+    return ret;
 }
 
 
@@ -106,7 +107,8 @@ conv_resource(const protos::LayerParameter & layer)
     const double lut_streams = (2 * wf + 1) * (402 + 100);
     const double lut = lut_scheduler + lut_streams + lut_unit + lut_acc;
 
-    return (resource_t)  {.dsp = dsp , .bram = bram, .lut = lut};
+    resource_t ret =  {.lut = lut , .bram = bram, .dsp = dsp};
+    return ret;
 }
 
 static resource_t
@@ -125,11 +127,8 @@ pool_resource(const protos::LayerParameter & layer)
         34.9 * dim * dim * channel_folding_factor
         + 1.6152 * layer.input_width() * layer.num_inputs();
 
-    return (resource_t) {
-        .bram = bram,
-        .lut = lut,
-        .dsp = 0.0,
-    };
+    resource_t ret = {.lut = lut, .bram = bram, .dsp = double(0.0)};
+    return ret;
 }
 
 static resource_t
@@ -148,7 +147,7 @@ lrn_resource(const protos::LayerParameter & layer)
         34.9 * dim * dim * channel_folding_factor
         + 1.6152 * layer.input_width() * layer.num_inputs();
 
-    resource_t resource = {.bram = bram, .lut = lut, .dsp = 0.0};
+    resource_t resource = {.lut = lut, .bram = bram, .dsp = 0.0};
 
     resource.dsp = channel_folding_factor;
     return resource;
@@ -255,7 +254,7 @@ meets_resource_constraints(const std::vector<resource_t> & resources)
     for (const resource_t & resource : resources) {
         if (resource.dsp > MAX_DSP
                 || resource.dsp > MAX_BRAM
-                || resource.lut >= 0.6 * MAX_LUT) {
+                || resource.lut > MAX_LUT) {
             return false;
         }
     }
