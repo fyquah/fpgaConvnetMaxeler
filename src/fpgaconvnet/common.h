@@ -58,6 +58,9 @@ uint64_t div_ceil(uint64_t a, uint64_t b);
 namespace calculation
 {
 
+// in terms of images a second.
+double throughput(const protos::Network & network);
+
 uint64_t total_multipliers(const protos::LayerParameter & layer);
 
 /* The number of iterations to perform a pixel calculation. */

@@ -1,5 +1,7 @@
 #include <fcntl.h>
 
+#include <cmath>
+
 #include <iostream>
 
 #include "fpgaconvnet/common.h"
@@ -179,6 +181,47 @@ uint64_t div_ceil(uint64_t a, uint64_t b)
 
 
 namespace calculation {
+
+// In bytes per second
+const double PCIE_BANDWIDTH = 500e6;
+
+double throughput(const protos::Network & network)
+{
+    double frequency = network.frequency() * 1e6;
+    double cycle_length = 1.0 / frequency;
+    double size =
+        network.layer(0).input_height() * network.layer(0).input_width();
+
+    double input_image_bytes =
+        size * network.layer(0).num_inputs() * sizeof(fixed_point_t);
+
+    /* In terms of images per clock cycle */
+    double throughput = PCIE_BANDWIDTH / input_image_bytes * cycle_length;
+
+    /* TODO(fyq14): Consider cross-FPGA boundary. */
+    for (auto layer : network.layer()) {
+        const double input_size =
+                layer.input_height() * layer.input_width();
+
+        const double output_size =
+                layer.output_height() * layer.output_width();
+
+        const double area_compression = output_size / input_size;
+        const double scheduler_throughput =
+                area_compression / layer.conv().worker_factor();
+
+        const double computation_throughput =
+                1.0 / (calculation::total_iterations(layer) * output_size);
+
+        const double layer_throughput = std::min(
+                scheduler_throughput, computation_throughput);
+
+        throughput = std::min(throughput, layer_throughput);
+    }
+
+    return throughput * frequency;
+}
+
 
 uint64_t total_multipliers(const protos::LayerParameter & layer)
 {
