@@ -380,6 +380,7 @@ int main (int argc, char **argv)
             << "Projected Throughput = " << throughput << '\n';
         fpgaconvnet::logging::stdout()
             << "Projected total GOps = " << ops * throughput * 1e-9 << '\n';
+<<<<<<< HEAD
         return 0;
     }
     else {
@@ -387,6 +388,8 @@ int main (int argc, char **argv)
             << "Failed to find a solution" << std::endl;
         return 1;
 
+=======
+>>>>>>> 32acfec403e2faab61d0a585da038ae044bc4c91
     }
 
     return 0;
