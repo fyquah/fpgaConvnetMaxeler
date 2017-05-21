@@ -117,7 +117,7 @@ void log_prefix(const std::string & prefix)
 
 void indent()
 {
-    INDENTATION.append("  ");
+    INDENTATION.append("> ");
 }
 
 void dedent()
@@ -207,14 +207,27 @@ double throughput(const protos::Network & network)
                 layer.output_height() * layer.output_width();
 
         const double area_compression = output_size / input_size;
-        const double scheduler_throughput =
+        double layer_throughput = 0.0;
+
+        if (layer.has_conv()) {
+            const double scheduler_throughput =
                 area_compression / layer.conv().worker_factor();
 
-        const double computation_throughput =
+            const double computation_throughput =
                 1.0 / (calculation::total_iterations(layer) * output_size);
 
-        const double layer_throughput = std::min(
-                scheduler_throughput, computation_throughput);
+            layer_throughput = std::min(
+                    scheduler_throughput, computation_throughput);
+
+        } else if (layer.has_conv()) {
+            layer_throughput =
+                1.0 / (calculation::total_iterations(layer) * input_size);
+
+        } else if (layer.has_lrn()) {
+            layer_throughput =
+                1.0 / (calculation::total_iterations(layer) * input_size);
+
+        }
 
         throughput = std::min(throughput, layer_throughput);
     }

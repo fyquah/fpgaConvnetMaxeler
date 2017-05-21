@@ -284,6 +284,7 @@ search_design_space(fpgaconvnet::protos::Network network)
     const optimizer_t optimizer = build_initial_optimizer(network);
     const std::vector<double> relative_worker_factors = 
             calculate_relative_worker_factors(network);
+    bool is_best_solution_set = false;
     fpgaconvnet::protos::Network best_solution;
 
     fpgaconvnet::logging::stdout() << "Relative factors:" << std::endl;
@@ -313,18 +314,21 @@ search_design_space(fpgaconvnet::protos::Network network)
                         reference_layer_index,
                         reference_wf,
                         relative_worker_factors);
-            fpgaconvnet::logging::stdout ()
+            fpgaconvnet::logging::stdout()
                 << "Bottleneck worker factor = " << reference_wf << '\n';
             fpgaconvnet::protos::Network local_solution =
                 solve_for_ideal_worker_factors(
                         optimizer, network, ideal_worker_factors);
+
             bool meets_resource_constraints =
                 ::fpgaconvnet::resource_model::meets_resource_constraints(
                         local_solution);
 
             if (meets_resource_constraints) {
-                if (fpgaconvnet::calculation::throughput(local_solution)
-                        > fpgaconvnet::calculation::throughput(best_solution)) {
+                if (!is_best_solution_set ||
+                        fpgaconvnet::calculation::throughput(local_solution)
+                            > fpgaconvnet::calculation::throughput(best_solution)) {
+                    is_best_solution_set = true;
                     best_solution = local_solution;
                 }
 
