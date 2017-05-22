@@ -1,6 +1,7 @@
 #include <cmath>
 #include <cstring>
 
+#include <iostream>
 #include <sstream>
 #include <vector>
 
@@ -66,16 +67,14 @@ conv_resource(const protos::LayerParameter & layer)
      * - Calculation for weights BRAM usage assumes 16 bit fixed point.
      */
     const double bram_sliding_window = 100.0;
-    const double bram_stream =
-            512.0
-            * layer.conv().worker_factor()
-            * layer.conv().kernel_size() * layer.conv().kernel_size()
-            / 1024.0;
+    const double bram_stream = layer.conv().worker_factor() * std::ceil(
+            512.0 / 1024.0
+            * layer.conv().kernel_size() * layer.conv().kernel_size());
 
     const double weights_vector_bits =
         layer.conv().worker_factor() * layer.conv().conv_folding_factor()
         * layer.conv().kernel_folding_factor()
-        * sizeof(fixed_point_t) * 2.0;
+        * sizeof(fixed_point_t) * 8.0;
 
     const double bram_kernels_width = std::ceil(weights_vector_bits / 40.0);
     const double bram_kernels_depth =

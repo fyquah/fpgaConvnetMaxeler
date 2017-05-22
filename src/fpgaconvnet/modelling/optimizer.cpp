@@ -390,6 +390,11 @@ int main (int argc, char **argv)
             << "Projected Throughput = " << throughput << '\n';
         fpgaconvnet::logging::stdout()
             << "Projected total GOps = " << ops * throughput * 1e-9 << '\n';
+        fpgaconvnet::logging::stdout()
+            << "Resource usage:\n"
+            << fpgaconvnet::resource_model::resource_to_string(
+                    fpgaconvnet::resource_model::project(solution))
+            << std::endl;
 
         int fd = open(output_filename, O_WRONLY);
         google::protobuf::io::FileOutputStream fstream(fd);
