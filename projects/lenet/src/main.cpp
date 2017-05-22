@@ -84,7 +84,7 @@ std::vector<float> run_feature_extraction(
 
     // warm up the DFE with the weights.
     extracted_features = convnet.max_run_inference(N, images, false);
-    // extracted_features = convnet.max_run_inference(N, images, true);
+    extracted_features = convnet.max_run_inference(N, images, true);
     fpgaconvnet::verify_conv_output(
             network_parameters,
             N,
