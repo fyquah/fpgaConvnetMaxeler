@@ -14,7 +14,7 @@
 #ifdef __SIM__
     static const uint64_t N = 6;
 #else
-    static const uint64_t N = 10000;
+    static const uint64_t N = 10000000;
 #endif
 static const uint64_t CONV_IN_SIZE = 784;
 static const uint64_t CONV_OUT_SIZE = 800;
@@ -115,7 +115,7 @@ int main(int argc, char **argv)
     read_mnist_labels(labels, "mnist/t10k-labels-idx1-ubyte");
     for (unsigned i = 0 ; i < N ; i++) {
         for (unsigned j = 0 ; j < CONV_IN_SIZE ; j++) {
-            pixel_stream.push_back(images[i][j]);
+            pixel_stream.push_back(images[i % 10000][j]);
         }
     } 
 
