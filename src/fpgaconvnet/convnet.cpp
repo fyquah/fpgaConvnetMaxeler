@@ -162,7 +162,11 @@ void report_conv_performance(
             << "Time taken for " << N << " feature extractions  = "
             << delta << std::endl;
     logging::stdout(logging::INFO)
-            << "Throughput (images per second) = " << throughput << std::endl;
+            << "Project Throughput (images per second) = "
+            << calculation::throughput(network)
+            << std::endl;
+    logging::stdout(logging::INFO)
+            << "Actual Throughput (images per second) = " << throughput << std::endl;
     logging::stdout(logging::INFO)
             << "GOps = " << throughput * total_ops / 1e9 << std::endl;
 }
