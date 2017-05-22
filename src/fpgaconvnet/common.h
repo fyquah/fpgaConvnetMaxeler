@@ -58,6 +58,10 @@ uint64_t div_ceil(uint64_t a, uint64_t b);
 namespace calculation
 {
 
+// In bytes per second
+const double PCIE_BANDWIDTH = 500e6;
+const double MAXRING_BANDWIDTH = 5e9;
+
 /* in terms of images a second. */
 double throughput(const protos::Network & network);
 

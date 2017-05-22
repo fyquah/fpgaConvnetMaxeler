@@ -1,7 +1,9 @@
 #include <fcntl.h>
 
 #include <cmath>
+#include <cstring>
 
+#include <algorithm>
 #include <iostream>
 #include <vector>
 #include <functional>
@@ -28,8 +30,17 @@ struct layer_valid_values_t
     std::vector<uint64_t> conv_factors;
 };
 
+struct ring_connection_t
+{
+    /* The maxring connection here is between layer_index and layer_index + 1 */
+    int layer_index;
+    double throughput;
+};
+
+
 struct optimizer_t
 {
+    std::vector<ring_connection_t> maxring_model;
     std::vector<layer_valid_values_t> layer_valid_values;
 };
 
@@ -48,6 +59,47 @@ compute_significant_factors(uint64_t N)
     }
 
     return factors;
+}
+
+
+/* The connection is sorted in decreasing order of throughput. */
+static std::vector<ring_connection_t>
+build_maxring_bottleneck_model(const fpgaconvnet::protos::Network & network)
+{
+    struct comparator
+    {
+        bool
+        operator()(
+                ring_connection_t const &a, ring_connection_t const &b) const
+        {
+            return a.throughput > b.throughput;
+        }
+    };
+
+    std::vector<ring_connection_t> ret;
+
+    for (int i = 0 ; i < network.layer_size() - 1 ; i++) {
+        uint64_t image_bytes =
+            network.layer(i).output_height()
+            * network.layer(i).output_width()
+            * network.layer(i).num_outputs()
+            * sizeof(fpgaconvnet::fixed_point_t);
+
+        const double throughput =
+            double(fpgaconvnet::calculation::MAXRING_BANDWIDTH)
+            / double(image_bytes);
+
+        ring_connection_t connection;
+
+        connection.layer_index = i;
+        connection.throughput = throughput;
+
+        ret.push_back(connection);
+    }
+
+    std::sort(ret.begin(), ret.end(), comparator());
+
+    return ret;
 }
 
 
@@ -78,9 +130,10 @@ build_initial_optimizer(const fpgaconvnet::protos::Network & network)
 
     optimizer_t optimizer;
     optimizer.layer_valid_values = layer_valid_values;
+    optimizer.maxring_model =
+            build_maxring_bottleneck_model(network);
     return optimizer;
 }
-
 
 
 
@@ -214,6 +267,51 @@ solve_minimal_cff_kff(
 }
 
 
+static double
+calculate_reference_throughput(const fpgaconvnet::protos::Network & network)
+{
+    fpgaconvnet::protos::Network reference_network = network;
+
+    for (auto it = reference_network.mutable_layer()->begin()
+            ; it != reference_network.mutable_layer()->end()
+            ; it++) {
+        it->set_fpga_id(0);
+    }
+
+    return fpgaconvnet::calculation::throughput(reference_network);
+}
+
+
+static fpgaconvnet::protos::Network
+position_fpgas(
+        const optimizer_t & optimizer,
+        const fpgaconvnet::protos::Network & network)
+{
+    const double reference_throughput = calculate_reference_throughput(network);
+    bool ring_connection_allowed[network.layer_size() - 1];
+    int allowed_conn_count;
+
+    std::memset(
+            ring_connection_allowed,
+            false,
+            sizeof(bool) * (network.layer_size() - 1));
+
+    for (allowed_conn_count = 0 ;
+            allowed_conn_count < optimizer.maxring_model.size() ;
+            allowed_conn_count++) {
+        const int i = allowed_conn_count;
+        const auto & model = optimizer.maxring_model[i];
+
+        if ((model.throughput + 0.01) < reference_throughput) {
+            break;
+        }
+
+        ring_connection_allowed[model.layer_index] = true;
+    }
+
+    return network;
+}
+
 
 static fpgaconvnet::protos::Network
 solve_for_ideal_worker_factors(
@@ -274,7 +372,12 @@ solve_for_ideal_worker_factors(
         }
     }
 
-    return optimized_network;
+    if (network.num_fpga_available() == 1) {
+        return optimized_network;
+
+    }
+
+    return position_fpgas(optimizer, optimized_network);
 }
 
 
