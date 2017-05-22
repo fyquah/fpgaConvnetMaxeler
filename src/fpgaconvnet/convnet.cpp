@@ -56,7 +56,7 @@ uint64_t conv_in_size(const protos::Network & network)
 
 uint64_t total_rom_size(const protos::LayerParameter & layer)
 {
-    return calculation::total_rom_size(network);
+    return calculation::total_rom_size(layer);
 }
 
 
@@ -156,13 +156,19 @@ void report_conv_performance(
     double end = double(t_end.tv_sec) * 1000000 + double(t_end.tv_usec);
     double delta = end - begin;
     double throughput = double(N) / delta * 1000000;
-    double total_ops = calculation::total_ops(network);
+    double total_ops = calculation::ops(network);
    
-    logging::stdout(INFO) << "Time taken for " << N << " feature extractions  = "
-             << delta << std::endl;
-    logging::stdout(INFO) << "Throughput (images per second) = "
-            << throughput << std::endl;
-    logging::stdout(INFO) << "GOps = " << throughput * total_ops / 1e9 << std::endl;
+    logging::stdout(logging::INFO)
+            << "Time taken for " << N << " feature extractions  = "
+            << delta << std::endl;
+    logging::stdout(logging::INFO)
+            << "Project Throughput (images per second) = "
+            << calculation::throughput(network)
+            << std::endl;
+    logging::stdout(logging::INFO)
+            << "Actual Throughput (images per second) = " << throughput << std::endl;
+    logging::stdout(logging::INFO)
+            << "GOps = " << throughput * total_ops / 1e9 << std::endl;
 }
 
 
@@ -196,7 +202,8 @@ void verify_conv_output(
 
             if (fin.eof()) {
                 fin.clear();
-                logging::stdout(WARNING) << "Verifier terminated early!" << std::endl;
+                logging::stdout(logging::WARNING)
+                    << "Verifier terminated early!" << std::endl;
                 break;
             }
 
@@ -204,14 +211,16 @@ void verify_conv_output(
             total_pixels += 1;
 
             if (std::abs(obtained - expected) > 0.01) {
-                logging::stdout(WARNING) << j << "\t| ERROR: Obtained " << obtained << ", expected " << expected << std::endl;
+                logging::stdout(logging::WARNING) << j << "\t| ERROR: Obtained " << obtained << ", expected " << expected << std::endl;
             }
             // else {
             //     logging::stdout(WARNING) << j << "\t| OKAY: Obtained " << obtained << ", expected " << expected << std::endl;
             // }
         }
     }
-    logging::stdout(INFO) << "Average pixel_error = " << float(total_error) / float(total_pixels) << std::endl;
+    logging::stdout(logging::INFO)
+        << "Average pixel_error = "
+        << float(total_error) / float(total_pixels) << std::endl;
     fin.close();
 }
 
@@ -228,7 +237,7 @@ void special_allign_and_place_kernel_weights(
     const uint64_t worker_factor = layer.conv().worker_factor();
     const uint64_t total_iter = calculation::total_iterations(layer);
     const uint64_t rom_per_worker =
-            calc_total_rom_size(layer) / layer.conv().worker_factor();
+            calculation::total_rom_size(layer) / layer.conv().worker_factor();
 
     /* This for loop makes dest_base into
      *
@@ -238,7 +247,7 @@ void special_allign_and_place_kernel_weights(
         float *dest = dest_base + (i * rom_per_worker);
         float *src = src_base + (i * kernel_dim * kernel_dim);
 
-        for (int w = 0; w < calc_scheduler_iterations(layer); w++) {
+        for (int w = 0; w < calculation::scheduler_iterations(layer); w++) {
             const int worker_iter = w;  // the w-th channel that the worker's handling.
 
             if (i + worker_iter * worker_factor >= layer.num_inputs()) {
@@ -256,7 +265,7 @@ void special_allign_and_place_kernel_weights(
                          + ((channel % conv_ff) * conv_iters * scheduler_iters)
                          + (channel / conv_ff))
                         * layer.conv().kernel_folding_factor()
-                        * kernel_iterations(layer);
+                        * calculation::kernel_iterations(layer);
 
                 /*
                  * Useful piece of code to visualize the kernels weights
@@ -282,7 +291,7 @@ void allign_and_place_cpu_initialized_kernel_weights(
         float *src_base
 )
 {
-    const uint64_t total_rom_size = calc_total_rom_size(layer);
+    const uint64_t total_rom_size = calculation::total_rom_size(layer);
     float *tmp = new float[total_rom_size];
     const uint64_t rom_per_worker =
             total_rom_size / layer.conv().worker_factor();
@@ -324,7 +333,7 @@ void allign_and_place_lmem_initialized_kernel_weights(
         float *src_base
 )
 {
-    const uint64_t total_rom_size = calc_total_rom_size(layer);
+    const uint64_t total_rom_size = calculation::total_rom_size(layer);
     float *tmp = new float[total_rom_size];
     const uint64_t rom_per_worker =
             total_rom_size / layer.conv().worker_factor();
@@ -393,7 +402,7 @@ void Convnet::set_layer_weights(
     sprintf(buffer, "kernel_%d", layer.layer_id());
 
     if (initialized_weights) {
-        logging::stdout(INFO)
+        logging::stdout(logging::INFO)
                 << "Host-initialized weights has been set in previous calls."
                 << std::endl;
         if (calculation::is_layer_cpu_initialized(layer)) {
@@ -404,7 +413,7 @@ void Convnet::set_layer_weights(
         max_queue_input(action, buffer, NULL, 0);
 
     } else {
-        logging::stdout(INFO)
+        logging::stdout(logging::INFO)
                 << "Passing in host-initialized weights (This will only be done once)."
                 << std::endl;
 
@@ -535,7 +544,7 @@ Convnet::~Convnet ()
 
 void Convnet::load_weights_from_files(std::vector<std::string> filenames, file_format_t file_type)
 {
-    logging::stdout(INFO) << "Loading weights from file." << std::endl;
+    logging::stdout(logging::INFO) << "Loading weights from file." << std::endl;
     for (int i = 0 ; i < conv_layer_params.size(); i++) {
         float *bias_tmp = new float[calculation::bias_stream_size(
                 conv_layer_params[i])];
@@ -557,7 +566,7 @@ void Convnet::load_weights_from_files(std::vector<std::string> filenames, file_f
 
         delete[] bias_tmp;
     }
-    logging::stdout(INFO) << "Alligning weights." << std::endl;
+    logging::stdout(logging::INFO) << "Alligning weights." << std::endl;
     for (int i = 0; i < conv_layer_params.size() ; i++) {
         if (calculation::is_layer_cpu_initialized(conv_layer_params[i])) {
             allign_and_place_cpu_initialized_kernel_weights(
@@ -567,7 +576,7 @@ void Convnet::load_weights_from_files(std::vector<std::string> filenames, file_f
                     conv_layer_params[i], worker_kernels[i], kernels[i]);
         }
     }
-    logging::stdout(INFO) << "Done!" << std::endl;
+    logging::stdout(logging::INFO) << "Done!" << std::endl;
 }
 
 
@@ -578,7 +587,7 @@ void Convnet::max_init_weights()
 
     for (int i = 0; i < conv_layer_params.size() ; i++) {
         if (calculation::is_layer_cpu_initialized(conv_layer_params[i])) {
-            logging::stdout(INFO) << "layer "
+            logging::stdout(logging::INFO) << "layer "
                     << conv_layer_params[i].layer_id()
                     << " is host-initialized. Skipping .." << std::endl;
             continue;
@@ -594,12 +603,15 @@ void Convnet::max_init_weights()
                 * calculation::weights_vector_size(layer)
                 * sizeof(fixed_point_t);
 
-        logging::stdout(INFO) << "Initializing weights in LMEM at layer "
-            << conv_layer_params[i].layer_id()
-            << " [fpga_id = " << conv_layer_params[i].fpga_id() << "]"
-            << std::endl;
-        logging::stdout(INFO) << "Address = " << address << std::endl;
-        logging::stdout(INFO) << "Stream size (in bytes) = " << stream_size << std::endl;
+        logging::stdout(logging::INFO)
+                << "Initializing weights in LMEM at layer "
+                << conv_layer_params[i].layer_id()
+                << " [fpga_id = " << conv_layer_params[i].fpga_id() << "]"
+                << std::endl;
+        logging::stdout(logging::INFO)
+                << "Address = " << address << std::endl;
+        logging::stdout(logging::INFO)
+                << "Stream size (in bytes) = " << stream_size << std::endl;
         max_set_param_uint64t(write_action, "start", address);
         max_set_param_uint64t(write_action, "size", stream_size);
         max_queue_input(
@@ -626,7 +638,7 @@ void Convnet::max_init_weights()
 #endif
 
         max_actions_free(write_action);
-        logging::stdout(INFO) << "Done!" << std::endl;
+        logging::stdout(logging::INFO) << "Done!" << std::endl;
     }
 
 }
@@ -649,7 +661,8 @@ std::vector<float> Convnet::max_run_inference(
         actions[i] = max_actions_init(max_files[i], "default");
     }
 
-    logging::stdout(INFO) << "Setting up feature extraction actions ... " << std::endl;
+    logging::stdout(logging::INFO)
+        << "Setting up feature extraction actions ... " << std::endl;
 
     int i = 0;
     for (auto it = network_params.layer().begin();
@@ -695,7 +708,8 @@ std::vector<float> Convnet::max_run_inference(
                      (void*) &ret[0],
                      N * output_size * sizeof(float));
 
-    logging::stdout(INFO) << "Running feature extraction ... " << std::endl;
+    logging::stdout(logging::INFO)
+        << "Running feature extraction ... " << std::endl;
 
 #ifdef __SIM__
     void *tmp_buffer_in;
@@ -764,7 +778,7 @@ std::vector<float> Convnet::max_run_inference(
     if (benchmark) {
         report_conv_performance(network_params, N, t_begin, t_end);
     }
-    logging::stdout(INFO) << "Done!" << std::endl;
+    logging::stdout(logging::INFO) << "Done!" << std::endl;
 
     delete[] actions;
 

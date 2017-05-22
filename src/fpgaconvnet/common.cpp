@@ -122,8 +122,7 @@ void indent()
 
 void dedent()
 {
-    INDENTATION.pop_back();
-    INDENTATION.pop_back();
+    INDENTATION = INDENTATION.substr(0, INDENTATION.length() - 2);
 }
 
 
@@ -182,9 +181,6 @@ uint64_t div_ceil(uint64_t a, uint64_t b)
 
 namespace calculation {
 
-// In bytes per second
-const double PCIE_BANDWIDTH = 500e6;
-
 double throughput(const protos::Network & network)
 {
     double frequency = network.frequency() * 1e6;
@@ -199,7 +195,8 @@ double throughput(const protos::Network & network)
     double throughput = PCIE_BANDWIDTH / input_image_bytes * cycle_length;
 
     /* TODO(fyq14): Consider cross-FPGA boundary. */
-    for (auto layer : network.layer()) {
+    for (int i = 0 ; i < network.layer_size() ; i++) {
+        auto layer = network.layer(i);
         const double input_size =
                 layer.input_height() * layer.input_width();
 
@@ -338,7 +335,7 @@ uint64_t total_rom_size(const protos::LayerParameter & layer)
             * total_iterations(layer);
 }
 
-uint64_t calc_weights_vector_size(
+uint64_t weights_vector_size(
         const protos::LayerParameter & layer)
 {
     int stream_chunk_size = 384 / sizeof(fixed_point_t);
@@ -352,20 +349,22 @@ uint64_t calc_weights_vector_size(
 
 bool is_layer_cpu_initialized(const protos::LayerParameter & layer)
 {
-    return layer.conv().bram_factor()
-        >= (layer.num_inputs() * layer.num_outputs());
+    return
+        !layer.conv().has_bram_factor()
+        || (layer.conv().bram_factor()
+                >= (layer.num_inputs() * layer.num_outputs()));
 }
 
 
 
-uint64_t calc_bias_stream_size(const protos::LayerParameter & layer)
+uint64_t bias_stream_size(const protos::LayerParameter & layer)
 {
     uint64_t stream_chunk_size = 16 / sizeof(fixed_point_t);
     return math::div_ceil(layer.num_outputs(), stream_chunk_size)
         * stream_chunk_size;
 }
 
-uint64_t calc_cpu_weights_stream_size(
+uint64_t cpu_weights_stream_size(
         const protos::LayerParameter & layer)
 {
     uint64_t stream_chunk_size = 16 / sizeof(fixed_point_t);

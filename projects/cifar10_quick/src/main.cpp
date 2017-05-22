@@ -14,7 +14,7 @@
 #ifdef __SIM__
     static const uint64_t N = 6;
 #else
-    static const uint64_t N = 10000;
+    static const uint64_t N = 1000000;
 #endif
 
 
@@ -72,7 +72,7 @@ void load_cifar10(const char *filename, std::vector<float> &images, std::vector<
         throw fpgaconvnet::Exception("File not found");
     }
 
-    for (unsigned iter = 0 ; iter < N ; iter++) {
+    for (unsigned iter = 0 ; iter < 10000 ; iter++) {
         char byte;
         std::vector<float> red(1024);
         std::vector<float> blue(1024);
@@ -167,7 +167,7 @@ int main(int argc, char **argv)
 
         for (unsigned i = 0 ; i < N ; i++) {
             for (unsigned j = 0 ; j < conv_in_size ; j++) {
-                pixel_stream.push_back(images[i * conv_in_size + j]);
+                pixel_stream.push_back(images[(i % 10000) * conv_in_size + j]);
             }
         } 
 

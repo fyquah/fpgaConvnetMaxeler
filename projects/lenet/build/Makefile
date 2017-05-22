@@ -18,11 +18,8 @@ $(LENET_DATA):
 	gzip -d $@.gz
 
 
-$(LENET_OPTIMIZED_DESCRIPTOR): fpgaconvnet/modelling/optimizer $(LENET_DESCRIPTOR) $(PYTHON_PROTOS)
-	python fpgaconvnet/modelling/optimizer.py \
-	    --resource-bench $(WHEREISROOT)/results/resource_bench.yaml \
-	    --output $@ \
-	    $(LENET_DESCRIPTOR)
+$(LENET_OPTIMIZED_DESCRIPTOR): fpgaconvnet/modelling/optimizer $(LENET_DESCRIPTOR)
+	./$< $(LENET_DESCRIPTOR) $@
 
 
 # ==============================
@@ -77,24 +74,25 @@ $(LENET_DFE_MAXFILE): $(ENGINEFILES) $(JAVA_PROTOS) $(LENET_OPTIMIZED_DESCRIPTOR
 		  enableMPCX=$(MPCX)
 
 
-fpgaconvnet/lenet_dfe.o: $(LENET_DFE_MAXFILE)
-	$(SLICCOMPILE) $< $@
+lenet_dfe.o:
+	$(SLICCOMPILE) $(LENET_DFE_MAXFILE) $@
 
 
-fpgaconvnet/lenet_main_dfe.o: fpgaconvnet/lenet_main.cpp $(LENET_DFE_MAXFILE)
+lenet_main_dfe.o: main.cpp
 	$(CPUCOMPILER) $< $(ALL_FLAGS) \
 		-I$(MAXCOMPILER_BUILD_DIR) -I$(LENET_DFEMAXDIR) \
 		-DDESIGN_NAME=$(LENET_NAME) -c -o $@
 
 
 lenet_dfe: $(FPGACONVNET_OBJ_FILES) \
-	    fpgaconvnet/lenet_dfe.o fpgaconvnet/lenet_main_dfe.o \
+	    lenet_dfe.o lenet_main_dfe.o \
 	    fpgaconvnet/protos/parameters.pb.o
 	$(CPUCOMPILER) $(ALL_FLAGS) -o $@ $^ $(LFLAGS)
 
 
-run_lenet_dfe: lenet_dfe $(LENET_DATA) $(LENET_DESCRIPTOR)
-	SLIC_CONF="$(SLIC_CONF)" LD_PRELOAD=$(MAXOS_HW) ./$< $(LENET_OPTIMIZED_DESCRIPTOR)
+run_lenet_dfe: lenet_dfe $(LENET_DATA)
+	SLIC_CONF="$(SLIC_CONF)" LD_PRELOAD=$(MAXOS_HW) \
+		  ./$< $(LENET_OPTIMIZED_DESCRIPTOR)
 
 
 # ---- Debug ----
@@ -107,6 +105,6 @@ sim: lenet_sim
 
 runsim: run_lenet_sim
 
-dfe: lenet_dfe
+dfe: lenet_dfe  $(LENET_DFE_MAXFILE)
 
 rundfe: run_lenet_dfe

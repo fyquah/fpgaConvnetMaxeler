@@ -16,12 +16,10 @@ $(CIFAR10_QUICK_DATA):
 	curl "https://www.cs.toronto.edu/~kriz/cifar-10-binary.tar.gz" >cifar10-binary.tar.gz
 	tar xzvf cifar10-binary.tar.gz
 
-
-$(CIFAR10_QUICK_OPTIMIZED_DESCRIPTOR): fpgaconvnet/modelling/optimizer.py $(CIFAR10_QUICK_DESCRIPTOR) $(PYTHON_PROTOS)
-	python fpgaconvnet/modelling/optimizer.py \
-		--resource-bench $(WHEREISROOT)/results/resource_bench.yaml \
-		--output $@ \
-		$(CIFAR10_QUICK_DESCRIPTOR)
+$(CIFAR10_QUICK_OPTIMIZED_DESCRIPTOR): fpgaconvnet/modelling/optimizer \
+				       $(CIFAR10_QUICK_DESCRIPTOR)
+	touch $@
+	./$< $(CIFAR10_QUICK_DESCRIPTOR) $@
 
 
 # ==============================
@@ -76,24 +74,25 @@ $(CIFAR10_QUICK_DFE_MAXFILE): $(ENGINEFILES) $(JAVA_PROTOS) $(CIFAR10_QUICK_OPTI
 		  enableMPCX=$(MPCX)
 
 
-fpgaconvnet/cifar10_quick_dfe.o: $(CIFAR10_QUICK_DFE_MAXFILE)
-	$(SLICCOMPILE) $< $@
+cifar10_quick_dfe.o:
+	$(SLICCOMPILE) $(CIFAR10_QUICK_DFE_MAXFILE) $@
 
 
-fpgaconvnet/cifar10_quick_main_dfe.o: fpgaconvnet/cifar10_quick_main.cpp $(CIFAR10_QUICK_DFE_MAXFILE)
+cifar10_quick_main_dfe.o: main.cpp
 	$(CPUCOMPILER) $< $(ALL_FLAGS) \
 		-I$(MAXCOMPILER_BUILD_DIR) -I$(CIFAR10_QUICK_DFEMAXDIR) \
 		-DDESIGN_NAME=$(CIFAR10_QUICK_NAME) -c -o $@
 
 
 cifar10_quick_dfe: $(FPGACONVNET_OBJ_FILES) \
-	    fpgaconvnet/cifar10_quick_dfe.o fpgaconvnet/cifar10_quick_main_dfe.o \
+	    cifar10_quick_dfe.o cifar10_quick_main_dfe.o \
 	    fpgaconvnet/protos/parameters.pb.o
 	$(CPUCOMPILER) $(ALL_FLAGS) -o $@ $^ $(LFLAGS)
 
 
-run_cifar10_quick_dfe: cifar10_quick_dfe $(CIFAR10_QUICK_DATA) $(CIFAR10_QUICK_OPTIMIZED_DESCRIPTOR)
-	SLIC_CONF="$(SLIC_CONF)" LD_PRELOAD=$(MAXOS_HW) ./$< $(CIFAR10_QUICK_OPTIMIZED_DESCRIPTOR)
+run_cifar10_quick_dfe: $(CIFAR10_QUICK_DATA) cifar10_quick_dfe
+	SLIC_CONF="$(SLIC_CONF)" LD_PRELOAD=$(MAXOS_HW) \
+	    ./cifar10_quick_dfe $(CIFAR10_QUICK_OPTIMIZED_DESCRIPTOR)
 
 
 # ---- Debug ----
@@ -106,6 +105,6 @@ sim: cifar10_quick_sim
 
 runsim: run_cifar10_quick_sim
 
-dfe: cifar10_quick_dfe
+dfe: cifar10_quick_dfe $(CIFAR10_QUICK_DFE_MAXFILE) 
 
 rundfe: run_cifar10_quick_dfe
