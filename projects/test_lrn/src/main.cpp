@@ -43,6 +43,7 @@ std::vector<float> run_feature_extraction(
     std::vector<float> expected_output = extracted_features;
     float alpha = network_parameters.layer(0).lrn().alpha();
     float beta = network_parameters.layer(0).lrn().beta();
+    float k = network_parameters.layer(0).lrn().k();
     int local_size = network_parameters.layer(0).lrn().local_size();
     int num_inputs = network_parameters.layer(0).num_inputs();
 
@@ -54,18 +55,14 @@ std::vector<float> run_feature_extraction(
             for (int i = -(local_size / 2) ; i <= (local_size / 2) ; i++) {
                 int idx = c + i;
 
-                if (idx < 0) {
-                    idx = local_size / 2 - i;
-
-                } else if (idx >= num_inputs) {
-                    idx = num_inputs - local_size / 2 - (i + 1);
-
+                if (idx < 0 || idx >= num_inputs) {
+                    continue;
                 }
 
                 x += images[idx] * images[idx];
             }
 
-            x = images[p + c] / std::pow(1.0 + alpha / float(local_size) * x, beta);
+            x = images[p + c] / std::pow(k + alpha / float(local_size) * x, beta);
             expected_output[p + c] = x;
         }
     }

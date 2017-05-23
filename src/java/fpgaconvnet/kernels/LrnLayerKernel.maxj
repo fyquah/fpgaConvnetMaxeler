@@ -22,6 +22,7 @@ public class LrnLayerKernel extends Kernel {
     private final DFEVectorType<DFEVar> ioType;
     private final DFEVectorType<DFEVar> rawIoType;
     private final DFEVar approxFactor;
+    private final DFEVar approxLeft;
     private final DFEVar iter;
     private final LayerParameter layerParams;
     private final LrnParameter lrnParams;
@@ -49,9 +50,10 @@ public class LrnLayerKernel extends Kernel {
         output = ioType.newInstance(this);
 
         if (layerParams.getLrn().getApproxMethod() == LrnParameter.ApproxMethod.BINOMIAL) {
-            approxFactor = io.scalarInput("approx_factor", GlobalConfig.cpuType).cast(
-                    GlobalConfig.dataType);
+            approxLeft   = io.scalarInput("approx_left", GlobalConfig.cpuType).cast(GlobalConfig.dataType);
+            approxFactor = io.scalarInput("approx_factor", GlobalConfig.cpuType).cast(GlobalConfig.dataType);
         } else {
+            approxLeft = null;
             approxFactor = null;
         }
 
@@ -85,7 +87,11 @@ public class LrnLayerKernel extends Kernel {
                 List<DFEVar> pixelLocalRegionVars = new ArrayList<DFEVar>();
 
                 for (int i = 0 ; i < localRegions.size() ; i++) {
-                    pixelLocalRegionVars.add(input[localRegions[i][j]]);
+                    int channel = localRegions[i][j];
+                    pixelLocalRegionVars.add(
+                            channel != -1
+                            ? input[channel]
+                            : constant.var(GlobalConfig.dataType, 0.0));
                 }
 
                 if (pixelLocalRegionVars.size() == 1) {
@@ -168,11 +174,8 @@ public class LrnLayerKernel extends Kernel {
                     ; j++) {
                 int channel = channelChoices[i] + j;
 
-                if (channel < 0) {
-                    channel = lrnParams.getLocalSize() / 2 - j;
-                } else if (channel >= layerParams.getNumInputs()) {
-                    channel = layerParams.getNumInputs() - lrnParams.getLocalSize() / 2
-                                - (j + 1);
+                if (channel < 0 || channel >= layerParams.getNumInputs()) {
+                    channel = -1;
                 }
 
                 local[j + lrnParams.getLocalSize() / 2] = channel;
@@ -199,7 +202,8 @@ public class LrnLayerKernel extends Kernel {
         }
 
         if (layerParams.getLrn().getApproxMethod() == LrnParameter.ApproxMethod.BINOMIAL) {
-            return localRegion[lrnParams.getLocalSize() / 2] * (1 + approxFactor * Utils.treeReduceAdd(squaredLocalRegion));
+            return localRegion[lrnParams.getLocalSize() / 2]
+                * (approxLeft + approxFactor * Utils.treeReduceAdd(squaredLocalRegion));
 
         } else if (layerParams.getLrn().getApproxMethod() == LrnParameter.ApproxMethod.LUT) {
             /* TODO(fyq14): Complete this. */

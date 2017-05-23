@@ -214,24 +214,29 @@ static uint64_t calc_cpu_weights_stream_size(
 }
 
 
-static void copy_float_to_fixed(fixed_point_t *dest, float *src, int size)
-{
+static inline uint16_t
+cast_float_to_fixed(const float arg) {
+
     const int num_frac_bits = 12;
     const int num_int_bits = 4;
     const float fixed_point_one = (1 << num_frac_bits);
 
+    int x = (int) (arg * fixed_point_one);
+
+    /* GCC gurantees that a right shift is a ASR rather than a LSR
+     * for signed integers.
+     */
+    uint16_t int_bits = (uint16_t) (x >> num_frac_bits);
+    uint16_t frac_bits = (x & ((1 << num_frac_bits) - 1));
+
+    return ((uint16_t) (int_bits << num_frac_bits)) | (frac_bits);
+}
+
+
+static void copy_float_to_fixed(fixed_point_t *dest, float *src, int size)
+{
     for (int i = 0 ; i < size ; i++) {
-        int x = (int) (src[i] * fixed_point_one);
-
-        /* GCC gurantees that a right shift is a ASR rather than a LSR
-         * for signed integers.
-         */
-        uint16_t int_bits = (uint16_t) (x >> num_frac_bits);
-        uint16_t frac_bits = (x & ((1 << num_frac_bits) - 1));
-
-        dest[i] =
-            ((uint16_t) (int_bits << num_frac_bits))
-            | (frac_bits);
+        dest[i] = cast_float_to_fixed(src[i]);
     }
 }
 
@@ -882,12 +887,22 @@ std::vector<float> Convnet::max_run_inference(
         } else if (it->has_lrn()) {
             /* assuming binomial approximation used. */
             char buffer[30];
+            const float beta = it->lrn().beta();
+            const float alpha = it->lrn().alpha();
+            const float k = it->lrn().k();
+            const float local_size = it->lrn().local_size();
 
             sprintf(buffer, "approx_factor_%d", it->layer_id());
             max_set_param_double(
                     actions[it->fpga_id()],
                     buffer,
-                    -it->lrn().alpha() * it->lrn().beta() / float(it->lrn().local_size()));
+                    -beta * alpha / local_size);
+
+            sprintf(buffer, "approx_left_%d", it->layer_id());
+            max_set_param_double(
+                    actions[it->fpga_id()],
+                    buffer,
+                    std::pow(k, -beta));
         }
     }
 

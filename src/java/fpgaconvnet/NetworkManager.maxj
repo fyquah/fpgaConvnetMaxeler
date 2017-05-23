@@ -163,8 +163,11 @@ public class NetworkManager extends CustomManager {
 
             } else if (isLrnLayer(layerParams)) {
                 InterfaceParam approx_factor = ei.addParam(
-                        "approx_factor_" + layerParams.getLayerId(), CPUTypes.UINT16);
+                        "approx_factor_" + layerParams.getLayerId(), CPUTypes.FLOAT);
+                InterfaceParam approx_left = ei.addParam(
+                        "approx_left_" + layerParams.getLayerId(), CPUTypes.FLOAT);
                 computationChains[j].setScalar(ei, "approx_factor", approx_factor);
+                computationChains[j].setScalar(ei, "approx_left", approx_left);
 
             }
 

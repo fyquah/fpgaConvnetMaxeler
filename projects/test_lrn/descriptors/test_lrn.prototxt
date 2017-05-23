@@ -8,6 +8,7 @@ layer {
         local_size: 5
         alpha: 0.0001
         beta: 0.75
+        k: 8.0
         norm_region: ACROSS_CHANNELS
         channel_folding_factor: 37
     }
