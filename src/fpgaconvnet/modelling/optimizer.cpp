@@ -324,14 +324,15 @@ position_fpgas(
     std::vector<std::vector<fpgaconvnet::protos::LayerParameter> > solution;
     solution.push_back(std::vector<fpgaconvnet::protos::LayerParameter>());
 
-    for (; allowed_conn_count < optimizer.maxring_model.size()
+    for (; allowed_conn_count <= optimizer.maxring_model.size()
             ; allowed_conn_count++) {
 
         bool is_solution_valid = true;
         int prev_splitable_connection = -1;
+        int mapped_layers = 0;
 
         for (int i = 0 ; i < network.layer_size() ; i++) {
-            std::vector<fpgaconvnet::protos::LayerParameter>
+            std::vector<fpgaconvnet::protos::LayerParameter> &
                     current_fpga = solution.back();
 
             fpgaconvnet::resource_model::stream_t input_stream =
@@ -352,9 +353,10 @@ position_fpgas(
 
             if (!fpgaconvnet::resource_model::meets_resource_constraints(
                         resource)) {
-                const int old_size = i - prev_splitable_connection - 1;
+                const int old_size =
+                        prev_splitable_connection - mapped_layers + 1;
 
-                if (old_size == 0) {
+                if (old_size == 0 || prev_splitable_connection < 0) {
                     is_solution_valid = false;
                     break;
                 }
@@ -364,6 +366,8 @@ position_fpgas(
                         current_fpga.end());
                 current_fpga.resize(old_size);
                 solution.push_back(new_fpga);
+                mapped_layers = prev_splitable_connection + 1;
+                prev_splitable_connection = -1;
             }
 
             if (ring_connection_allowed[i]) {
@@ -371,7 +375,8 @@ position_fpgas(
             }
         }
 
-        if (is_solution_valid) {
+        if (is_solution_valid
+                || solution.size() > network.num_fpga_available()) {
             fpgaconvnet::protos::Network positioned = network;
             auto ptr = positioned.mutable_layer()->begin();
 
@@ -387,8 +392,11 @@ position_fpgas(
             return positioned;
         }
 
-        ring_connection_allowed[
-            optimizer.maxring_model[allowed_conn_count].layer_index] = true;
+        if (allowed_conn_count < optimizer.maxring_model.size()) {
+            ring_connection_allowed[
+                optimizer.maxring_model[allowed_conn_count].layer_index]
+                    = true;
+        }
     }
 
     return network;
@@ -514,7 +522,8 @@ search_design_space(const fpgaconvnet::protos::Network & network, bool *success)
         std::vector<fpgaconvnet::resource_model::resource_t> resources =
             ::fpgaconvnet::resource_model::project(local_solution);
         bool meets_resource_constraints =
-            ::fpgaconvnet::resource_model::meets_resource_constraints(resources);
+            ::fpgaconvnet::resource_model::meets_resource_constraints(resources)
+            && local_solution.num_fpga_used() < local_solution.num_fpga_available();
 
         fpgaconvnet::logging::stdout() << "Resource usage:\n";
 

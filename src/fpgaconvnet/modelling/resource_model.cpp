@@ -244,11 +244,12 @@ project(const protos::Network & network)
 
     for (int i = 0; i < layers_by_fpga.size() ; i++) {
         auto & layers = layers_by_fpga[i];
+
         const stream_t input_stream =
             (i == 0) ? STREAM_PCIE : STREAM_MAX_RING;
 
         const stream_t output_stream =
-            (i == network.num_fpga_used()) ? STREAM_PCIE : STREAM_MAX_RING;
+            (i == network.num_fpga_used() - 1) ? STREAM_PCIE : STREAM_MAX_RING;
 
         resources.push_back(project_single_fpga(
                 input_stream, layers, output_stream));
