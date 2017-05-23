@@ -30,7 +30,8 @@ ifneq ($(findstring cpp, $(CPUFILES)), )
     CPUCOMPILER = $(CXX)
 
     # Assuming CXX points to g++/c++ by default
-    COMPILER_CFLAGS = -fopenmp -std=c++0x
+    # TODO(fyq14): -fopenmp flag useful?
+    COMPILER_CFLAGS = -std=c++0x
     OPT_FLAGS = -march=native -O3
 
     ifeq ($(CXX), icpc)
@@ -43,7 +44,7 @@ else
     CPUCOMPILER = $(CC)
 
     # Assuming CC points to gcc/cc by default
-    COMPILER_CFLAGS = -std=c99 -fopenmp
+    COMPILER_CFLAGS = -std=c99
     OPT_FLAGS = -march=native -O3
 
     ifeq ($(CC), icc)
@@ -71,7 +72,7 @@ MAXOS_SIM=$(MAXELEROSDIR_SIM)/lib/libmaxeleros.so
 
 CP='$(WHEREISROOT)/lib/maxpower.jar:$(WHEREISROOT)/lib/junit-4.12.jar:$(WHEREISROOT)/lib/hamcrest-core-1.3.jar:$(WHEREISROOT)/lib/protobuf-java-3.0.0.jar'
 JFLAGS=-cp '$(MAXCOMPILERDIR)/lib/MaxCompiler.jar:$(CP)' -1.6 -d .
-INCFLAGS =  -I/src/ -I${MAXCOMPILERDIR}/include \
+INCFLAGS =  -I/src/ -I${MAXCOMPILERDIR}/include -I. \
 	-I${MAXCOMPILERDIR}/include/slic -I${MAXELEROSDIR}/include \
 	-I$(WHEREISROOT)/include/ -I$(WHEREISROOT)/src/
 CFLAGS= $(COMPILER_CFLAGS) $(OPT_FLAGS) -Wall -D_XOPEN_SOURCE=600 $(INCFLAGS)
@@ -98,14 +99,23 @@ all: runsim build
 
 # Rules for protobufs
 $(ALL_GENERATED_PROTOS): $(PROTOS)
-	mkdir -p java/
-	$(PROTOC) $< -I$(WHEREISROOT)/protos --java_out=./java --python_out=./ --cpp_out=./
+	mkdir -p java/ fpgaconvnet/modelling/ fpgaconvnet/protos/
 	touch fpgaconvnet/__init__.py fpgaconvnet/protos/__init__.py
-	ln -sf $(abspath $(WHEREISROOT)/src/fpgaconvnet/modelling/) ./fpgaconvnet/ 
+	$(PROTOC) $< -I$(WHEREISROOT)/protos --java_out=./java --python_out=./ --cpp_out=./
 
 protos: $(ALL_GENERATED_PROTOS)
 
 fpgaconvnet/convnet.o: fpgaconvnet fpgaconvnet/protos/parameters.pb.h
+
+fpgaconvnet/modelling/optimizer.o: fpgaconvnet \
+				   fpgaconvnet/protos/parameters.pb.h \
+				   fpgaconvnet/protos/parameters.pb.o
+
+fpgaconvnet/modelling/optimizer: fpgaconvnet/modelling/optimizer.o \
+				 fpgaconvnet/protos/parameters.pb.o \
+				 fpgaconvnet/modelling/resource_model.o \
+				 fpgaconvnet/common.o
+	$(CPUCOMPILER) $(ALL_FLAGS) -o $@ $^ -lprotobuf
 
 fpgaconvnet/feedforward.o: fpgaconvnet
 
@@ -118,6 +128,8 @@ fpgaconvnet/convnet_sim.o: fpgaconvnet/convnet.cpp fpgaconvnet/protos/parameters
 
 FPGACONVNET_OBJ_FILES=fpgaconvnet/protos/parameters.pb.o \
 		      fpgaconvnet/feedforward.o fpgaconvnet/convnet.o \
-		      fpgaconvnet/mnist.o
+		      fpgaconvnet/mnist.o \
+		      fpgaconvnet/modelling/resource_model.o \
+		      fpgaconvnet/common.o
 
 FPGACONVNET_SIM_OBJ_FILES=fpgaconvnet/feedforward.o fpgaconvnet/convnet_sim.o fpgaconvnet/mnist.o

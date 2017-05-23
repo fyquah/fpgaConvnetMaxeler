@@ -10,6 +10,7 @@
 #include <google/protobuf/io/zero_copy_stream_impl.h>
 
 #include "fpgaconvnet/protos/parameters.pb.h"
+#include "fpgaconvnet/common.h"
 
 
 namespace fpgaconvnet {
@@ -71,18 +72,6 @@ void set_log_prefix(const std::string & prefix);
 
 uint64_t calc_total_kernel_weights(const protos::LayerParameter & layer);
 uint64_t calc_conv_in_size(const protos::Network & network);
-
-
-class Exception : public std::exception {
-private:
-    std::string message;
-public:
-    Exception(const std::string & message);
-    virtual ~Exception() throw();
-    virtual const char* what() const throw();
-};
-
-typedef uint16_t fixed_point_t;
 
 
 /* On most cases, this is the class abstracts most of the crazy reallignment
