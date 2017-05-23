@@ -282,12 +282,24 @@ calculate_reference_throughput(const fpgaconvnet::protos::Network & network)
 }
 
 
+/* This algorithms runs in O(N^2) - where N is the number of layers.
+ *
+ * The idea is that we want to choose the maxring connection such that
+ * the overall throughput is not bottlenecked by the connection.
+ *
+ * This may not be possible at times, in those cases, we permit using
+ * the connections with throughput just slower than the optimized
+ * throughput, more slower, and so on. For the given list of connection
+ * we are allowed to use, we then position the connections greedily
+ * (This is provably correct, under some weak assumptions).
+ */
 static fpgaconvnet::protos::Network
 position_fpgas(
         const optimizer_t & optimizer,
         const fpgaconvnet::protos::Network & network)
 {
-    const double reference_throughput = calculate_reference_throughput(network);
+    const double reference_throughput =
+            calculate_reference_throughput(network);
     bool ring_connection_allowed[network.layer_size() - 1];
     int allowed_conn_count;
 
@@ -307,6 +319,76 @@ position_fpgas(
         }
 
         ring_connection_allowed[model.layer_index] = true;
+    }
+
+    std::vector<std::vector<fpgaconvnet::protos::LayerParameter> > solution;
+    solution.push_back(std::vector<fpgaconvnet::protos::LayerParameter>());
+
+    for (; allowed_conn_count < optimizer.maxring_model.size()
+            ; allowed_conn_count++) {
+
+        bool is_solution_valid = true;
+        int prev_splitable_connection = -1;
+
+        for (int i = 0 ; i < network.layer_size() ; i++) {
+            std::vector<fpgaconvnet::protos::LayerParameter>
+                    current_fpga = solution.back();
+
+            fpgaconvnet::resource_model::stream_t input_stream =
+                (solution.size() == 1
+                    ? fpgaconvnet::resource_model::STREAM_PCIE
+                    : fpgaconvnet::resource_model::STREAM_MAX_RING);
+
+            fpgaconvnet::resource_model::stream_t output_stream =
+                (i == network.layer_size() - 1
+                     ? fpgaconvnet::resource_model::STREAM_PCIE
+                     : fpgaconvnet::resource_model::STREAM_MAX_RING);
+
+            current_fpga.push_back(network.layer(i));
+
+            fpgaconvnet::resource_model::resource_t resource =
+                    fpgaconvnet::resource_model::project_single_fpga(
+                            input_stream, current_fpga, output_stream);
+
+            if (!fpgaconvnet::resource_model::meets_resource_constraints(
+                        resource)) {
+                const int old_size = i - prev_splitable_connection - 1;
+
+                if (old_size == 0) {
+                    is_solution_valid = false;
+                    break;
+                }
+
+                std::vector<fpgaconvnet::protos::LayerParameter> new_fpga(
+                        current_fpga.begin() + old_size,
+                        current_fpga.end());
+                current_fpga.resize(old_size);
+                solution.push_back(new_fpga);
+            }
+
+            if (ring_connection_allowed[i]) {
+                prev_splitable_connection = i;
+            }
+        }
+
+        if (is_solution_valid) {
+            fpgaconvnet::protos::Network positioned = network;
+            auto ptr = positioned.mutable_layer()->begin();
+
+            for (int i = 0; i < solution.size() ; i++) {
+                for (int j = 0 ; j < solution[i].size() ; j++) {
+                    ptr->set_fpga_id(i);
+                    ptr++;
+                }
+            }
+
+            positioned.set_num_fpga_used(solution.size());
+
+            return positioned;
+        }
+
+        ring_connection_allowed[
+            optimizer.maxring_model[allowed_conn_count].layer_index] = true;
     }
 
     return network;

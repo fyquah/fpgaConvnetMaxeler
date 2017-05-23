@@ -28,6 +28,17 @@ const double MAX_FF = 1049600;
 bool
 meets_resource_constraints(const std::vector<resource_t> & resources);
 
+
+bool
+meets_resource_constraints(const resource_t & resource);
+
+
+resource_t
+project_single_fpga(
+        const stream_t input_stream,
+        const std::vector<protos::LayerParameter> & layers,
+        const stream_t output_stream);
+
 std::vector<resource_t> project(const protos::Network & network);
 
 std::string

@@ -69,6 +69,7 @@ conv_resource(const protos::LayerParameter & layer)
     const double bram_sliding_window = 100.0;
     const double bram_stream = layer.conv().worker_factor() * std::ceil(
             512.0 / 1024.0
+
             * layer.conv().kernel_size() * layer.conv().kernel_size());
 
     const double weights_vector_bits =
@@ -159,7 +160,7 @@ lrn_resource(const protos::LayerParameter & layer)
 }
 
 
-static resource_t
+resource_t
 project_single_fpga(
         const stream_t input_stream,
         const std::vector<protos::LayerParameter> & layers,
@@ -259,13 +260,19 @@ project(const protos::Network & network)
 
 
 bool
+meets_resource_constraints(const resource_t & resource)
+{
+    return (resource.dsp < MAX_DSP
+            && resource.dsp < MAX_BRAM
+            && resource.lut < MAX_LUT);
+}
+
+
+bool
 meets_resource_constraints(const std::vector<resource_t> & resources)
 {
     for (int i = 0 ; i < resources.size(); i++) {
-        auto resource = resources[i];
-        if (resource.dsp > MAX_DSP
-                || resource.dsp > MAX_BRAM
-                || resource.lut > MAX_LUT) {
+        if (!meets_resource_constraints(resources[i])) {
             return false;
         }
     }
