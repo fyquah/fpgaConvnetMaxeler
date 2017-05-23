@@ -61,20 +61,17 @@ compute_significant_factors(uint64_t N)
     return factors;
 }
 
+static bool
+ring_desc_comparator(
+        ring_connection_t const &a, ring_connection_t const &b)
+{
+    return a.throughput > b.throughput;
+}
 
 /* The connection is sorted in decreasing order of throughput. */
 static std::vector<ring_connection_t>
 build_maxring_bottleneck_model(const fpgaconvnet::protos::Network & network)
 {
-    struct comparator
-    {
-        bool
-        operator()(
-                ring_connection_t const &a, ring_connection_t const &b) const
-        {
-            return a.throughput > b.throughput;
-        }
-    };
 
     std::vector<ring_connection_t> ret;
 
@@ -97,7 +94,7 @@ build_maxring_bottleneck_model(const fpgaconvnet::protos::Network & network)
         ret.push_back(connection);
     }
 
-    std::sort(ret.begin(), ret.end(), comparator());
+    std::sort(ret.begin(), ret.end(), ring_desc_comparator);
 
     return ret;
 }
@@ -523,7 +520,7 @@ search_design_space(const fpgaconvnet::protos::Network & network, bool *success)
             ::fpgaconvnet::resource_model::project(local_solution);
         bool meets_resource_constraints =
             ::fpgaconvnet::resource_model::meets_resource_constraints(resources)
-            && local_solution.num_fpga_used() < local_solution.num_fpga_available();
+            && local_solution.num_fpga_used() <= local_solution.num_fpga_available();
 
         fpgaconvnet::logging::stdout() << "Resource usage:\n";
 
