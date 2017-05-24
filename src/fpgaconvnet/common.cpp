@@ -193,8 +193,8 @@ double throughput(const protos::Network & network)
 
     /* In terms of images per clock cycle */
     double throughput = PCIE_BANDWIDTH / input_image_bytes * cycle_length;
+    int prev_fpga = 0;
 
-    /* TODO(fyq14): Consider cross-FPGA boundary. */
     for (int i = 0 ; i < network.layer_size() ; i++) {
         auto layer = network.layer(i);
         const double input_size =
@@ -227,6 +227,19 @@ double throughput(const protos::Network & network)
         }
 
         throughput = std::min(throughput, layer_throughput);
+        if (layer.fpga_id() != prev_fpga) {
+            const uint64_t image_bytes =
+                network.layer(i).input_height()
+                * network.layer(i).input_width()
+                * network.layer(i).num_inputs()
+                * sizeof(fpgaconvnet::fixed_point_t);
+
+            throughput = std::min(
+                    throughput,
+                    double(fpgaconvnet::calculation::MAXRING_BANDWIDTH)
+                    / double(image_bytes));
+        }
+        prev_fpga = layer.fpga_id();
     }
 
     return throughput * frequency;
