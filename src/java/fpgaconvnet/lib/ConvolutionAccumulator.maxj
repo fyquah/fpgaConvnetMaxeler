@@ -222,6 +222,7 @@ public class ConvolutionAccumulator extends KernelLib {
                 convParams.getLookAhead() * ctr.getTotalIterations(),
                 enableSignal);
 
+        DFEVar groupIter;
         DFEVar convIter;
         DFEVar lookAheadIter;
         DFEVar pixelIter;
@@ -233,9 +234,21 @@ public class ConvolutionAccumulator extends KernelLib {
                     * ctr.getSchedulerIterations();
             CounterChain chain = control.count.makeCounterChain(enableSignal);
             Utils.chainCounterOrZero(this, chain, ctr.getSchedulerIterations());
-            convIter = Utils.chainCounterOrZero(this, chain, ctr.getConvolutionIterations());
+            convIter = Utils.chainCounterOrZero(
+                    this, chain, ctr.getConvolutionIterations());
             Utils.chainCounterOrZero(this, chain, ctr.getKernelIterations());
             pixelIter = makeSimpleEnableCounter(totalIter, enableSignal);
+
+            CounterChain groupChain =
+                    control.count.makeCounterChain(enableSignal);
+            groupIter = Utils.chainCounterOrZero(
+                    this,
+                    groupChain,
+                    layerParams.getConv().getGroup());
+            final int inGroupIterations =
+                    ctr.getTotalIterations()
+                    / layerParams.getConv().getGroup();
+            Utils.chainCounterOrZero(this, groupChain, inGroupIterations);
 
             lookAheadIter = constant.var(dfeBool(), 0);
             outputControlFlag = enableSignal & pixelIter.eq(totalIter - 1);
@@ -246,6 +259,7 @@ public class ConvolutionAccumulator extends KernelLib {
             DFEVar loopIter = Utils.chainCounterOrZero(this, chain, ctr.getRevisitIterations());;
             lookAheadIter = Utils.chainCounterOrZero(this, chain, convParams.getLookAhead());
             DFEVar weightIter;
+            groupIter = null;
 
             if (ctr.getLastWeightIterations() == ctr.getWeightIterations()) {
                 weightIter = Utils.chainCounterOrZero(this, chain, ctr.getWeightIterations());
@@ -312,6 +326,13 @@ public class ConvolutionAccumulator extends KernelLib {
         optimization.popPipeliningFactor();
 
         List<DFEVector<DFEVar>> lookAheadOutputs = new ArrayList<DFEVector<DFEVar>>();
+        List<DFEVar> sumVars = new ArrayList<DFEVar>();
+
+        final int convFoldingFactor = layerParams.getConv().getConvFoldingFactor();
+        for (int i = 0 ; i < convFoldingFactor ; i++) {
+            sumVars.add(Utils.treeReduceAdd(map(inputVectors, i)));
+        }
+        sumVars[0].simWatch("sumVars");
 
         // logic for accumulating outputs
         for (int lookAhead = 0; lookAhead < convParams.getLookAhead() ; lookAhead++) {
@@ -319,17 +340,22 @@ public class ConvolutionAccumulator extends KernelLib {
 
             for (int channel = 0 ; channel < layerParams.getNumOutputs() ; channel++) {
 
-                final int convFoldingFactor = layerParams.getConv().getConvFoldingFactor();
+                final int totalGroups = layerParams.getConv().getGroup();
+                final int numOutputs = layerParams.getNumOutputs();
+
                 DFEVar acc = GlobalConfig.dataType.newInstance(this);
                 DFEVar initFlag =
                         lookAheadIter.eq(lookAhead)
                         & pixelIter.eq(
                             (channel / layerParams.getConv().getConvFoldingFactor()));
-                DFEVar sumVars = Utils.treeReduceAdd(map(inputVectors, channel % convFoldingFactor));
                 DFEVar channelOutputFlag = (
                         lookAheadIter.eq(lookAhead)
-                        & convIter.eq(channel / layerParams.getConv().getConvFoldingFactor()));
-                DFEVar muxedSumVars = channelOutputFlag ? sumVars : 0.0;
+                        & convIter.eq(channel / convFoldingFactor)
+                        & groupIter.eq(channel / (numOutputs / totalGroups)));
+                DFEVar muxedSumVars = (
+                        channelOutputFlag
+                        ? sumVars[channel % convFoldingFactor]
+                        : 0.0);
                 DFEVar carriedSum = stream.offset(acc, -1);
 
                 // push and pop pipelining factor required to make sure this accumulator runs at
@@ -340,10 +366,6 @@ public class ConvolutionAccumulator extends KernelLib {
 
                 acc <== muxedSumVars + prevAcc;
                 lookAheadOutput[channel] <== acc;
-
-                if (channel == 0) {
-                    sumVars.simWatch("sumVars_" + lookAhead);
-                }
             }
 
             lookAheadOutputs.add(lookAheadOutput);

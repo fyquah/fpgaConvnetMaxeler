@@ -70,7 +70,9 @@ public class IterationCounter {
      */
     public int getConvolutionIterations() {
         return Utils.divCeil(
-                layerParams.getNumOutputs(), layerParams.getConv().getConvFoldingFactor()); 
+                layerParams.getNumOutputs()
+                    / layerParams.getConv().getGroup(),
+                layerParams.getConv().getConvFoldingFactor()); 
     }
 
     /* The number of input channels a worker needs to handle. */

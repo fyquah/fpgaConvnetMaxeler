@@ -106,6 +106,7 @@ message ConvolutionParameter
     optional uint32 kernel_folding_factor = 3;  // 1 <= x <= kernel_dim * kernel_dim
                                               // - number of multipliers per convoluter.
                                               // - must be a factor of kernelDim * kernelDim
+    optional uint32 group = 15 [default = 1];
 
 }
 

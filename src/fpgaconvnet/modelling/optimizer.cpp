@@ -590,6 +590,7 @@ int main (int argc, char **argv)
         int fd = open(output_filename, O_WRONLY);
         google::protobuf::io::FileOutputStream fstream(fd);
         google::protobuf::TextFormat::Print(solution, &fstream);
+        fstream.Close();
 
         return 0;
 
