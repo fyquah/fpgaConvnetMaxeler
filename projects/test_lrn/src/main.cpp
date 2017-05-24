@@ -97,10 +97,11 @@ int main(int argc, char **argv)
      *       data as image input.
      */
     std::cout << "Reading images ..." << std::endl;
+    const int conv_in_size =
+        fpgaconvnet::calculation::conv_in_size(network_parameters);
+
     for (unsigned i = 0 ; i < N ; i++) {
-	for (unsigned j = 0;
-		j < fpgaconvnet::calc_conv_in_size(network_parameters);
-		j++) {
+	for (unsigned j = 0; j < conv_in_size; j++) {
             float x = (float(rand()) / float(RAND_MAX));
 	    pixel_stream.push_back((x - 0.5) * 2.0);
 	}
