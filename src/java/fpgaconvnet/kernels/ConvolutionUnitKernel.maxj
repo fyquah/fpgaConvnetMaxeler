@@ -99,7 +99,7 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
                 pixelVars.add(
                         new FanoutLimiter<DFEVar>(
                             getConvPixel(multId, inputWindow),
-                            8));
+                            4));
             }
 
             for (int convUnitIndex = 0; convUnitIndex < convFoldingFactor; convUnitIndex++) {

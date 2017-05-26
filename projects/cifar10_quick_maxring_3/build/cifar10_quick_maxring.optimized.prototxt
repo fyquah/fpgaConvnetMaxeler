@@ -1,13 +1,10 @@
 layer {
   conv {
     worker_factor: 3
-    conv_folding_factor: 32
+    conv_folding_factor: 16
     kernel_folding_factor: 25
-    bram_factor: 96
-    look_ahead: 1
     kernel_size: 5
     pad: 2
-    should_fit_on_chip: true
   }
   input_height: 32
   input_width: 32
@@ -16,7 +13,6 @@ layer {
   output_height: 32
   output_width: 32
   layer_id: 0
-  is_first_layer: true
   fpga_id: 0
 }
 layer {
@@ -38,15 +34,12 @@ layer {
 }
 layer {
   conv {
-    worker_factor: 16
-    conv_folding_factor: 8
+    worker_factor: 4
+    conv_folding_factor: 32
     kernel_folding_factor: 25
-    bram_factor: 1024
-    look_ahead: 1
     kernel_size: 5
     stride: 1
     pad: 2
-    should_fit_on_chip: true
   }
   input_height: 16
   input_width: 16
@@ -63,7 +56,7 @@ layer {
     type: Average
     dim: 3
     stride: 2
-    channel_folding_factor: 32
+    channel_folding_factor: 4
   }
   input_height: 16
   input_width: 16
@@ -72,19 +65,16 @@ layer {
   output_height: 8
   output_width: 8
   layer_id: 3
-  fpga_id: 2
+  fpga_id: 1
 }
 layer {
   conv {
-    worker_factor: 32
-    conv_folding_factor: 8
-    kernel_folding_factor: 7
-    bram_factor: 2048
-    look_ahead: 1
+    worker_factor: 1
+    conv_folding_factor: 64
+    kernel_folding_factor: 25
     kernel_size: 5
     stride: 1
     pad: 2
-    should_fit_on_chip: true
   }
   input_height: 8
   input_width: 8
@@ -101,7 +91,7 @@ layer {
     type: Average
     dim: 3
     stride: 2
-    channel_folding_factor: 8
+    channel_folding_factor: 2
   }
   input_height: 8
   input_width: 8
@@ -110,7 +100,6 @@ layer {
   output_height: 4
   output_width: 4
   layer_id: 5
-  is_last_layer: true
   fpga_id: 2
 }
 num_fpga_available: 3
