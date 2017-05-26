@@ -10,6 +10,7 @@ import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVectorType;
 import com.maxeler.maxcompiler.v2.kernelcompiler.KernelParameters;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.memory.Memory;
 
+import fpgaconvnet.maxpower.FanoutLimiter;
 import fpgaconvnet.Functional;
 import fpgaconvnet.GlobalConfig;
 import fpgaconvnet.IterationCounter;
@@ -87,11 +88,18 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
                     getInputName(workerId), inputVectorType, inputControlFlag);
 
             DFEVector<DFEVar> output = workerOutputVectorType.newInstance(this);
-            final DFEVar[] pixelVars = new DFEVar[layerParams.getConv().getKernelFoldingFactor()];
-            final DFEVar[][] weightVars = new DFEVar[convFoldingFactor][kernelFoldingFactor];
+            final List<FanoutLimiter<DFEVar>> pixelVars =
+                    new ArrayList<FanoutLimiter<DFEVar>>();
+            final DFEVar[][] weightVars =
+                    new DFEVar[convFoldingFactor][kernelFoldingFactor];
 
-            for (int multId = 0; multId < layerParams.getConv().getKernelFoldingFactor(); multId++) {
-                pixelVars[multId] = getConvPixel(multId, inputWindow);
+            for (int multId = 0;
+                    multId < layerParams.getConv().getKernelFoldingFactor();
+                    multId++) {
+                pixelVars.add(
+                        new FanoutLimiter<DFEVar>(
+                            getConvPixel(multId, inputWindow),
+                            8));
             }
 
             for (int convUnitIndex = 0; convUnitIndex < convFoldingFactor; convUnitIndex++) {
@@ -100,11 +108,13 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
                 for (int multId = 0; multId < kernelFoldingFactor; multId++) {
 
                     /* Determine the weight fetching strategy based on the foldingFactors. */
-                    weightVars[convUnitIndex][multId] = getConvWeights(
-                            workerId, convUnitIndex, multId);
+                    weightVars[convUnitIndex][multId] =
+                        optimization.pipeline(
+                            getConvWeights(
+                                workerId, convUnitIndex, multId));
 
                     convUnitOutput = convUnitOutput
-                            + pixelVars[multId] * weightVars[convUnitIndex][multId];
+                            + pixelVars[multId].get() * weightVars[convUnitIndex][multId];
 
                 }
                 output[convUnitIndex] <== convUnitOutput;
@@ -125,7 +135,12 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
                 }
                 inputControlFlag.simWatch("input_control_flag");
                 weightVars[0][0].simWatch("weight");
-                pixelVars[0].simWatch("pixel");
+            }
+
+            for (int i = 0
+                    ; i < layerParams.getConv().getKernelFoldingFactor()
+                    ; i++) {
+                pixelVars[i].finalizeFanout(this);
             }
         }
 
