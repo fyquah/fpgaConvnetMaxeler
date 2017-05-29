@@ -78,6 +78,8 @@ target_main_dfe.o: main.cpp
 		$(foreach name,$(TARGET_DFEMAXDIRS),-I$(name)) \
 		-c -o $@
 
+dfe_maxfiles: $(TARGET_DFE_MAXFILES)
+
 
 target_dfe: fpgaconvnet/convnet.o fpgaconvnet/common.o \
 		fpgaconvnet/protos/parameters.pb.o \
