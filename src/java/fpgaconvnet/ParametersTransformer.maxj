@@ -358,6 +358,10 @@ public class ParametersTransformer {
             // allign width with next layer's worker factor
             builder.setOutputVectorWidth(next.getConv().getWorkerFactor());
 
+        } else if (next.getParamsCase().equals(LayerParameter.ParamsCase.POOL)) {
+            builder.setOutputVectorWidth(
+                    next.getPool().getChannelFoldingFactor());
+
         }
 
         if (builder.getOutputVectorWidth() < cur.getNumOutputs()) {
