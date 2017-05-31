@@ -68,20 +68,22 @@ $(TARGET_DFE_MAXFILES): $(ENGINEFILES) $(JAVA_PROTOS)  $(PRJ_OPTIMIZED_DESCRIPTO
 		  enableMPCX=$(MPCX)
 
 
-$(TARGET_DFE_OBJS): $(TARGET_DFE_MAXFILES)
+$(TARGET_DFE_OBJS):
 	$(SLICCOMPILE) $(MAXCOMPILER_BUILD_DIR)/$(basename $(basename $(notdir $@)))_$(DFEModel)_DFE/results/$(basename $(basename $(notdir $@))).max $@
 
 
-fpgaconvnet/target_main_dfe.o: main.cpp $(TARGET_DFE_MAXFILES)
+target_main_dfe.o: main.cpp
 	$(CPUCOMPILER) $< $(ALL_FLAGS) \
 		-I$(MAXCOMPILER_BUILD_DIR) \
 		$(foreach name,$(TARGET_DFEMAXDIRS),-I$(name)) \
 		-c -o $@
 
+dfe_maxfiles: $(TARGET_DFE_MAXFILES)
 
-target_dfe: fpgaconvnet/convnet.o \
-		fpgaconvnet/target_main_dfe.o \
+
+target_dfe: fpgaconvnet/convnet.o fpgaconvnet/common.o \
 		fpgaconvnet/protos/parameters.pb.o \
+		target_main_dfe.o \
 		$(TARGET_DFE_OBJS) \
 		$(ADDITIONAL_OBJS)
 	$(CPUCOMPILER) $(ALL_FLAGS) -o $@ $^ $(LFLAGS)

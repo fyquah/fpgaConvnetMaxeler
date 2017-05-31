@@ -264,8 +264,7 @@ bool
 meets_resource_constraints(const resource_t & resource)
 {
     return (resource.dsp < MAX_DSP
-            && resource.dsp < MAX_BRAM
-            && resource.lut < MAX_LUT);
+            && resource.dsp < MAX_BRAM);
 }
 
 

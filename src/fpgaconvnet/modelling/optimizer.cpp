@@ -591,6 +591,7 @@ int main (int argc, char **argv)
         google::protobuf::io::FileOutputStream fstream(fd);
         google::protobuf::TextFormat::Print(solution, &fstream);
         fstream.Close();
+        close(fd);
 
         return 0;
 
