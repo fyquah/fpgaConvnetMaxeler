@@ -13,15 +13,12 @@
 #include "target_2.h"
 #include "target_3.h"
 #include "target_4.h"
-#include "target_5.h"
-#include "target_6.h"
-#include "target_7.h"
 
 
 #ifdef __SIM__
     static const uint64_t N = 2;
 #else
-    static const uint64_t N = 10000;
+    static const uint64_t N = 100;
 #endif
 
 
@@ -54,9 +51,6 @@ std::vector<float> run_feature_extraction(
     max_files.push_back(target_2_init());
     max_files.push_back(target_3_init());
     max_files.push_back(target_4_init());
-    max_files.push_back(target_5_init());
-    max_files.push_back(target_6_init());
-    max_files.push_back(target_7_init());
 
     std::vector<float> extracted_features;
     fpgaconvnet::Convnet convnet(network_parameters, max_files, "");
@@ -67,7 +61,7 @@ std::vector<float> run_feature_extraction(
     /* warm up the DFE with the weights. */
     extracted_features = convnet.max_run_inference(N, images, false);
 #ifndef __SIM__
-    extracted_features = convnet.max_run_inference(N, images, ture);
+    extracted_features = convnet.max_run_inference(N, images, true);
 #endif
 
     fpgaconvnet::verify_conv_output(
