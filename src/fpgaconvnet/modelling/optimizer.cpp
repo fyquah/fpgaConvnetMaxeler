@@ -1,4 +1,5 @@
 #include <fcntl.h>
+#include <stdio.h>
 
 #include <cmath>
 #include <cstring>
@@ -591,7 +592,10 @@ int main (int argc, char **argv)
         google::protobuf::io::FileOutputStream fstream(fd);
         google::protobuf::TextFormat::Print(solution, &fstream);
         fstream.Close();
+
+#ifndef __OSX__
         close(fd);
+#endif
 
         return 0;
 
