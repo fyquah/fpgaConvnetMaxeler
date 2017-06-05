@@ -287,7 +287,7 @@ uint64_t kernel_iterations(const protos::LayerParameter & layer)
 
 uint64_t convolution_iterations(const protos::LayerParameter & layer)
 {
-    return math::div_ceil(layer.num_outputs(),
+    return math::div_ceil(layer.num_outputs() / layer.conv().group(),
                     layer.conv().conv_folding_factor()); 
 }
 
@@ -343,7 +343,7 @@ uint64_t conv_in_size(const protos::Network & network)
 uint64_t total_rom_size(const protos::LayerParameter & layer)
 {
     return layer.conv().worker_factor()
-            * layer.conv().conv_folding_factor()
+            * (layer.conv().conv_folding_factor() / layer.conv().group())
             * layer.conv().kernel_folding_factor()
             * total_iterations(layer);
 }
