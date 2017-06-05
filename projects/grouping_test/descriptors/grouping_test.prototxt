@@ -1,0 +1,18 @@
+layer {
+    input_height: 33
+    input_width: 33
+    num_inputs: 16
+    num_outputs: 26
+
+    conv: {
+        worker_factor: 1
+        conv_folding_factor: 10
+        kernel_folding_factor: 13
+
+        stride: 3
+        kernel_size: 5
+        group: 2
+    }
+
+    activation: None
+}
