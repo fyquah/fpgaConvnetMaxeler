@@ -7,12 +7,9 @@ PRJ_DESCRIPTOR=../descriptors/alexnet.prototxt
 PRJ_OPTIMIZED_DESCRIPTOR=alexnet.optimized.prototxt
 
 
-$(PRJ_OPTIMIZED_DESCRIPTOR): fpgaconvnet/modelling/optimizer.py $(PRJ_DESCRIPTOR) $(PYTHON_PROTOS)
-	python fpgaconvnet/modelling/optimizer.py \
-	    --resource-bench $(WHEREISROOT)/results/resource_bench.yaml \
-	    --output $@ \
-	    $(PRJ_DESCRIPTOR)
-
+$(PRJ_OPTIMIZED_DESCRIPTOR): fpgaconvnet/modelling/optimizer $(PRJ_DESCRIPTOR)
+	touch $(PRJ_OPTIMIZED_DESCRIPTOR);
+	./$< $(PRJ_DESCRIPTOR) $@
 
 gen_makefile: $(WHEREISROOT)/scripts/generate_multi_fpga_makefile.py $(PRJ_OPTIMIZED_DESCRIPTOR)
 	python $< --descriptor $(PRJ_OPTIMIZED_DESCRIPTOR) \

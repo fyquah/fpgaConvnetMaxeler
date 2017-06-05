@@ -68,6 +68,9 @@ $(TARGET_DFE_MAXFILES): $(ENGINEFILES) $(JAVA_PROTOS)  $(PRJ_OPTIMIZED_DESCRIPTO
 		  enableMPCX=$(MPCX)
 
 
+dfe_maxfiles: $(TARGET_DFE_MAXFILES)
+
+
 $(TARGET_DFE_OBJS):
 	$(SLICCOMPILE) $(MAXCOMPILER_BUILD_DIR)/$(basename $(basename $(notdir $@)))_$(DFEModel)_DFE/results/$(basename $(basename $(notdir $@))).max $@
 
