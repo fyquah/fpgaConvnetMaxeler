@@ -593,7 +593,7 @@ int main (int argc, char **argv)
         google::protobuf::TextFormat::Print(solution, &fstream);
         fstream.Close();
 
-#ifndef __OSX__
+#ifndef __APPLE__
         close(fd);
 #endif
 
