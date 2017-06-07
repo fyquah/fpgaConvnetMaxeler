@@ -27,6 +27,11 @@ std::vector<float> run_feature_extraction(
     std::vector<float> extracted_features;
     fpgaconvnet::Convnet convnet(network_parameters, max_file, "");
 
+    std::vector<std::string> filenames = {
+        "../test_data/weights.bin",
+        "../test_data/bias.bin"
+    };
+    convnet.load_weights_from_files(filenames, fpgaconvnet::FORMAT_BINARY);
     convnet.max_init_weights();
 
     /* warm up the DFE with the weights. */
@@ -59,7 +64,7 @@ int main(int argc, char **argv)
 
     std::cout << "Reading images ..." << std::endl;
     int input_array_size =
-            N * fpgaconvnet::calc_conv_in_size(network_parameters);
+            N * fpgaconvnet::calculation::conv_in_size(network_parameters);
     std::cout << input_array_size << std::endl;
     std::vector<float> pixel_stream(input_array_size, 0.0f);
     fpgaconvnet::load_float_array_from_binary_file(

@@ -5,13 +5,13 @@ layer {
     num_outputs: 26
 
     conv: {
-        worker_factor: 1
-        conv_folding_factor: 10
-        kernel_folding_factor: 13
-
         stride: 3
         kernel_size: 5
         group: 2
+
+        worker_factor: 1
+        conv_folding_factor: 13
+        kernel_folding_factor: 25
     }
 
     activation: None

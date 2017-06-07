@@ -35,8 +35,8 @@ grouping_test_main_sim.o: main.cpp $(GROUPING_TEST_SIM_MAXFILE)
 		-D__SIM__ -DDESIGN_NAME=$(GROUPING_TEST_NAME) -c -o $@
 
 
-grouping_test_sim: $(FPGACONVNET_OBJ_FILES) \
-	    grouping_test_sim.o grouping_test_main_sim.o
+grouping_test_sim: grouping_test_sim.o grouping_test_main_sim.o \
+    $(FPGACONVNET_OBJ_FILES)
 	$(CPUCOMPILER) $(ALL_FLAGS) -o $@ $^ $(LFLAGS)
 
 

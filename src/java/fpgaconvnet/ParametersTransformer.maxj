@@ -112,8 +112,10 @@ public class ParametersTransformer {
                         * convParams.getConvFoldingFactor()
                         * Utils.divCeil(layerParameter.getNumInputs(),
                                         convParams.getWorkerFactor())
-                        * Utils.divCeil(layerParameter.getNumOutputs(),
-                                        convParams.getConvFoldingFactor());
+                        * Utils.divCeil(
+                                layerParameter.getNumOutputs()
+                                    / layerParameter.getConv().getGroup(),
+                                convParams.getConvFoldingFactor());
             }
 
             stride = convParams.getStride();
@@ -243,10 +245,10 @@ public class ParametersTransformer {
                         "worker factor must divide num inputs. This is required to optimize"
                         + " fifo usage.");
             }
-            if (checkOutOfRange(layer.getConv().getConvFoldingFactor(), layer.getNumOutputs())) {
+            if (checkOutOfRange(layer.getConv().getConvFoldingFactor(), layer.getNumOutputs()  / layer.getConv().getGroup())) {
                 raiseError(layer.getLayerId(),
                         "Conv folding factor in convolution layer must be strictly between "
-                        + "inclusive 1 and num_outputs");
+                        + "inclusive 1 and num_outputs / groupSize");
             }
 
             IterationCounter ctr = new IterationCounter(layer);

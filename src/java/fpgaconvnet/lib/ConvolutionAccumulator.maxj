@@ -294,6 +294,7 @@ public class ConvolutionAccumulator extends KernelLib {
                     & kernelIter.eq(ctr.getKernelIterations() - 1);
         }
 
+        groupIter.simWatch("group_iter");
         batchCounter.simWatch("batchCounter");
         isInitializingWeights.simWatch("initializingWeights");
         lookAheadIter.simWatch("lookAheadIter");
@@ -345,13 +346,14 @@ public class ConvolutionAccumulator extends KernelLib {
 
                 DFEVar acc = GlobalConfig.dataType.newInstance(this);
                 DFEVar initFlag =
-                        lookAheadIter.eq(lookAhead)
-                        & pixelIter.eq(
-                            (channel / layerParams.getConv().getConvFoldingFactor()));
+                        lookAheadIter.eq(lookAhead) & pixelIter.eq(0);
                 DFEVar channelOutputFlag = (
                         lookAheadIter.eq(lookAhead)
-                        & convIter.eq(channel / convFoldingFactor)
-                        & groupIter.eq(channel / (numOutputs / totalGroups)));
+                        & convIter.eq(
+                            (channel % (numOutputs / totalGroups))
+                            / convFoldingFactor)
+                        & groupIter.eq(
+                            channel / (numOutputs / totalGroups)));
                 DFEVar muxedSumVars = (
                         channelOutputFlag
                         ? sumVars[channel % convFoldingFactor]
@@ -366,6 +368,11 @@ public class ConvolutionAccumulator extends KernelLib {
 
                 acc <== muxedSumVars + prevAcc;
                 lookAheadOutput[channel] <== acc;
+
+                if (channel == 0 || channel == 13) {
+                    channelOutputFlag.simWatch("channel_output_flag_" + channel);
+
+                }
             }
 
             lookAheadOutputs.add(lookAheadOutput);

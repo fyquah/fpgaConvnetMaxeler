@@ -255,7 +255,7 @@ double ops(const protos::Network & network)
             total_ops += (
                     2 * double(it->conv().kernel_size() * it->conv().kernel_size())
                     * double(it->output_height() * it->output_width())
-                    * double(it->num_inputs() * it->num_outputs()));
+                    * double(it->num_inputs() * it->num_outputs() / it->conv().group()));
         } else if (it->has_pool()) {
             total_ops += it->output_height() * it->output_width() * it->num_inputs();
 
@@ -327,7 +327,8 @@ uint64_t total_kernel_weights(const protos::LayerParameter & layer)
         return 0;
     }
     auto & conv = layer.conv();
-    return layer.num_inputs() * layer.num_outputs()
+    return layer.num_inputs()
+            * layer.num_outputs() / layer.conv().group()
             * conv.kernel_size() * conv.kernel_size();
 }
 
@@ -343,7 +344,7 @@ uint64_t conv_in_size(const protos::Network & network)
 uint64_t total_rom_size(const protos::LayerParameter & layer)
 {
     return layer.conv().worker_factor()
-            * (layer.conv().conv_folding_factor() / layer.conv().group())
+            * layer.conv().conv_folding_factor()
             * layer.conv().kernel_folding_factor()
             * total_iterations(layer);
 }
@@ -365,7 +366,8 @@ bool is_layer_cpu_initialized(const protos::LayerParameter & layer)
     return
         !layer.conv().has_bram_factor()
         || (layer.conv().bram_factor()
-                >= (layer.num_inputs() * layer.num_outputs()));
+                >= (layer.num_inputs()
+                    * (layer.num_outputs() / layer.conv().group())));
 }
 
 

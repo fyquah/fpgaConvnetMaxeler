@@ -125,7 +125,7 @@ void load_kernels_from_binary_file(
 {
     std::ifstream fin(filename.c_str());
     int total_kernel_size = layer.conv().kernel_size() * layer.conv().kernel_size();
-    int total_kernels = layer.num_outputs() * layer.num_inputs();
+    int total_kernels = layer.num_outputs() / layer.conv().group() * layer.num_inputs();
     float *buffer = new float[total_kernel_size];
 
     if (!fin.is_open()) {
@@ -259,9 +259,20 @@ void special_allign_and_place_kernel_weights(
                 continue;
             }
 
-            for (int channel = 0 ; channel < layer.num_outputs() ; channel++) {
+            for (int channel = 0
+                    ; channel < layer.num_outputs() / layer.conv().group()
+                    ; channel++) {
+                const int k =
+                        (worker_iter * worker_factor
+                         / (layer.num_inputs() / layer.conv().group()));
+                const int x =
+                        (worker_iter * worker_factor)
+                        % (layer.num_inputs() / layer.conv().group());
                 const int src_offset =
-                        (channel * layer.num_inputs() + worker_iter * worker_factor)
+                        (((k * layer.num_outputs() / layer.conv().group()
+                           + channel)
+                           * (layer.num_inputs() / layer.conv().group()))
+                          + x)
                         * kernel_dim * kernel_dim;
                 const int conv_iters = calculation::convolution_iterations(layer);
                 const int scheduler_iters = calculation::scheduler_iterations(layer);
@@ -275,12 +286,12 @@ void special_allign_and_place_kernel_weights(
                 /*
                  * Useful piece of code to visualize the kernels weights
                  *    -> worker position mapping.
-                 * std::cout << "src_offset = " 
-                 *         << src_offset / (kernel_dim * kernel_dim)
-                 *         << " -> "
-                 *         << dest_offset / (kernel_dim * kernel_dim)
-                 *         << std::endl;
                 */
+                std::cout << "src_offset = " 
+                        << src_offset / (kernel_dim * kernel_dim)
+                        << " -> "
+                        << dest_offset / (kernel_dim * kernel_dim)
+                        << std::endl;
                 std::memcpy(
                         dest + dest_offset,
                         src + src_offset,
@@ -319,11 +330,15 @@ void allign_and_place_cpu_initialized_kernel_weights(
                         + (worker * rom_per_worker)
                         + (conv * rom_per_conv);
 
+                std::cout << "Offset = " << offset
+                    << "addr = " << addr << std::endl;
+
                 copy_float_to_fixed(
                         dest_base + addr,
                         tmp + offset,
                         layer.conv().kernel_folding_factor());
                 addr += layer.conv().kernel_folding_factor();
+
             }
         }
     }
