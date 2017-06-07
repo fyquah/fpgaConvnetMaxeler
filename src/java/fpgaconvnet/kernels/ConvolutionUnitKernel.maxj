@@ -134,7 +134,9 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
                     lookAheadCounter.getEnableSignal().simWatch("enable_signal");
                 }
                 inputControlFlag.simWatch("input_control_flag");
-                weightVars[0][0].simWatch("weight");
+                weightVars[0][0].simWatch("weight_0_0");
+                weightVars[0][1].simWatch("weight_0_1");
+                weightVars[0][2].simWatch("weight_0_2");
             }
 
             for (int i = 0
@@ -494,6 +496,10 @@ public class ConvolutionUnitKernel extends ConvolutionKernelBase {
                     }
                 }
             }
+
+            inputVec[0].simWatch("input_weight_0");
+            inputVec[1].simWatch("input_weight_1");
+            cpuInitWeightsCounter.getInitAddress().simWatch("init_address");
 
             filtersRom.write(
                     cpuInitWeightsCounter.getInitAddress(),

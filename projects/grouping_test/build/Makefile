@@ -14,7 +14,7 @@ GROUPING_TEST_DESCRIPTOR=../descriptors/grouping_test.prototxt
 #           Simulation
 # ==============================
 
-$(GROUPING_TEST_SIM_MAXFILE): $(ENGINEFILES) $(JAVA_PROTOS)
+$(GROUPING_TEST_SIM_MAXFILE): $(ENGINEFILES) $(JAVA_PROTOS) $(GROUPING_TEST_DESCRIPTOR)
 	$(MAXJC) $(JFLAGS) $(filter %.java,$^) $(filter %.maxj,$^)
 	MAXAPPJCP='.:$(CP)' MAXSOURCEDIRS=$(SOURCE_DIRS) \
 		  $(MAXJAVARUN) fpgaconvnet.GenericNetworkBuilder \

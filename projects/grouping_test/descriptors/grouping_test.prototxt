@@ -5,6 +5,7 @@ layer {
     num_outputs: 26
 
     conv: {
+        pad: 1
         stride: 3
         kernel_size: 5
         group: 2

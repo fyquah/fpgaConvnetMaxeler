@@ -286,12 +286,15 @@ void special_allign_and_place_kernel_weights(
                 /*
                  * Useful piece of code to visualize the kernels weights
                  *    -> worker position mapping.
-                */
                 std::cout << "src_offset = " 
                         << src_offset / (kernel_dim * kernel_dim)
                         << " -> "
                         << dest_offset / (kernel_dim * kernel_dim)
+                        << "; " << *(src + src_offset)
+                        << "; " << *(src + src_offset + 1)
+                        << "; " << *(src + src_offset + 2)
                         << std::endl;
+                */
                 std::memcpy(
                         dest + dest_offset,
                         src + src_offset,
@@ -330,8 +333,19 @@ void allign_and_place_cpu_initialized_kernel_weights(
                         + (worker * rom_per_worker)
                         + (conv * rom_per_conv);
 
-                std::cout << "Offset = " << offset
-                    << "addr = " << addr << std::endl;
+                /*
+                 * Some useful debugging code
+                std::cout
+                    << "Worker = " << worker
+                    << " conv = " << conv
+                    << " iter = " << iter
+                    << " offset = " << offset
+                    << " addr = " << addr
+                    << " ; " << *(tmp + offset)
+                    << " ; " << *(tmp + offset + 1)
+                    << " ; " << *(tmp + offset + 2)
+                    << std::endl;
+                */
 
                 copy_float_to_fixed(
                         dest_base + addr,
