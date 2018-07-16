@@ -31,7 +31,7 @@ gen_makefile: $(WHEREISROOT)/scripts/generate_multi_fpga_makefile.py $(PRJ_OPTIM
 
 $(TARGET_SIM_MAXFILES): $(ENGINEFILES) $(JAVA_PROTOS) $(PRJ_OPTIMIZED_DESCRIPTOR)
 	$(MAXJC) $(JFLAGS) $(filter %.java,$^) $(filter %.maxj,$^)
-	MAXAPPJCP='.:$(CP)' MAXSOURCEDIRS=$(SOURCE_DIRS) \
+	PATH="$(FPGACONVNET_JAVA8_HOME)/bin:$(PATH)" MAXAPPJCP='.:$(CP)' MAXSOURCEDIRS=$(SOURCE_DIRS) \
 		  $(MAXJAVARUN) fpgaconvnet.GenericNetworkBuilder \
 		  DFEModel=$(DFEModel) \
 		  maxFileName=$(basename $(notdir $@)) \
