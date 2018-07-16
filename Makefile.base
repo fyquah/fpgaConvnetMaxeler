@@ -1,3 +1,17 @@
+##########################################################
+#    
+#     Makefile.base
+#
+#     Base Makefile that contains the targets
+#     required for compiling protobuf, object files,
+#     optimizers etc. regarless of the number of
+#     underlying FPGA being used. This Makefile DOES NOT
+#     contain any target for Maxfiles, and is also NOT meant
+#     to be used directly as a Makefile, as it requires some
+#     variable names to be set.
+#
+##########################################################
+
 include $(WHEREISROOT)/Makefile.Maia.hardware
 
 NUMDEVICES ?= 1
@@ -86,7 +100,7 @@ EXTRA_CFLAGS?=
 # This is set in the gdbsim/gdbdfe targets
 DEBUG_FLAGS?=
 
-ALL_FLAGS = $(CFLAGS) $(EXTRA_CFLAGS) $(DEBUG_FLAGS)
+ALL_FLAGS = $(CFLAGS) $(EXTRA_CFLAGS) $(DEBUG_FLAGS) -L/mnt/data/cccad3/fyq14/.local/lib/
 # ---- Default DFE ----
 DFEID=/dev/maxeler0
 
@@ -107,8 +121,7 @@ protos: $(ALL_GENERATED_PROTOS)
 
 fpgaconvnet/convnet.o: fpgaconvnet fpgaconvnet/protos/parameters.pb.h
 
-fpgaconvnet/modelling/optimizer.o: fpgaconvnet \
-				   fpgaconvnet/protos/parameters.pb.h \
+fpgaconvnet/modelling/optimizer.o: fpgaconvnet/protos/parameters.pb.h \
 				   fpgaconvnet/protos/parameters.pb.o
 
 fpgaconvnet/modelling/optimizer: fpgaconvnet/modelling/optimizer.o \
@@ -132,4 +145,15 @@ FPGACONVNET_OBJ_FILES=fpgaconvnet/protos/parameters.pb.o \
 		      fpgaconvnet/modelling/resource_model.o \
 		      fpgaconvnet/common.o
 
-FPGACONVNET_SIM_OBJ_FILES=fpgaconvnet/feedforward.o fpgaconvnet/convnet_sim.o fpgaconvnet/mnist.o
+
+$(PRJ_OPTIMIZED_DESCRIPTOR): $(PRJ_DESCRIPTOR) fpgaconvnet/modelling/optimizer
+	fpgaconvnet/modelling/optimizer $< $@
+
+optimize: $(PRJ_OPTIMIZED_DESCRIPTOR)
+
+FPGACONVNET_SIM_OBJ_FILES=fpgaconvnet/protos/parameters.pb.o \
+		      fpgaconvnet/feedforward.o \
+		      fpgaconvnet/convnet_sim.o \
+		      fpgaconvnet/mnist.o \
+		      fpgaconvnet/modelling/resource_model.o \
+		      fpgaconvnet/common.o

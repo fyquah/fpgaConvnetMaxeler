@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <iostream>
+#include <fstream>
 #include <vector>
 #include <functional>
 
@@ -585,18 +586,16 @@ int main (int argc, char **argv)
         fpgaconvnet::logging::stdout()
             << "Resource usage:\n"
             << fpgaconvnet::resource_model::resource_to_string(
-                    fpgaconvnet::resource_model::project(solution))
-            << std::endl;
+                    fpgaconvnet::resource_model::project(solution));
+        fpgaconvnet::logging::stdout()
+            << "Writing optimized protobuf to "
+            << output_filename << std::endl;
 
-        int fd = open(output_filename, O_WRONLY);
-        google::protobuf::io::FileOutputStream fstream(fd);
-        google::protobuf::TextFormat::Print(solution, &fstream);
-        fstream.Close();
-
-#ifndef __APPLE__
-        close(fd);
-#endif
-
+        std::string s;
+        google::protobuf::TextFormat::PrintToString(solution, &s);
+        std::ofstream fout(output_filename);
+        fout << s;
+        fout.close();
         return 0;
 
     } else {
@@ -604,6 +603,4 @@ int main (int argc, char **argv)
             << "Failed to find a solution" << std::endl;
         return 1;
     }
-
-    return 0;
 }

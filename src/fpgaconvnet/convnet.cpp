@@ -760,7 +760,7 @@ std::vector<float> Convnet::max_run_inference(
     void *tmp_buffer_out;
 
     for (int i = 0; i < num_fpgas ; i++) {
-        logging::stdout(INFO) << "Running on DFE " << i << " ..." << std::endl;
+        logging::stdout(logging::INFO) << "Running on DFE " << i << " ..." << std::endl;
 
         if (num_fpgas > 1) {
             dfe = max_load(max_files[i], load_spec);

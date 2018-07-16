@@ -1,9 +1,29 @@
+##########################################################
+#    
+#     Makefile.multi.fpga.base
+#
+#     Base Makefile that generates the compilation
+#     targets for simulations and dfe, targetting
+#     multiple fpga. This is not meant to be used directly,
+#     but rather, meant to be included by a Makefile which
+#     has set sensible defaults.
+#
+##########################################################
+
 TARGET_SIMMAXDIRS := $(foreach name,$(TARGET_NAMES),$(MAXCOMPILER_BUILD_DIR)/$(name)_$(DFEModel)_DFE_SIM/results)
 TARGET_SIM_MAXFILES := $(foreach name,$(TARGET_NAMES),$(MAXCOMPILER_BUILD_DIR)/$(name)_$(DFEModel)_DFE_SIM/results/$(name).max)
 TARGET_SIM_OBJS := $(foreach name,$(TARGET_NAMES),fpgaconvnet/$(name).sim.o)
 TARGET_DFEMAXDIRS := $(foreach name,$(TARGET_NAMES),$(MAXCOMPILER_BUILD_DIR)/$(name)_$(DFEModel)_DFE/results)
 TARGET_DFE_MAXFILES := $(foreach name,$(TARGET_NAMES),$(MAXCOMPILER_BUILD_DIR)/$(name)_$(DFEModel)_DFE/results/$(name).max)
 TARGET_DFE_OBJS := $(foreach name,$(TARGET_NAMES),fpgaconvnet/$(name).dfe.o)
+
+# ==============================
+#      Auxilary Targets
+# ==============================
+
+gen_makefile: $(WHEREISROOT)/scripts/generate_multi_fpga_makefile.py $(PRJ_OPTIMIZED_DESCRIPTOR)
+	PYTHONPATH=. python $< --descriptor $(PRJ_OPTIMIZED_DESCRIPTOR) \
+		--output Makefile.targets
 
 # ==============================
 #           Simulation
@@ -25,7 +45,7 @@ $(TARGET_SIM_OBJS): $(TARGET_SIM_MAXFILES)
 	$(SLICCOMPILE) $(MAXCOMPILER_BUILD_DIR)/$(basename $(basename $(notdir $@)))_$(DFEModel)_DFE_SIM/results/$(basename $(basename $(notdir $@))).max $@
 
 
-fpgaconvnet/target_main_sim.o: main.cpp $(TARGET_SIM_MAXFILES)
+fpgaconvnet/target_main_sim.o: main.cpp $(TARGET_SIM_OBJS)
 	$(CPUCOMPILER) $< $(ALL_FLAGS) \
 		-I$(MAXCOMPILER_BUILD_DIR) \
 		$(foreach name,$(TARGET_SIMMAXDIRS),-I$(name)) \
@@ -33,6 +53,7 @@ fpgaconvnet/target_main_sim.o: main.cpp $(TARGET_SIM_MAXFILES)
 
 
 target_sim: fpgaconvnet/convnet_sim.o \
+		fpgaconvnet/common.o \
 		fpgaconvnet/target_main_sim.o \
 		fpgaconvnet/protos/parameters.pb.o \
 		$(TARGET_SIM_OBJS) \
@@ -45,8 +66,6 @@ run_target_sim: target_sim
 	SLIC_CONF+="use_simulation=$(USER)a; default_topology_timeout=-1" \
 		   LD_PRELOAD=$(MAXOS_SIM) \
 		   ./$< $(PRJ_OPTIMIZED_DESCRIPTOR)
-	make stopsim
-
 
 runsim: run_target_sim
 

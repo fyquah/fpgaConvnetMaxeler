@@ -1,47 +1,100 @@
 # fpgaconvnet on Maxeler
 
-Running fast convolutional neural network inference on generic networks using
-maxeler DFEs.
+Running fast convolutional neural network inference on maxeler DFE.
 
 ## Dependencies
 
-- protoc-3.0.0 compiler (libproto-java.jar is not required, tho)
+- protoc-3.0.0 compiler (libproto-java.jar is not required)
+- libprotobuf.so (install this in your `LD_LIBRARY_PATH`)
 
+## Usage
 
-## Design Space Exploration
+### Step 0: Write the CNN's Protobuf Desciptor
 
-Recognize that for optimal resource usage at runtime (100% utilization, or near
-100%, of all allocated resources), we require:
+The protobuf descriptor is given by `protos/fpgaconvnet/protos/parameters.proto`.
+You are required to define a `Network` protobuf. Remember to specify the number
+of available fpga in num\_fpga\_used.
 
+Refer to `descriptors/lenet.prototxt` for an example.
+
+### Step 1: Generate a project
+
+```bash
+python ./scripts/create_project \
+  --nets my_net.prototxt \
+  --dir projects/my_net
+  --max-ring  # This allows the usage of multiple fpgas.
+  my_net
 ```
-wf(i) / wf(0) = (in(i) / in(0)) * (size(i) / size(0))
+
+This creates a project in `projects/my_net` (which is, by default, tracked by
+git). In the projects, you will see several files:
+
+```bash
+build/
+  Makefile  # A generated Makefile. This Makefile, on its own doesn't contain
+            # any targets. The targets are included via other Makefiles. You
+            # can add custom targets, as long as you don't overwrite the original
+            # contents.
+src/
+  main.cpp  # A default executable that is generated. This passes a random stream
+            # of numbers into the generated network, and does not check the output.
+            # You (probably) want to modify this, unless you are interested only
+            # in performance numbers and is 100% sure about the model's correctness.
+descriptors/
+  my_net.prototxt  # The net you have created. This is a copy of the file you have
+                   # made earlier, not a symlink / hard link.
 ```
 
-### Assuming:
+### Step 2: Compiling
 
-- `resource(wf(i), cff(i), kff(i)) > resource(wf(j), cff(j), kff(j))` iff
-  `wf(i) > wf(j) && cff(i) > cff(j) && kff(i) > kff(j)`. This is not true in
-  practice and we will have to handle such cases in our optimizer.
-- Fifos are deep enough to store the intermediate buffers. This is almost
-  always true.
+Depending on your requirements, you will want to modify `projects/my_net/src/main.cpp`
+based on your needs.
 
-### Pseudo Algorithm:
+Firstly, you need to perform DSE and generate the relevant targets.
 
-1. Choose a set of wf that hasn't been explored.
-2. Adjust wf such that resource usage in FIFOs and sliding windows are minimal
-3. Search kff and cff such that
-   `input(i) / wf(i) >= total_iterations * size_out(i) / size_in(i)`
-   and `total_iterations <= input(i + 1) / wf(i + 1)`
-   and constraints are just met. (I.e: use least amount of resources - this can
-   be a bit tricky with large nets, as we might end up more than one BRAM per
-   multiplier - something we want to avoid).
-4. If this meets the constraint, add to set of explored solution. If satisfactory
-   return. Otherwise, goto 1.
+```bash
+make optimize  # Design space exploration generates <net>.optimized.prototxt
+make gen_makefile  # This generates a Makefile, based on the number of FPGA required.
+                   # it is possible to use less than the available FPGA to have
+                   # better throughput.
+```
+
+### Step 4: Simulation
+
+(Optional, but highly recommended) Secondly, you want to simulate the maxfile.
+
+```bash
+make sim
+make runsim
+```
+
+### Step 4: DFE
+
+Once you are ready, you can compile the net into the DFE (This will take awhile)
+and you can run it. The default `main.cpp` file will run inference twice and report
+their execution times.
+
+```bash
+make dfe
+make rundfe
+```
+
+## Example: Lenet
+
+## Example: Alexnet
+
+## Hacking
 
 
-
-## Conventions
+### Conventions
 
 1. Filters are indexed by `output_channels * input_channels * input_height * input_width`
    4D Array should have the relevant dimensions and 1D flatten array storage
    should have the given output_channels-major configuration.
+
+##
+
+## License
+
+TBC
