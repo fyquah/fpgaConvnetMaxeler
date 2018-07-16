@@ -1,11 +1,14 @@
 # fpgaconvnet on Maxeler
 
-Running fast convolutional neural network inference on maxeler DFE.
+Running fast convolutional neural network (CNN) inference on maxeler dataflow engines (DFE).
+This
 
 ## Dependencies
 
 - protoc-3.0.0 compiler (libproto-java.jar is not required)
 - libprotobuf.so (install this in your `LD_LIBRARY_PATH`)
+
+## Project Structure
 
 ## Usage
 
@@ -82,16 +85,15 @@ make rundfe
 
 ## Example: Lenet
 
+TODO
+
 ## Example: Alexnet
+
+TODO
 
 ## Hacking
 
-
-### Conventions
-
-1. Filters are indexed by `output_channels * input_channels * input_height * input_width`
-   4D Array should have the relevant dimensions and 1D flatten array storage
-   should have the given output_channels-major configuration.
+TODO
 
 ##
 
