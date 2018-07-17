@@ -1,22 +1,87 @@
 # fpgaconvnet on Maxeler
 
-Running fast convolutional neural network (CNN) inference on maxeler dataflow engines (DFE).
-This
+Running convolutional neural network (CNN) inference on maxeler dataflow engines (DFE).
+This toolchain targets _multiple FPGAs_ on a single DFE device, where communication
+between FPGAs is done primarily via maxring (sometimes using off-chip RAM).
+
+This tool (as of writing) performs only feature extraction, namely the convolution,
+pooling layers etc.
+
+To use this tool, you need to provide a protobuf descriptor of the CNN you wish
+to accelerate, and the tool will generate FPGA bistreams (ie: maxfiles).
+*This means that you need to recompile multiple FPGA bistreams everytime you want to
+run inference on a new neuralnetwork, or the available resources change.* This is
+certainly not what you want for developing neural networks / testing them, but probably
+something you want in a production setting for long-term usage (eg: classifying images
+over the course of at least weeks).
+
+The tool targets a high throughput + low-powered usage, that is, we aim to
+have a lower Ops/Watt compared to conventional using GPUs.
+
+The supported DFE cards include:
+
+- MAIA
+- (In progress) AWS F1 FPGAs
+
+<!-- TODO: Complete this -->
+The design methodology and parameter optimisation will be uploaded soon.
 
 ## Dependencies
 
 - protoc-3.0.0 compiler (libproto-java.jar is not required)
 - libprotobuf.so (install this in your `LD_LIBRARY_PATH`)
+- maxcompiler 2018-1
 
 ## Project Structure
 
+```
+descriptors/  # Several example neural networks
+protos/   # protobuf specification used throughout the project.
+  fpgaconvnet/
+    protos/
+      parameters.proto  # Protobuf specification for neural networks
+projects/  # Where several generated projects are located
+scripts/   # Helper scripts for generating Makefiles etc.
+src/
+  fpgaconvnet/
+    modelling/  # C++ Code used for design space exploration
+    *.h         # Header files and source files for libraries
+    *.cpp       #   used to facilitate communication between the 
+                #   CPU and the FPGA, including uploading bistreams
+                #   and writing to off-chip memory.
+  java/   # Maxj code used for the design.
+    kernels/
+    lib/
+    maxpower/
+    *.maxj
+  javatest/  # Various kernel tests (in .maxj format)
+template/  # Template files used in generating projects
+test_data/  # Data used for testing
+```
+
 ## Usage
+
+### Step -1: Setting up your project environment
+
+1. Clone this repo: `git clone https://github.com/fyquah95/fpgaconvnetmaxeler`
+2. Set the `FPGACONVNET_JAVA8_HOME` environment variable to a valid JDK 8 (or greater) installation path.
+You can download java8 from oracle's website. _I am not entirely sure if this
+is actually needed, but in my setup, `maxjc` required a java 1.7 (ecj.jar is a java 7 library),
+whereas `maxJavaRun` required java 1.8 (because `MaxCompiler.jar` in 2018-1 is a java1.8 library).
+I tried using a custom java installation (I placed java8 in `$HOME/jdk-...`) and configured the
+PATH variable as appropriate. This doesn't work (`Unable to resolve type String` - implying
+that java cannot find the JRE runtime libraries).  I suspect that this should work if the global
+java installation is 1.8 (I have not tested this)._
+3. Refresh your shell environment eg: `source ~/.bashrc`
+4. If you are targetting AWS F1 instances, you will need to configure your AWS credentials. See
+   maxeler's guide for getting started on AWS EC2 instances for the relevant instructions.
+5. Enter the project directory `cd fpgaconvnetmaxeler`
 
 ### Step 0: Write the CNN's Protobuf Desciptor
 
 The protobuf descriptor is given by `protos/fpgaconvnet/protos/parameters.proto`.
 You are required to define a `Network` protobuf. Remember to specify the number
-of available fpga in num\_fpga\_used.
+of available fpga in `num_fpga_used`.
 
 Refer to `descriptors/lenet.prototxt` for an example.
 
@@ -91,11 +156,10 @@ TODO
 
 TODO
 
+
 ## Hacking
 
 TODO
-
-##
 
 ## License
 
