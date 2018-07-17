@@ -24,7 +24,8 @@ The supported DFE cards include:
 - (In progress) AWS F1 FPGAs
 
 <!-- TODO: Complete this -->
-The design methodology and parameter optimisation will be uploaded soon.
+The design methodology and parameter optimisation will be uploaded soon,
+along with a guide on how to do some hacking on this.
 
 ## Dependencies
 
@@ -148,18 +149,10 @@ make dfe
 make rundfe
 ```
 
-## Example: Lenet
+## Examples
 
-TODO
-
-## Example: Alexnet
-
-TODO
-
-
-## Hacking
-
-TODO
+- [lenet](projects/lenet_maxring)
+- [alexnet](projects/alexnet)
 
 ## License
 
