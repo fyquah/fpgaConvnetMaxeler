@@ -12,7 +12,7 @@
 #
 ##########################################################
 
-include $(WHEREISROOT)/Makefile.Maia.hardware
+MPCX=false
 
 NUMDEVICES ?= 1
 

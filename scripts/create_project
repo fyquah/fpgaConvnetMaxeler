@@ -13,6 +13,7 @@ BASE_DIR = os.path.join(os.path.dirname(os.path.realpath(__file__)), "..")
 TEMPLATES_DIR = os.path.join(
 	os.path.dirname(os.path.realpath(__file__)), "../templates")
 
+permitted_dfe_models = ("MAIA", "AWSF1", "MAX5")
 
 parser = argparse.ArgumentParser(
         description=("Create new project with the given net descriptor."
@@ -21,6 +22,9 @@ parser.add_argument("name", type=str,
 		    help="Name of project")
 parser.add_argument("--nets", type=str, nargs="+",
                     help="list of net descriptors to be added in the project.",
+		    required=True)
+parser.add_argument("--dfe-model", type=str,
+                    help="DFE Model " + ",".join(permitted_dfe_models),
 		    required=True)
 parser.add_argument("--dir", type=str, required=True,
 		    help="directory of the project")
@@ -42,6 +46,9 @@ def mkdir_if_not_exist(dir):
 
 
 def main(argv):
+    if FLAGS.dfe_model not in permitted_dfe_models:
+        raise RuntimeError(str(FLAGS.dfe_model) + " is not a recognised dfe model!")
+
     if not os.path.exists(FLAGS.dir):
 	os.makedirs(FLAGS.dir)
 
@@ -69,6 +76,7 @@ def main(argv):
 
         contents = slurp(
                 os.path.join(TEMPLATES_DIR, template_file_name)).format(
+                    dfemodel=FLAGS.dfe_model,
                     prj=FLAGS.name,
                     PRJ=FLAGS.name.upper(),
                     WHEREISROOT=os.path.relpath(

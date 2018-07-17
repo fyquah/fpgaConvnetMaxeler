@@ -10,6 +10,7 @@ WHEREISROOT={WHEREISROOT}
 PRJ_NAME={prj}
 PRJ_DESCRIPTOR=../descriptors/{prj}.prototxt
 PRJ_OPTIMIZED_DESCRIPTOR={prj}.optimized.prototxt
+DFEModel={dfemodel}
 
 #### BEGIN: ADD CUSTOM TARGETS HERE
 

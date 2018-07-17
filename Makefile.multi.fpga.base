@@ -62,7 +62,7 @@ target_sim: fpgaconvnet/convnet_sim.o \
 
 
 run_target_sim: target_sim
-	$(MAXCOMPILERSIM) -n $(USER)a -c$(DEVICENUM) -d$(NUMDEVICES) restart
+	$(MAXCOMPILERSIM) -n $(USER)a -c$(DFEModel) -d$(NUMDEVICES) restart
 	SLIC_CONF+="use_simulation=$(USER)a; default_topology_timeout=-1" \
 		   LD_PRELOAD=$(MAXOS_SIM) \
 		   ./$< $(PRJ_OPTIMIZED_DESCRIPTOR)

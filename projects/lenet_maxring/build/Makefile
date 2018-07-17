@@ -10,6 +10,7 @@ WHEREISROOT=../../..
 PRJ_NAME=lenet
 PRJ_DESCRIPTOR=../descriptors/lenet.prototxt
 PRJ_OPTIMIZED_DESCRIPTOR=lenet.optimized.prototxt
+DFEModel=MAIA
 
 #### BEGIN: ADD CUSTOM TARGETS HERE
 
