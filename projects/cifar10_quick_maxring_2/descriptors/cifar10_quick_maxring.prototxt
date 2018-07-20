@@ -1,4 +1,4 @@
-num_fpga_available: 2
+num_fpga_available: 4
 layer {
     input_height: 32
     input_width: 32
