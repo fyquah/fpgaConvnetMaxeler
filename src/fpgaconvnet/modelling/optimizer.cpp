@@ -289,15 +289,33 @@ incremental_greedy_positioning(
     const double reference_throughput =
             calculate_reference_throughput(network);
     bool ring_connection_allowed[network.layer_size() - 1];
+    int allowed_conn_count = 0;
+    std::memset(
+            ring_connection_allowed,
+            false,
+            sizeof(bool) * (network.layer_size() - 1));
 
-    for (int allowed_conn_count = 0;
-            allowed_conn_count <= optimizer.maxring_model.size();
+    for (allowed_conn_count = 0 ;
+            allowed_conn_count <= optimizer.maxring_model.size() ;
+            allowed_conn_count++) {
+        const int i = allowed_conn_count;
+        const auto & model = optimizer.maxring_model[i];
+
+        if ((model.throughput + 0.01) < reference_throughput) {
+            break;
+        }
+
+        ring_connection_allowed[model.layer_index] = true;
+    }
+
+    for (; allowed_conn_count <= optimizer.maxring_model.size();
             allowed_conn_count++) {
  
         bool is_solution_valid = true;
         int prev_splitable_connection = -1;
         int mapped_layers = 0;
         std::vector<std::vector<fpgaconvnet::protos::LayerParameter>> solution;
+        solution.push_back(std::vector<fpgaconvnet::protos::LayerParameter>());
  
         for (int i = 0 ; i < network.layer_size() ; i++) {
             std::vector<fpgaconvnet::protos::LayerParameter> &
@@ -497,22 +515,38 @@ position_fpgas(
         const fpgaconvnet::protos::Network & network,
         bool *success)
 {
-    fpgaconvnet::protos::Network ret;
+    std::vector<fpgaconvnet::protos::Network> candidates;
 
-    ret = sorted_throughput_positioning(optimizer, network, success);
-    if (success) {
-        *success = 1;
-        return ret;
+    {
+        fpgaconvnet::protos::Network tmp = incremental_greedy_positioning(
+                optimizer, network, success);
+        if (*success) {
+            candidates.push_back(tmp);
+        }
     }
 
-    ret = incremental_greedy_positioning(optimizer, network, success);
-    if (success) {
-        *success = 1;
-        return ret;
+    {
+        fpgaconvnet::protos::Network tmp = sorted_throughput_positioning(
+                optimizer, network, success);
+        if (*success) {
+            candidates.push_back(tmp);
+        }
     }
 
-    *success = false;
-    return network;
+    if (candidates.size() == 0) {
+        *success = 0;
+        return network;
+    }
+
+    /* All things equal, we want to use as few FPGAs as possible. */
+    *success = 1;
+    fpgaconvnet::protos::Network best = candidates[0];
+    for (unsigned i = 1; i < candidates.size() ; i++) {
+        if (candidates[i].num_fpga_used() < best.num_fpga_used()) {
+            best = candidates[i];
+        }
+    }
+    return best;
 }
 
 
