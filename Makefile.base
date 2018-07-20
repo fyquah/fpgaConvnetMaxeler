@@ -85,7 +85,7 @@ MAXOS_HW=/opt/maxeler/maxeleros/lib/libmaxeleros.so
 MAXOS_SIM=$(MAXELEROSDIR_SIM)/lib/libmaxeleros.so
 
 CP='$(WHEREISROOT)/lib/maxpower.jar:$(WHEREISROOT)/lib/junit-4.12.jar:$(WHEREISROOT)/lib/hamcrest-core-1.3.jar:$(WHEREISROOT)/lib/protobuf-java-3.0.0.jar'
-JFLAGS=-nowarn -cp '$(MAXCOMPILERDIR)/lib/MaxCompiler.jar:$(CP)' -1.6 -d .
+JFLAGS=-nowarn -cp '$(MAXCOMPILERDIR)/lib/MaxCompiler.jar:$(CP)' -1.8 -d .
 INCFLAGS =  -I/src/ -I${MAXCOMPILERDIR}/include -I. \
 	-I${MAXCOMPILERDIR}/include/slic -I${MAXELEROSDIR}/include \
 	-I$(WHEREISROOT)/include/ -I$(WHEREISROOT)/src/

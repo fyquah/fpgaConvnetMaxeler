@@ -31,7 +31,10 @@ gen_makefile: $(WHEREISROOT)/scripts/generate_multi_fpga_makefile.py $(PRJ_OPTIM
 
 $(TARGET_SIM_MAXFILES): $(ENGINEFILES) $(JAVA_PROTOS) $(PRJ_OPTIMIZED_DESCRIPTOR)
 	$(MAXJC) $(JFLAGS) $(filter %.java,$^) $(filter %.maxj,$^)
-	PATH="$(FPGACONVNET_JAVA8_HOME)/bin:$(PATH)" MAXAPPJCP='.:$(CP)' MAXSOURCEDIRS=$(SOURCE_DIRS) \
+	JAVA_HOME=$(FPGACONVNET_JAVA8_HOME) \
+		  PATH="$(FPGACONVNET_JAVA8_HOME)/bin:$(PATH)" \
+		  MAXAPPJCP='.:$(CP)' \
+		  MAXSOURCEDIRS=$(SOURCE_DIRS) \
 		  $(MAXJAVARUN) fpgaconvnet.GenericNetworkBuilder \
 		  DFEModel=$(DFEModel) \
 		  maxFileName=$(basename $(notdir $@)) \
@@ -42,7 +45,8 @@ $(TARGET_SIM_MAXFILES): $(ENGINEFILES) $(JAVA_PROTOS) $(PRJ_OPTIMIZED_DESCRIPTOR
 
 
 $(TARGET_SIM_OBJS): $(TARGET_SIM_MAXFILES)
-	$(SLICCOMPILE) $(MAXCOMPILER_BUILD_DIR)/$(basename $(basename $(notdir $@)))_$(DFEModel)_DFE_SIM/results/$(basename $(basename $(notdir $@))).max $@
+	PATH="$(FPGACONVNET_JAVA8_HOME)/bin:$(PATH)" $(SLICCOMPILE) \
+	     $(MAXCOMPILER_BUILD_DIR)/$(basename $(basename $(notdir $@)))_$(DFEModel)_DFE_SIM/results/$(basename $(basename $(notdir $@))).max $@
 
 
 fpgaconvnet/target_main_sim.o: main.cpp $(TARGET_SIM_OBJS)

@@ -72,7 +72,9 @@ whereas `maxJavaRun` required java 1.8 (because `MaxCompiler.jar` in 2018-1 is a
 I tried using a custom java installation (I placed java8 in `$HOME/jdk-...`) and configured the
 PATH variable as appropriate. This doesn't work (`Unable to resolve type String` - implying
 that java cannot find the JRE runtime libraries).  I suspect that this should work if the global
-java installation is 1.8 (I have not tested this)._
+java installation is 1.8 (I have not tested this)._ You _must_ use Java 8 in oracle, as the
+maxcompiler libraries makes use of `sun.*` libraries. Some of the libraries are deprecated in
+Java 10, per se.
 3. Refresh your shell environment eg: `source ~/.bashrc`
 4. If you are targetting AWS F1 instances, you will need to configure your AWS credentials. See
    maxeler's guide for getting started on AWS EC2 instances for the relevant instructions.

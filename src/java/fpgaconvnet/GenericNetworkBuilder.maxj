@@ -7,7 +7,6 @@ import com.maxeler.maxcompiler.v2.managers.BuildConfig;
 
 import fpgaconvnet.protos.Parameters;
 
-
 public class GenericNetworkBuilder {
     public static class NetworkEngineParameters extends EngineParameters {
         private final String s_descriptor = "descriptor";
