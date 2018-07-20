@@ -46,4 +46,4 @@ layer {
         channel_folding_factor: 5
     }
 }
-num_fpga_available: 2
+num_fpga_available: 8
