@@ -128,7 +128,7 @@ fpgaconvnet/modelling/optimizer: fpgaconvnet/modelling/optimizer.o \
 				 fpgaconvnet/protos/parameters.pb.o \
 				 fpgaconvnet/modelling/resource_model.o \
 				 fpgaconvnet/common.o
-	$(CPUCOMPILER) $(ALL_FLAGS) -o $@ $^ -lprotobuf
+	$(CPUCOMPILER) $(ALL_FLAGS) -g -o $@ $^ -lprotobuf
 
 fpgaconvnet/feedforward.o: fpgaconvnet
 
