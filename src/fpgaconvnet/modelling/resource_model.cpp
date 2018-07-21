@@ -263,8 +263,8 @@ project(const protos::Network & network)
 bool
 meets_resource_constraints(const resource_t & resource)
 {
-    return (resource.dsp < MAX_DSP
-            && resource.dsp < MAX_BRAM);
+    return (resource.dsp < 0.7 * MAX_DSP
+            && resource.dsp < 0.9 * MAX_BRAM);
 }
 
 
