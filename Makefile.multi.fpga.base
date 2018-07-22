@@ -102,6 +102,10 @@ $(TARGET_DFE_OBJS): $(TARGET_DFE_MAXFILES)
 
 
 target_main_dfe.o: main.cpp $(TARGET_DFE_OBJS)
+	echo "" >targets.h
+	for target in $(TARGET_NAMES); do \
+	    echo "#include \"$$target.h\"" >>targets.h ; \
+	done
 	$(CPUCOMPILER) $< $(ALL_FLAGS) \
 		-I$(MAXCOMPILER_BUILD_DIR) \
 		$(foreach name,$(TARGET_DFEMAXDIRS),-I$(name)) \

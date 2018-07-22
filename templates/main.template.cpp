@@ -8,7 +8,7 @@
 #include "fpgaconvnet/convnet.h"
 #include "fpgaconvnet/feedforward.h"
 
-#include "$prj.h"
+#include "targets.h"  // includes all the header file for maxfiles generated.
 
 
 #ifdef __SIM__

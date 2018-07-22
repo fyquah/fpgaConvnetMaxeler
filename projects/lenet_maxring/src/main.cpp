@@ -8,8 +8,7 @@
 #include "fpgaconvnet/convnet.h"
 #include "fpgaconvnet/feedforward.h"
 
-#include "target_0.h"
-#include "target_1.h"
+#include "targets.h"
 
 
 #ifdef __SIM__
@@ -32,7 +31,6 @@ std::vector<float> run_feature_extraction(
     std::vector<max_file_t*> max_files;
 
     max_files.push_back(target_0_init());
-    max_files.push_back(target_1_init());
 
     std::vector<std::string> filenames = {
             "../weights/conv0_kernels.txt",
