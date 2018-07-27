@@ -258,11 +258,11 @@ solve_minimal_cff_kff(
         }
     }
 
-    ::fpgaconvnet::logging::stdout() << "Best cff = "
-        << best.conv().conv_folding_factor() << '\n';
-    ::fpgaconvnet::logging::stdout() << "Best kff = "
-        << best.conv().kernel_folding_factor() << '\n';
-
+    ::fpgaconvnet::logging::stdout()
+        << "Best (wf, cff, kff) = " << "("
+        << best.conv().worker_factor() << ","
+        << best.conv().conv_folding_factor() << ", "
+        << best.conv().kernel_folding_factor() << ")\n";
     return best;
 }
 
@@ -519,6 +519,7 @@ position_fpgas(
     fpgaconvnet::modelling::PositionFpga position_fpga(network);
     position_fpga.search();
     fpgaconvnet::logging::stdout()
+        << "FPGA Positiong accepted "
         << position_fpga.get_num_accepted_solutions()
         << "/" << position_fpga.get_num_considered_solutions()
         << " SOLUTIONS\n";
@@ -551,6 +552,8 @@ solve_for_ideal_worker_factors(
 )
 {
     fpgaconvnet::protos::Network optimized_network = network;
+
+    fpgaconvnet::logging::stdout() << "Network configuration:\n";
     ::fpgaconvnet::logging::Indentation indent;
 
     for (int i = 0 ; i < optimized_network.layer_size() ; i++)
@@ -646,9 +649,16 @@ search_design_space(const fpgaconvnet::protos::Network & network, bool *success)
     double lo = 0.0;
     double hi = network.layer(reference_layer_index).num_inputs();
 
+    fpgaconvnet::logging::stdout()
+        << "Reference layer index = " << reference_layer_index << std::endl;
+    fpgaconvnet::logging::stdout() << std::endl;
+
     while (hi - lo > 0.0001) {
         double reference_wf = (lo + hi) / 2.0;
         bool success = false;
+
+        fpgaconvnet::logging::stdout() << "Reference wf = " << reference_wf
+             << "\n";
 
         std::vector<double> ideal_worker_factors =
             compute_ideal_worker_factors(
@@ -680,6 +690,7 @@ search_design_space(const fpgaconvnet::protos::Network & network, bool *success)
             << "Meets constraints: "
             << (meets_resource_constraints ?  "YES" : "NO")
             << "\n";
+        fpgaconvnet::logging::stdout() << "\n";
 
         if (meets_resource_constraints) {
             if (!is_best_solution_set ||
@@ -725,9 +736,8 @@ int main (int argc, char **argv)
         double throughput = fpgaconvnet::calculation::throughput(solution);
         double ops = fpgaconvnet::calculation::ops(solution);
         fpgaconvnet::logging::stdout() << "Found an optimal solution!\n";
-        fpgaconvnet::logging::stdout() << solution.DebugString();
         fpgaconvnet::logging::stdout()
-            << "Network ops = " << ops << '\n';
+            << "Network Operations per second = " << ops << '\n';
         fpgaconvnet::logging::stdout()
             << "Projected Throughput = " << throughput << '\n';
         fpgaconvnet::logging::stdout()
