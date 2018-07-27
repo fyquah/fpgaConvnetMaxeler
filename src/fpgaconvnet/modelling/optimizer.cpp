@@ -12,6 +12,7 @@
 
 #include <fpgaconvnet/common.h>
 #include <fpgaconvnet/modelling/resource_model.h>
+#include <fpgaconvnet/modelling/place_fpga.h>
 
 
 struct conv_layer_factors_t
@@ -515,38 +516,29 @@ position_fpgas(
         const fpgaconvnet::protos::Network & network,
         bool *success)
 {
-    std::vector<fpgaconvnet::protos::Network> candidates;
+    fpgaconvnet::modelling::PositionFpga position_fpga(network);
+    position_fpga.search();
+    fpgaconvnet::logging::stdout()
+        << position_fpga.get_num_accepted_solutions()
+        << "/" << position_fpga.get_num_considered_solutions()
+        << " SOLUTIONS\n";
+    std::vector<std::vector<int>> solutions = position_fpga.get_solutions();
 
-    {
-        fpgaconvnet::protos::Network tmp = incremental_greedy_positioning(
-                optimizer, network, success);
-        if (*success) {
-            candidates.push_back(tmp);
-        }
-    }
-
-    {
-        fpgaconvnet::protos::Network tmp = sorted_throughput_positioning(
-                optimizer, network, success);
-        if (*success) {
-            candidates.push_back(tmp);
-        }
-    }
-
-    if (candidates.size() == 0) {
+    if (solutions.size() == 0) {
         *success = 0;
         return network;
     }
 
     /* All things equal, we want to use as few FPGAs as possible. */
-    *success = 1;
-    fpgaconvnet::protos::Network best = candidates[0];
-    for (unsigned i = 1; i < candidates.size() ; i++) {
-        if (candidates[i].num_fpga_used() < best.num_fpga_used()) {
-            best = candidates[i];
+    unsigned best = 0;
+    for (unsigned i = 1 ; i < solutions.size() ; i++) {
+        if (solutions[i].back() < solutions[best].back()) {
+            best = i;
         }
     }
-    return best;
+
+    *success = 1;
+    return fpgaconvnet::insert_fpga_positions(network, solutions[best]);
 }
 
 

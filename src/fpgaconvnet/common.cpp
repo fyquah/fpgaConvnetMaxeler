@@ -399,4 +399,20 @@ uint64_t cpu_weights_stream_size(
 
 
 }  // calculation
+
+protos::Network
+insert_fpga_positions(protos::Network network, std::vector<int> v)
+{
+    unsigned num_fpga_used = 1;
+
+    for (unsigned i = 0 ;i < network.layer_size() ; i++) {
+        assert (0 <= v[i] && v[i] < network.num_fpga_available());
+        network.mutable_layer(i)->set_fpga_id(v[i]);
+        num_fpga_used = std::max(num_fpga_used, v[i] + 1u);
+    }
+    network.set_num_fpga_used(num_fpga_used);
+    return network;
+}
+
+
 }  // fpgaconvnet

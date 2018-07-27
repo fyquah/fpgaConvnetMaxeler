@@ -88,6 +88,9 @@ uint64_t cpu_weights_stream_size(const protos::LayerParameter & layer);
 
 
 }  // calculation
+
+protos::Network insert_fpga_positions(protos::Network, std::vector<int>);
+
 }  // fpgaconvnet
 
 #endif
