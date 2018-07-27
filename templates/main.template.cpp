@@ -28,9 +28,10 @@ std::vector<float> run_feature_extraction(
         const std::vector<float> & images
 )
 {
-    max_file_t *max_file = $init_fn();
+    std::vector<max_file_t*> max_files = targets_init();
+
     std::vector<float> extracted_features;
-    fpgaconvnet::Convnet convnet(network_parameters, max_file, "");
+    fpgaconvnet::Convnet convnet(network_parameters, max_files, "");
 
     /* TODO: load the weights from somewhere. */
     convnet.randomize_weights();
