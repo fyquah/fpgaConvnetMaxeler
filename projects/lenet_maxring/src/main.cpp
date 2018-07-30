@@ -14,7 +14,7 @@
 #ifdef __SIM__
     static const uint64_t N = 4;
 #else
-    static const uint64_t N = 10000;
+    static const uint64_t N = 1000000;
 #endif
 
 
@@ -38,8 +38,11 @@ std::vector<float> run_feature_extraction(
             "../weights/conv2_kernels.txt",
             "../weights/conv2_bias.txt"};
     std::vector<float> extracted_features;
-    fpgaconvnet::Convnet convnet(network_parameters, max_files, "");
 
+    std::cout << "Constructing fpgaconvnet::Convnet object" << std::endl;
+    fpgaconvnet::Convnet convnet(network_parameters, max_files, "*");
+
+    std::cout << "Loading weights to object" << std::endl;
     convnet.load_weights_from_files(filenames, fpgaconvnet::FORMAT_TXT);
     convnet.max_init_weights();
 
@@ -140,7 +143,7 @@ int main(int argc, char **argv)
     read_mnist_labels(labels, "mnist/t10k-labels-idx1-ubyte");
     for (unsigned i = 0 ; i < N ; i++) {
         for (unsigned j = 0 ; j < conv_in_size ; j++) {
-            pixel_stream.push_back(images[i][j]);
+            pixel_stream.push_back(images[i % images.size()][j]);
         }
     } 
 
