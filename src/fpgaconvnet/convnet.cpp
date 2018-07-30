@@ -48,7 +48,7 @@ void set_log_prefix(const std::string & prefix)
     logging::log_prefix(prefix);
 }
 
-uint64_t conv_in_size(const protos::Network & network)
+uint64_t calc_conv_in_size(const protos::Network & network)
 {
     return calculation::conv_in_size(network);
 }
