@@ -10,11 +10,14 @@ import com.maxeler.maxcompiler.v2.managers.custom.stdlib.Max4MAIARingConnection;
 import com.maxeler.maxcompiler.v2.managers.custom.stdlib.MaxRingBidirectionalStream;
 import com.maxeler.maxcompiler.v2.managers.custom.stdlib.LMemInterface;
 import com.maxeler.maxcompiler.v2.managers.custom.stdlib.LMemCommandGroup;
-import com.maxeler.maxcompiler.v2.managers.custom.stdlib.LMemConfig;
 import com.maxeler.maxcompiler.v2.managers.engine_interfaces.CPUTypes;
 import com.maxeler.maxcompiler.v2.managers.engine_interfaces.EngineInterface;
 import com.maxeler.maxcompiler.v2.managers.engine_interfaces.EngineInterface.Direction;
 import com.maxeler.maxcompiler.v2.managers.engine_interfaces.InterfaceParam;
+
+
+// import com.maxeler.maxcompiler.v2.managers.custom.stdlib.LMemConfig;  /* FOR MAXCOMPILER 2018.1 */
+import com.maxeler.maxcompiler.v2.managers.custom.stdlib.MemoryControllerConfig; /* FOR MAXCOMPILER 2015.2 */
 
 import fpgaconvnet.Utils.Tuple3;
 import fpgaconvnet.protos.Parameters;
@@ -288,9 +291,17 @@ public class NetworkManager extends CustomManager {
 
             for (Tuple3<String, DFELink, Integer> link : computationChains[i].getLMemInputs()) {
                 if (lmem == null) {
-                    // config.setDataFifoImplementUsingLUTRAM(true);
+                    // begin of VERSION 2018.1
+                    // lmem = addLMemInterface(makeLMemConfig().setDataFIFODepth(32));
+                    // end of VERSION 2018.1
 
-                    lmem = addLMemInterface(makeLMemConfig().setDataFIFODepth(32));
+                    // begin of VERSION 2015.2
+                    MemoryControllerConfig config = new MemoryControllerConfig();
+                    config.setDataFIFODepth(32);
+                    config.setDataFifoImplementUsingLUTRAM(true);
+                    lmem = addLMemInterface();
+                    lmem.setMemoryControllerConfig(config);
+                    // end of VERSION 2015.2
                 }
                 DFELink dataStream = lmem.addStreamFromLMem(
                         link.getFirst(),
