@@ -48,9 +48,12 @@ std::vector<float> run_feature_extraction(
 
     // this is to measure latency
     std::vector<unsigned> counts;
+    counts.push_back(2);
     counts.push_back(4);
     counts.push_back(8);
+    counts.push_back(12);
     counts.push_back(16);
+    counts.push_back(20);
 
     for (int j = 0; j < counts.size() ; j++) {
         const unsigned N = counts[j];
