@@ -8,8 +8,17 @@ message Network
     /* Frequency of design in MHz. Note that all kernels will run at the same frequency. */
     optional uint32 frequency = 2 [default = 100];
     optional uint32 num_fpga_available = 3 [default = 1];
-    optional uint32 num_fpga_used = 4 [default = 1];
     optional bool   allow_runtime_reconfiguration = 5 [default = false];
+
+    /* For internal usage */
+
+    /* When used as a bitstream subnetwork, [num_fpga_used] signifies the
+     * number of FPGA used for just that single bitstream.
+     *
+     * When used for the entire network, [num_fpga_used] is the maximum
+     * of all the [num_fpga_used] across all bitstreams used.
+     */
+    optional uint32 num_fpga_used = 4 [default = 1];
 }
 
 

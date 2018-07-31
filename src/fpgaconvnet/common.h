@@ -105,8 +105,10 @@ double pipeline_throughput(
         const protos::Network & network, const unsigned bitstream_id);
 double effective_throughput(
         const protos::Network & network, const unsigned bitstream_id);
-double real_throughput(const protos::Network & network);
 void explain_throughput(const protos::Network & network);
+double real_throughput(const protos::Network & network);
+double min_num_fpga_real_throughput(const protos::Network & network);
+unsigned min_num_fpga_needed(const protos::Network & network);
 
 /* The total number of network operations in the network. */
 double ops(const protos::Network & network);

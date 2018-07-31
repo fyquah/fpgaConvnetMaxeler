@@ -324,8 +324,17 @@ double pipeline_throughput(
     return throughput * frequency;
 }
 
-unsigned optimal_num_parallel_pipelines(const protos::Network & network, unsigned bitstream_id)
+
+unsigned optimal_num_parallel_pipelines(
+    const protos::Network & reference_network,
+    unsigned bitstream_id)
 {
+    protos::Network network;
+    if (bitstream_id == -1) {
+        network = reference_network;
+    } else {
+        network = split_by_bitstreams(reference_network)[bitstream_id];
+    }
     return std::min(
             std::floor(double(network.num_fpga_available()) / network.num_fpga_used()),
             std::ceil(bandwidth_throughput_limit(network, bitstream_id) / pipeline_throughput(network, bitstream_id)));
@@ -345,7 +354,8 @@ double effective_throughput(const protos::Network & network, const unsigned bits
 }
 
 
-double real_throughput(const protos::Network & network)
+double
+real_throughput(const protos::Network & network)
 {
     if (network.allow_runtime_reconfiguration()) {
         double inverse_throughput = 0.0;
@@ -361,6 +371,23 @@ double real_throughput(const protos::Network & network)
     } else {
         return effective_throughput(network, -1);
     }
+}
+
+
+double min_num_fpga_real_throughput(const protos::Network & ref)
+{
+  auto network = ref;
+  network.set_num_fpga_available(min_num_fpga_needed(ref));
+  return real_throughput(network);
+}
+
+static bool
+is_memory_bottleneck(
+    const protos::Network & network, const unsigned bitstream_id)
+{
+  double effective = effective_throughput(network, bitstream_id);
+  double bandwidth_limit = bandwidth_throughput_limit(network, bitstream_id);
+  return effective == bandwidth_limit;
 }
 
 void explain_throughput(const protos::Network & network)
@@ -388,9 +415,27 @@ void explain_throughput(const protos::Network & network)
             << "Effective Throughput = "
             << fpgaconvnet::calculation::effective_throughput(network, i)
             << " images/s\n";
+
+        if (is_memory_bottleneck(network, i)) {
+            logging::stdout() << "Bottleneck: = OFF CHIP MEMORY\n";
+        } else {
+            logging::stdout() << "Bottleneck: = NOT OFF CHIP MEMORY\n";
+        }
     }
 
     // TODO
+}
+
+unsigned
+min_num_fpga_needed(const protos::Network & network)
+{
+  const auto subnetworks = split_by_bitstreams(network);
+  assert(subnetworks.size() > 0);
+  unsigned best = 1;
+  for (int i = 0; i < subnetworks.size() ; i++) {
+    best = std::max(best, subnetworks[i].num_fpga_used());
+  }
+  return best;
 }
 
 
@@ -575,7 +620,15 @@ split_by_bitstreams(protos::Network ref)
     }
 
     for (auto it = ref.layer().begin(); it != ref.layer().end() ; it++) {
-        *subnetworks[it->bitstream_id()].add_layer() = *it;
+        unsigned i = it->bitstream_id();
+        *subnetworks[i].add_layer() = *it;
+
+        if (subnetworks[i].has_num_fpga_used()) {
+            subnetworks[i].set_num_fpga_used(
+                std::max(subnetworks[i].num_fpga_used(), it->fpga_id() + 1));
+        } else {
+            subnetworks[i].set_num_fpga_used(it->fpga_id() + 1);
+        }
     }
     return subnetworks;
 }

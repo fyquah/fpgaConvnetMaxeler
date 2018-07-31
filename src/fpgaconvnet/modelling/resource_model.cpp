@@ -32,20 +32,6 @@ resource_to_string(const resource_t & res)
     return std::string(buffer);
 }
 
-std::string
-resource_to_string(const std::vector<resource_t> & resources)
-{
-    std::stringstream ss;
-
-    for (int i = 0 ; i < resources.size() ; i++) {
-        ss << "- [fpga "  << i << ": "
-            << resource_to_string(resources[i]) << "]\n";
-    }
-
-    return ss.str();
-}
-
-
 static resource_t
 conv_resource(const protos::LayerParameter & layer)
 {
@@ -248,7 +234,7 @@ project_single_bitstream(const protos::Network & network)
     for (auto it = network.layer().begin()
             ; it != network.layer().end()
             ; it++) {
-        layers_by_fpga[it->fpga_id()].push_back(*it);
+        layers_by_fpga.at(it->fpga_id()).push_back(*it);
     }
 
     for (int i = 0; i < layers_by_fpga.size() ; i++) {

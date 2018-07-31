@@ -43,9 +43,6 @@ project_single_fpga(
 std::vector<resource_t> project_single_bitstream(
         const protos::Network & network);
 
-std::string
-resource_to_string(const std::vector<resource_t> & resources);
-
 std::string resource_to_string(const resource_t & res);
 
 
