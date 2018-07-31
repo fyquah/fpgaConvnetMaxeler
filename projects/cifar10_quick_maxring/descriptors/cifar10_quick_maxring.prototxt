@@ -1,4 +1,7 @@
-num_fpga_available: 4
+num_fpga_available: 8
+frequency: 100
+allow_runtime_reconfiguration: true
+
 layer {
     input_height: 32
     input_width: 32
