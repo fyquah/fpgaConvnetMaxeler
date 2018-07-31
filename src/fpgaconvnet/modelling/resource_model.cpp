@@ -65,6 +65,10 @@ conv_resource(const protos::LayerParameter & layer)
     /* - Assume a constant for sliding window - should be correct for most
      *   of the case. In fact, it is overrly pessismitic.
      * - Calculation for weights BRAM usage assumes 16 bit fixed point.
+     *
+     * To better understand the "magic" numbers in the calculation below,
+     * please refer https://www.intel.com/content/www/us/en/programmable/quartushelp/current/index.htm#reference/glossary/def_m20k.htm
+     * for the standard M20k configuration definitions.
      */
     const double bram_sliding_window = 100.0;
     const double bram_stream = layer.conv().worker_factor() * std::ceil(
@@ -79,8 +83,7 @@ conv_resource(const protos::LayerParameter & layer)
 
     const double bram_kernels_width = std::ceil(weights_vector_bits / 40.0);
     const double bram_kernels_depth =
-            std::ceil(calculation::total_iterations(layer) / 1024.0);
-
+            std::ceil(calculation::total_iterations(layer) / 512.0);
     const double bram_kernels = bram_kernels_depth * bram_kernels_width;
 
     const double bram_accumulator =
@@ -91,6 +94,12 @@ conv_resource(const protos::LayerParameter & layer)
         bram_sliding_window
         + bram_stream + bram_kernels + bram_accumulator;
 
+
+    /* TODO: Fix LUT estimation
+     *
+     * LUT calculation is very much incorrect. However, it doesn't matter
+     * too much. The real constarint is on BRAM resources and DSP slices.
+     * */
     const double lut_scheduler =
             (4718.0 * layer.num_inputs()) / wf
             + 621.66 * wf
