@@ -58,6 +58,15 @@ std::vector<float> run_feature_extraction(
             &extracted_features[0],
             "../test_data/output.txt");
 
+    // this is to measure latency
+    std::vector<double> times;
+    for (int i = 0 ; i < 1000 ; i++) {
+        double p;
+        convnet.max_run_inference(1, images, true, &p);
+        times.push_back(p);
+    }
+    fpgaconvnet::dump_latencies("latency.txt", times);
+
     return extracted_features;
 }
 
