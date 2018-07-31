@@ -609,30 +609,7 @@ int main (int argc, char **argv)
         fpgaconvnet::logging::stdout()
             << "Network Operations per image = " << ops << '\n';
 
-        fpgaconvnet::logging::stdout() << "Bitstrema throughput break down\n";
-
-        // true makes the calculation verbose
-        double throughput = fpgaconvnet::calculation::real_throughput(solution);
         fpgaconvnet::calculation::explain_throughput(solution);
-
-        fpgaconvnet::logging::stdout()
-            << "Projected total GOps (with "
-            << solution.num_fpga_available()
-            << " FPGAs) = " << ops * throughput * 1e-9 << '\n';
-
-        unsigned min_num_fpga_needed =
-            fpgaconvnet::calculation::min_num_fpga_needed(solution);
-        double min_num_fpga_throughput =
-            fpgaconvnet::calculation::min_num_fpga_real_throughput(solution);
-
-        fpgaconvnet::logging::stdout()
-            << "Projected Real throughput (with "
-            << min_num_fpga_needed
-            << " FPGAs) = " << min_num_fpga_throughput << '\n';
-        fpgaconvnet::logging::stdout()
-            << "Projected total GOps (with "
-            << min_num_fpga_needed
-            << " FPGAs) = " << ops * min_num_fpga_throughput * 1e-9 << '\n';
 
         const auto subnetworks = fpgaconvnet::split_by_bitstreams(solution);
         for (unsigned i = 0; i < subnetworks.size(); i++) {

@@ -78,19 +78,20 @@ const double MAXRING_BANDWIDTH = 5e9;
  *                             (massive) pipeline of devices. This is
  *                             the primary evaluation metric when measuring
  *                             the performance of a pipeline that doesn't
- *                             permit reconfiguration. This is the primary
- *                             evaluation where latency is still somewhat
+ *                             permit reconfiguration. This is useful for
+ *                             cases where latency is still somewhat
  *                             sensitive, but not critical (eg: game-playing
- *                             bots which needs <10ms latency) but
- *                             throughput is still very important. (so
- *                             that we have good FPS).
+ *                             bots which needs <10ms latency) and
+ *                             throughput is still very important. (good
+ *                             FPS without high latency).
  *           
  *    - [effective throuhgput]: The throughput of a bitstream when
  *                              considering several parallel similarly
  *                              configured pipelines running simultaneously.
  *                              This throughput is not useful for overall
  *                              evaluation, but useful for indentifying
- *                              performance bottleneck of bistreams.
+ *                              performance bottleneck of bistreams, besides
+ *                              being used to calculate the [real throughput].
  *
  *    - [real throughput]: The real throughput that utilises as much
  *                         resources as required from the given resources.

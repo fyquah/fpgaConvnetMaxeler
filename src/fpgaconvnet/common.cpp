@@ -350,7 +350,6 @@ double effective_throughput(const protos::Network & network, const unsigned bits
             num_parallel_pipelines * pipeline_throughput(network, bitstream_id),
             bandwidth_throughput_limit(network, bitstream_id)
     );
-
 }
 
 
@@ -360,12 +359,7 @@ real_throughput(const protos::Network & network)
     if (network.allow_runtime_reconfiguration()) {
         double inverse_throughput = 0.0;
         for (int i = 0; i <= network.layer(network.layer_size() - 1).bitstream_id() ; i++) {
-            double effective = effective_throughput(network, i);
-            double pipeline = pipeline_throughput(network, i);
-            double bandwidth_limit = bandwidth_throughput_limit(network, i);
-            unsigned num_parallel_pipelines = optimal_num_parallel_pipelines(network, i);
-
-            inverse_throughput += 1.0 / effective;
+            inverse_throughput += 1.0 / effective_throughput(network, i);
         }
         return 1.0 / inverse_throughput;
     } else {
@@ -393,11 +387,32 @@ is_memory_bottleneck(
 void explain_throughput(const protos::Network & network)
 {
     using namespace fpgaconvnet;
+    const double total_ops = fpgaconvnet::calculation::ops(network);
 
     logging::stdout()
-        << "Real Throughput = "
-        << fpgaconvnet::calculation::real_throughput(network)
+        << "Projected Image Throughput (with "
+        << network.num_fpga_available()
+        << " FPGAS) = "
+        << real_throughput(network)
         << " images/s\n";
+    logging::stdout()
+        << "Projected Ops Throughput (with "
+        << network.num_fpga_available()
+        << " FPGAS) = "
+        << real_throughput(network) * total_ops * 1e-9
+        << " GOp/s\n";
+    fpgaconvnet::logging::stdout()
+        << "Projected Image Throughput (with "
+        << fpgaconvnet::calculation::min_num_fpga_needed(network)
+        << " FPGAs) = "
+        << min_num_fpga_real_throughput(network)
+        << " images/s\n";
+    logging::stdout()
+        << "Projected Ops Throughput (with "
+        << fpgaconvnet::calculation::min_num_fpga_needed(network)
+        << " FPGAS) = "
+        << min_num_fpga_real_throughput(network) * total_ops * 1e-9
+        << " GOp/s\n";
 
     logging::Indentation indent;
 
