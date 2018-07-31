@@ -2,6 +2,7 @@
 #include <fstream>
 #include <iostream>
 #include <cstring>
+#include <sstream>
 
 #include "fpgaconvnet/protos/parameters.pb.h"
 #include "fpgaconvnet/mnist.h"
@@ -44,6 +45,30 @@ std::vector<float> run_feature_extraction(
     /* TODO: Verify the output is correct. You can use the
      * fpgaconvnet::verify_conv_out function for this.
      */
+
+    // this is to measure latency
+    std::vector<unsigned> counts;
+    counts.push_back(4);
+    counts.push_back(8);
+    counts.push_back(16);
+
+    for (int j = 0; j < counts.size() ; j++) {
+        const unsigned N = counts[j];
+        std::vector<double> times;
+        fpgaconvnet::logging::stdout(fpgaconvnet::logging::INFO)
+            << "Measuring latency using " << N << " images" << std::endl;
+
+        for (int i = 0 ; i < 1000 ; i++) {
+            double p;
+            convnet.max_run_inference(N, images, true, &p);
+            times.push_back(p);
+        }
+
+        std::stringstream ss;
+        ss << "../results/latency_" << N << ".txt";
+        fpgaconvnet::dump_latencies(ss.str().c_str(), times);
+    }
+
 
     return extracted_features;
 }
