@@ -137,7 +137,8 @@ target_dfe: fpgaconvnet/convnet.o fpgaconvnet/common.o \
 
 
 run_target_dfe: target_dfe
-	SLIC_CONF="$(SLIC_CONF)" LD_PRELOAD=$(MAXOS_HW) \
+	SLIC_CONF="default_engine_resource=fyq14^192.168.0.1" \
+		  LD_PRELOAD=$(MAXOS_HW) \
 		  ./$< $(PRJ_OPTIMIZED_DESCRIPTOR)
 
 

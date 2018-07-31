@@ -127,8 +127,13 @@ public:
     void max_load_input_data(const std::vector<float> & images, uint64_t N);
     std::vector<float> max_run_inference(
             uint64_t N, const std::vector<float> & images, const bool benchmark);
+    std::vector<float> max_run_inference(
+            uint64_t N, const std::vector<float> & images, const bool benchmark, double * p_time_taken);
+
     std::vector<float> max_retrieve_features(uint64_t N);
 };
+
+void dump_latencies(std::string filename, std::vector<double> times);
 
 
 } // fpgaconvnet

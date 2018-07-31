@@ -737,7 +737,7 @@ int main (int argc, char **argv)
         double ops = fpgaconvnet::calculation::ops(solution);
         fpgaconvnet::logging::stdout() << "Found an optimal solution!\n";
         fpgaconvnet::logging::stdout()
-            << "Network Operations per second = " << ops << '\n';
+            << "Network Operations per image = " << ops << '\n';
         fpgaconvnet::logging::stdout()
             << "Projected Throughput = " << throughput << '\n';
         fpgaconvnet::logging::stdout()

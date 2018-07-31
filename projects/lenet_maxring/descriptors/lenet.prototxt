@@ -47,3 +47,4 @@ layer {
     }
 }
 num_fpga_available: 8
+frequency: 100

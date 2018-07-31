@@ -14,7 +14,7 @@
 #ifdef __SIM__
     static const uint64_t N = 4;
 #else
-    static const uint64_t N = 10000;
+    static const uint64_t N = 1000000;
 #endif
 
 
@@ -38,8 +38,11 @@ std::vector<float> run_feature_extraction(
             "../weights/conv2_kernels.txt",
             "../weights/conv2_bias.txt"};
     std::vector<float> extracted_features;
-    fpgaconvnet::Convnet convnet(network_parameters, max_files, "");
 
+    std::cout << "Constructing fpgaconvnet::Convnet object" << std::endl;
+    fpgaconvnet::Convnet convnet(network_parameters, max_files, "*");
+
+    std::cout << "Loading weights to object" << std::endl;
     convnet.load_weights_from_files(filenames, fpgaconvnet::FORMAT_TXT);
     convnet.max_init_weights();
 
@@ -54,6 +57,15 @@ std::vector<float> run_feature_extraction(
             N,
             &extracted_features[0],
             "../test_data/output.txt");
+
+    // this is to measure latency
+    std::vector<double> times;
+    for (int i = 0 ; i < 1000 ; i++) {
+        double p;
+        convnet.max_run_inference(1, images, true, &p);
+        times.push_back(p);
+    }
+    fpgaconvnet::dump_latencies("latency.txt", times);
 
     return extracted_features;
 }
@@ -140,7 +152,7 @@ int main(int argc, char **argv)
     read_mnist_labels(labels, "mnist/t10k-labels-idx1-ubyte");
     for (unsigned i = 0 ; i < N ; i++) {
         for (unsigned j = 0 ; j < conv_in_size ; j++) {
-            pixel_stream.push_back(images[i][j]);
+            pixel_stream.push_back(images[i % images.size()][j]);
         }
     } 
 

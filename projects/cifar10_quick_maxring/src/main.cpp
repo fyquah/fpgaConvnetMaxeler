@@ -8,14 +8,13 @@
 #include "fpgaconvnet/convnet.h"
 #include "fpgaconvnet/feedforward.h"
 
-#include "target_0.h"
-#include "target_1.h"
+#include "targets.h"
 
 
 #ifdef __SIM__
     static const uint64_t N = 4;
 #else
-    static const uint64_t N  = 100000;
+    static const uint64_t N = 10000;
 #endif
 
 
@@ -29,7 +28,6 @@ std::vector<float> run_feature_extraction(
         const std::vector<float> & images
 )
 {
-    std::vector<max_file_t*> max_files;
     std::vector<float> extracted_features;
     std::vector<std::string> filenames = {
             "../weights/conv0_weights",
@@ -38,9 +36,7 @@ std::vector<float> run_feature_extraction(
             "../weights/conv2_bias",
             "../weights/conv4_weights",
             "../weights/conv4_bias" };
-
-    max_files.push_back(target_0_init());
-    max_files.push_back(target_1_init());
+    std::vector<max_file_t*> max_files = targets_init();
 
     fpgaconvnet::Convnet convnet(network_parameters, max_files, "");
 
@@ -58,6 +54,15 @@ std::vector<float> run_feature_extraction(
             &extracted_features[0],
             "../test_data/pool3.bin",
             fpgaconvnet::FORMAT_BINARY);
+
+    // this is to measure latency
+    std::vector<double> times;
+    for (int i = 0 ; i < 1000 ; i++) {
+        double p;
+        convnet.max_run_inference(1, images, true, &p);
+        times.push_back(p);
+    }
+    fpgaconvnet::dump_latencies("latency.txt", times);
 
     return extracted_features;
 }

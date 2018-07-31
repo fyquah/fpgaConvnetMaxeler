@@ -154,7 +154,9 @@ make rundfe
 ## Examples
 
 - [lenet](projects/lenet_maxring)
-- [alexnet](projects/alexnet)
+- [alexnet](projects/alexnet_maxring)
+- [vgg\_16](projects/vgg_16_maxring)
+- [vgg\_s](projects/vgg_s_maxring)
 
 ## License
 

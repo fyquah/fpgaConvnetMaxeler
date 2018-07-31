@@ -203,12 +203,11 @@ double throughput(const protos::Network & network)
         const double output_size =
                 layer.output_height() * layer.output_width();
 
-        const double area_compression = output_size / input_size;
         double layer_throughput = 0.0;
 
         if (layer.has_conv()) {
             const double scheduler_throughput =
-                area_compression / layer.conv().worker_factor();
+                1.0 / (scheduler_iterations(layer) * input_size);
 
             const double computation_throughput =
                 1.0 / (calculation::total_iterations(layer) * output_size);
