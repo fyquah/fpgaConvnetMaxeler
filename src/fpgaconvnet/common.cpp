@@ -311,6 +311,8 @@ uint64_t total_iterations(const protos::LayerParameter &layer)
 
 
     }
+
+    assert(false);
 }
 
 

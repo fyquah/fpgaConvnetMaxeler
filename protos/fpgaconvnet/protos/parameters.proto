@@ -43,6 +43,7 @@ message LayerParameter
     optional bool is_last_layer = 13 [default = false];
     optional uint32 fpga_id = 15 [default = 0];
     optional uint32 output_vector_width = 16;
+    optional uint32 bitstream_id = 17 [default = 0];
 }
 
 

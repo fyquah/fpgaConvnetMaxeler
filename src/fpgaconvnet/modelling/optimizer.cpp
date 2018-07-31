@@ -630,7 +630,7 @@ choose_reference_layer_index(const fpgaconvnet::protos::Network & network)
 
 
 static fpgaconvnet::protos::Network
-search_design_space(const fpgaconvnet::protos::Network & network, bool *success)
+search_design_space_for_bistream(const fpgaconvnet::protos::Network & network, bool *success)
 {
     const optimizer_t optimizer = build_initial_optimizer(network);
     const std::vector<double> relative_worker_factors = 
@@ -715,6 +715,15 @@ search_design_space(const fpgaconvnet::protos::Network & network, bool *success)
 
     *success = is_best_solution_set;
     return best_solution;
+}
+
+static fpgaconvnet::protos::Network
+search_design_space(
+    fpgaconvnet::protos::Network network,
+    bool *success)
+{
+  // TODO: Call PlaceBitstream class here ...
+  return search_design_space_for_bistream(network, success);
 }
 
 
