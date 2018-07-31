@@ -165,7 +165,7 @@ void report_conv_performance(
    
     logging::stdout(logging::INFO)
             << "Time taken for " << N << " feature extractions  = "
-            << delta << std::endl;
+            << delta << "microseconds" << std::endl;
     logging::stdout(logging::INFO)
             << "Project Throughput (images per second) = "
             << calculation::throughput(network)
@@ -449,7 +449,7 @@ void Convnet::set_layer_weights(
     } else {
         logging::stdout(logging::INFO)
                 << "Passing in host-initialized weights (This will only be done once)."
-                << std::endl;
+                << buffer << std::endl;
 
         if (calculation::is_layer_cpu_initialized(layer)) {
             uint64_t stream_size = calculation::cpu_weights_stream_size(layer);
@@ -677,11 +677,22 @@ void Convnet::max_init_weights()
 
 }
 
-
 std::vector<float> Convnet::max_run_inference(
         uint64_t N,
         const std::vector<float> & images,
         const bool benchmark
+)
+{
+    double p;
+    return max_run_inference(N, images, benchmark, &p);
+}
+
+
+std::vector<float> Convnet::max_run_inference(
+        uint64_t N,
+        const std::vector<float> & images,
+        const bool benchmark,
+        double *p_time_taken
 )
 {
     timeval t_begin, t_end;
@@ -691,6 +702,8 @@ std::vector<float> Convnet::max_run_inference(
     std::vector<float> ret((N) * output_size , 0);
     std::vector<bool> has_conv(num_fpgas, 0);
 
+    logging::stdout(logging::INFO)
+        << "This bitstream use " << num_fpgas << " FPGAs  " << std::endl;
     for (int i = 0 ; i < num_fpgas ; i++) {
         actions[i] = max_actions_init(max_files[i], "default");
     }
@@ -826,7 +839,24 @@ std::vector<float> Convnet::max_run_inference(
 
     delete[] actions;
 
+    double begin = double(t_begin.tv_sec) * 1000000 + double(t_begin.tv_usec);
+    double end = double(t_end.tv_sec) * 1000000 + double(t_end.tv_usec);
+    double delta = end - begin;
+    *p_time_taken = delta;
+
     return ret;
+}
+
+void
+dump_latencies(std::string filename, std::vector<double> times)
+{
+    std::ofstream o(filename.c_str());
+    o << "[";
+    for (int i = 0 ; i < times.size() ; i++) {
+        o << times[i] << ", ";
+    }
+    o << "]";
+    o.close();
 }
 
 } // fpgaconvnet
