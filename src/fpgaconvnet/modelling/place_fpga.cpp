@@ -15,8 +15,14 @@ void PositionFpga::search_recur(std::vector<int> v)
     assert (v.size() > 0);
 
     if (v.size() == reference_network.layer_size()) {
+        // See paper on why we cna't search for multiple FPGA's
+        // simultaneously at a point in binary search.
+        if (v.back() + 1 != num_fpga_) {
+            return;
+        }
+
         auto network = reference_network;
-        auto resource = fpgaconvnet::resource_model::project(
+        auto resource = fpgaconvnet::resource_model::project_single_bitstream(
                 fpgaconvnet::insert_fpga_positions(network, v));
 
         considered_solutions++;
@@ -35,16 +41,15 @@ void PositionFpga::search_recur(std::vector<int> v)
     }
     v.pop_back();
 
-    // TODO: Allow more than the availble FPGA, ie: handle reconfigurations.
-    if (v.back() < reference_network.num_fpga_available() - 1) {
+    if (v.back() < num_fpga_ - 1) {
         v.push_back(v.back() + 1);
         search_recur(v);
         v.pop_back();
     }
 }
 
-PositionFpga::PositionFpga(fpgaconvnet::protos::Network network)
-    : reference_network(network)
+PositionFpga::PositionFpga(fpgaconvnet::protos::Network network, unsigned num_fpga)
+    : reference_network(network), num_fpga_(num_fpga)
 {
     done = false;
     considered_solutions = 0;

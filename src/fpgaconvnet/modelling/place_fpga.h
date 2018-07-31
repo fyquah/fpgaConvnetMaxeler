@@ -9,13 +9,15 @@ namespace modelling {
 class PositionFpga {
 private:
   const fpgaconvnet::protos::Network reference_network;
+  const unsigned num_fpga_;
+
   bool done;
   unsigned considered_solutions;
   unsigned accepted_solutions;
   std::vector<std::vector<int>> solutions;
   void search_recur(std::vector<int>);
 public:
-  PositionFpga(fpgaconvnet::protos::Network network);
+  PositionFpga(fpgaconvnet::protos::Network network, const unsigned num_fpga);
   void search();
   unsigned get_num_accepted_solutions();
   unsigned get_num_considered_solutions();

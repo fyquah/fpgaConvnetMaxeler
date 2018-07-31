@@ -239,7 +239,7 @@ project_single_fpga(
 
 
 std::vector<resource_t>
-project(const protos::Network & network)
+project_single_bitstream(const protos::Network & network)
 {
     std::vector<std::vector<fpgaconvnet::protos::LayerParameter>>
         layers_by_fpga(network.num_fpga_used());

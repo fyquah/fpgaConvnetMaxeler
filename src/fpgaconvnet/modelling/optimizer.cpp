@@ -13,6 +13,8 @@
 #include <fpgaconvnet/common.h>
 #include <fpgaconvnet/modelling/resource_model.h>
 #include <fpgaconvnet/modelling/place_fpga.h>
+#include <fpgaconvnet/modelling/place_bitstream.h>
+#include <fpgaconvnet/modelling/build_single_bitstream.h>
 
 
 struct conv_layer_factors_t
@@ -226,7 +228,7 @@ solve_minimal_cff_kff(
     best.mutable_conv()->set_worker_factor(worker_factor);
     tmp_container.mutable_conv()->set_worker_factor(worker_factor);
 
-    ::fpgaconvnet::logging::stdout()
+    ::fpgaconvnet::logging::stdout(fpgaconvnet::logging::DEBUG)
         << "Target iterations = "
         << target_iterations << '\n';
 
@@ -258,7 +260,7 @@ solve_minimal_cff_kff(
         }
     }
 
-    ::fpgaconvnet::logging::stdout()
+    ::fpgaconvnet::logging::stdout(fpgaconvnet::logging::DEBUG)
         << "Best (wf, cff, kff) = " << "("
         << best.conv().worker_factor() << ","
         << best.conv().conv_folding_factor() << ", "
@@ -267,258 +269,17 @@ solve_minimal_cff_kff(
 }
 
 
-static double
-calculate_reference_throughput(const fpgaconvnet::protos::Network & network)
-{
-    fpgaconvnet::protos::Network reference_network = network;
-
-    for (auto it = reference_network.mutable_layer()->begin()
-            ; it != reference_network.mutable_layer()->end()
-            ; it++) {
-        it->set_fpga_id(0);
-    }
-
-    return fpgaconvnet::calculation::throughput(reference_network);
-}
-
-static fpgaconvnet::protos::Network
-incremental_greedy_positioning(
-        const optimizer_t & optimizer,
-        const fpgaconvnet::protos::Network & network,
-        bool *success)
-{
-    const double reference_throughput =
-            calculate_reference_throughput(network);
-    bool ring_connection_allowed[network.layer_size() - 1];
-    int allowed_conn_count = 0;
-    std::memset(
-            ring_connection_allowed,
-            false,
-            sizeof(bool) * (network.layer_size() - 1));
-
-    for (allowed_conn_count = 0 ;
-            allowed_conn_count <= optimizer.maxring_model.size() ;
-            allowed_conn_count++) {
-        const int i = allowed_conn_count;
-        const auto & model = optimizer.maxring_model[i];
-
-        if ((model.throughput + 0.01) < reference_throughput) {
-            break;
-        }
-
-        ring_connection_allowed[model.layer_index] = true;
-    }
-
-    for (; allowed_conn_count <= optimizer.maxring_model.size();
-            allowed_conn_count++) {
- 
-        bool is_solution_valid = true;
-        int prev_splitable_connection = -1;
-        int mapped_layers = 0;
-        std::vector<std::vector<fpgaconvnet::protos::LayerParameter>> solution;
-        solution.push_back(std::vector<fpgaconvnet::protos::LayerParameter>());
- 
-        for (int i = 0 ; i < network.layer_size() ; i++) {
-            std::vector<fpgaconvnet::protos::LayerParameter> &
-                    current_fpga = solution.back();
- 
-            fpgaconvnet::resource_model::stream_t input_stream =
-                (solution.size() == 1
-                    ? fpgaconvnet::resource_model::STREAM_PCIE
-                    : fpgaconvnet::resource_model::STREAM_MAX_RING);
- 
-            fpgaconvnet::resource_model::stream_t output_stream =
-                (i == network.layer_size() - 1
-                     ? fpgaconvnet::resource_model::STREAM_PCIE
-                     : fpgaconvnet::resource_model::STREAM_MAX_RING);
- 
-            current_fpga.push_back(network.layer(i));
- 
-            fpgaconvnet::resource_model::resource_t resource =
-                    fpgaconvnet::resource_model::project_single_fpga(
-                            input_stream, current_fpga, output_stream);
- 
-            if (!fpgaconvnet::resource_model::meets_resource_constraints(
-                        resource)) {
-                const int old_size =
-                        prev_splitable_connection - mapped_layers + 1;
- 
-                if (old_size == 0 || prev_splitable_connection < 0) {
-                    is_solution_valid = false;
-                    break;
-                }
- 
-                std::vector<fpgaconvnet::protos::LayerParameter> new_fpga(
-                        current_fpga.begin() + old_size,
-                        current_fpga.end());
-                current_fpga.resize(old_size);
-                solution.push_back(new_fpga);
-                mapped_layers = prev_splitable_connection + 1;
-                prev_splitable_connection = -1;
-            }
- 
-            if (ring_connection_allowed[i]) {
-                prev_splitable_connection = i;
-            }
-        }
- 
-        if (is_solution_valid && solution.size() <= network.num_fpga_available()) {
-            fpgaconvnet::protos::Network positioned = network;
-            auto ptr = positioned.mutable_layer()->begin();
- 
-            for (int i = 0; i < solution.size() ; i++) {
-                for (int j = 0 ; j < solution[i].size() ; j++) {
-                    ptr->set_fpga_id(i);
-                    ptr++;
-                }
-            }
- 
-            positioned.set_num_fpga_used(solution.size());
-
-            *success = 1;
-            return positioned;
-        }
- 
-        if (allowed_conn_count < optimizer.maxring_model.size()) {
-            ring_connection_allowed[
-                optimizer.maxring_model[allowed_conn_count].layer_index]
-                    = true;
-        }
-    } 
-
-    *success = 0;
-    return network;
-}
-
-
-static fpgaconvnet::protos::Network
-sorted_throughput_positioning(
-        const optimizer_t & optimizer,
-        const fpgaconvnet::protos::Network & network,
-        bool *success)
-{
-    const double reference_throughput =
-            calculate_reference_throughput(network);
-    bool ring_connection_allowed[network.layer_size() - 1];
-
-    std::memset(
-            ring_connection_allowed,
-            false,
-            sizeof(bool) * (network.layer_size() - 1));
-
-
-    /* [optimizer.maxring_connections] are sorted by decreasing throughput. So we first try
-     *
-     * - Using no maxring connections
-     * - Using maxring connection with highest throughput
-     * - Try also using the maxring connection with the second highest throughput
-     * - Try also using the maxring connection with the third highest throughput
-     * 
-     * and so on..
-     */
-    for (int allowed_conn_count = 0;
-            allowed_conn_count < network.layer_size();
-            allowed_conn_count++) {
-
-        /* Add the additional maxring connetion that we are allowed to use this
-         * iteration.
-         */
-        if (allowed_conn_count != 0) {
-            const auto ring = optimizer.maxring_model[allowed_conn_count - 1];
-            const uint64_t layer_index = ring.layer_index;
-            ring_connection_allowed[layer_index] = true;
-        }
-
-        std::vector<std::vector<fpgaconvnet::protos::LayerParameter> > solution;
-        solution.push_back(std::vector<fpgaconvnet::protos::LayerParameter>());
-
-        /* Allocate layers to different FPGAs. Populate solution vector such that
-         *
-         * [layer_1, layer_2, ..., layer_n]
-         *
-         * becomes
-         *
-         * [ [layer_1, layer_2],
-         *   [layer_3, layer_4, layer_5],
-         *   ...
-         *   [layer_{n-1}, layer_n]
-         * ]
-         *
-         * where the i-th list corresponds to the layers served by the i-th FPGA
-         * */
-        for (int i = 0 ; i < network.layer_size() ; i++) {
-            std::vector<fpgaconvnet::protos::LayerParameter> &
-                    current_fpga = solution.back();
-
-            current_fpga.push_back(network.layer(i));
-
-            /* we can't put a maxring connection right after the last layer */
-            if (i != network.layer_size() - 1 && ring_connection_allowed[i]) {
-                solution.push_back(std::vector<fpgaconvnet::protos::LayerParameter>());
-            }
-        }
-
-        bool is_solution_valid = true;
-
-        /* Check if resource constraints are met */
-        for (int i = 0 ; i < solution.size() ; i++) {
-            fpgaconvnet::resource_model::stream_t input_stream =
-                (i == 0
-                    ? fpgaconvnet::resource_model::STREAM_PCIE
-                    : fpgaconvnet::resource_model::STREAM_MAX_RING);
-
-            fpgaconvnet::resource_model::stream_t output_stream =
-                (i == solution.size() - 1
-                     ? fpgaconvnet::resource_model::STREAM_PCIE
-                     : fpgaconvnet::resource_model::STREAM_MAX_RING);
-
-            fpgaconvnet::resource_model::resource_t resource =
-                    fpgaconvnet::resource_model::project_single_fpga(
-                            input_stream, solution[i], output_stream);
-
-            if (!fpgaconvnet::resource_model::meets_resource_constraints(resource)) {
-                is_solution_valid = false;
-                break;
-            }
-        }
-
-        /* A solution is accepted - return the allocated protobufs
-         *
-         * NOTE: the second boolean condition assumes NO RECONFIGURATION. If
-         *       reconfiguration is allowed, things will be different.
-         */
-        if (is_solution_valid && solution.size() <= network.num_fpga_available()) {
-            fpgaconvnet::protos::Network positioned = network;
-            auto ptr = positioned.mutable_layer()->begin();
-
-            for (int i = 0; i < solution.size() ; i++) {
-                for (int j = 0 ; j < solution[i].size() ; j++) {
-                    ptr->set_fpga_id(i);
-                    ptr++;
-                }
-            }
-
-            positioned.set_num_fpga_used(solution.size());
-
-            *success = 1;
-            return positioned;
-        }
-    }
-
-    *success = false;
-    return network;
-}
-
 
 static fpgaconvnet::protos::Network
 position_fpgas(
         const optimizer_t & optimizer,
         const fpgaconvnet::protos::Network & network,
+        const unsigned num_fpga,
         bool *success)
 {
-    fpgaconvnet::modelling::PositionFpga position_fpga(network);
+    fpgaconvnet::modelling::PositionFpga position_fpga(network, num_fpga);
     position_fpga.search();
-    fpgaconvnet::logging::stdout()
+    fpgaconvnet::logging::stdout(fpgaconvnet::logging::DEBUG)
         << "FPGA Positiong accepted "
         << position_fpga.get_num_accepted_solutions()
         << "/" << position_fpga.get_num_considered_solutions()
@@ -548,17 +309,18 @@ solve_for_ideal_worker_factors(
         const optimizer_t & optimizer,
         const fpgaconvnet::protos::Network & network,
         const std::vector<double> & ideal_worker_factors,
+        const unsigned num_fpga,
         bool *success
 )
 {
     fpgaconvnet::protos::Network optimized_network = network;
 
-    fpgaconvnet::logging::stdout() << "Network configuration:\n";
+    fpgaconvnet::logging::stdout(fpgaconvnet::logging::DEBUG) << "Network configuration:\n";
     ::fpgaconvnet::logging::Indentation indent;
 
     for (int i = 0 ; i < optimized_network.layer_size() ; i++)
     {
-        ::fpgaconvnet::logging::stdout() << "Layer " << i << '\n';
+        ::fpgaconvnet::logging::stdout(fpgaconvnet::logging::DEBUG) << "Layer " << i << '\n';
         ::fpgaconvnet::protos::LayerParameter* layer =
             optimized_network.mutable_layer(i);
 
@@ -586,7 +348,7 @@ solve_for_ideal_worker_factors(
                     channel_folding_factor);
 
             ::fpgaconvnet::logging::Indentation indent;
-            ::fpgaconvnet::logging::stdout()
+            ::fpgaconvnet::logging::stdout(fpgaconvnet::logging::DEBUG)
                 << "Channel folding factor = "
                 << channel_folding_factor << '\n';
 
@@ -599,18 +361,13 @@ solve_for_ideal_worker_factors(
                     channel_folding_factor);
 
             ::fpgaconvnet::logging::Indentation indent;
-            ::fpgaconvnet::logging::stdout()
+            ::fpgaconvnet::logging::stdout(fpgaconvnet::logging::DEBUG)
                 << "Channel folding factor = "
                 << channel_folding_factor << '\n';
         }
     }
 
-    if (network.num_fpga_available() == 1) {
-        return optimized_network;
-
-    }
-
-    return position_fpgas(optimizer, optimized_network, success);
+    return position_fpgas(optimizer, optimized_network, num_fpga, success);
 }
 
 
@@ -630,7 +387,10 @@ choose_reference_layer_index(const fpgaconvnet::protos::Network & network)
 
 
 static fpgaconvnet::protos::Network
-search_design_space_for_bistream(const fpgaconvnet::protos::Network & network, bool *success)
+search_design_space_for_bitstream_with_fixed_num_fpga(
+        const fpgaconvnet::protos::Network & network,
+        bool *success,
+        const int num_fpga)
 {
     const optimizer_t optimizer = build_initial_optimizer(network);
     const std::vector<double> relative_worker_factors = 
@@ -657,8 +417,8 @@ search_design_space_for_bistream(const fpgaconvnet::protos::Network & network, b
         double reference_wf = (lo + hi) / 2.0;
         bool success = false;
 
-        fpgaconvnet::logging::stdout() << "Reference wf = " << reference_wf
-             << "\n";
+        fpgaconvnet::logging::stdout(fpgaconvnet::logging::DEBUG)
+            << "Reference wf = " << reference_wf;
 
         std::vector<double> ideal_worker_factors =
             compute_ideal_worker_factors(
@@ -668,34 +428,41 @@ search_design_space_for_bistream(const fpgaconvnet::protos::Network & network, b
                     relative_worker_factors);
         fpgaconvnet::protos::Network local_solution =
             solve_for_ideal_worker_factors(
-                    optimizer, network, ideal_worker_factors, &success);
+                    optimizer, network, ideal_worker_factors, num_fpga, 
+                    &success);
 
         std::vector<fpgaconvnet::resource_model::resource_t> resources =
-            ::fpgaconvnet::resource_model::project(local_solution);
+            ::fpgaconvnet::resource_model::project_single_bitstream(local_solution);
         bool meets_resource_constraints =
             ::fpgaconvnet::resource_model::meets_resource_constraints(resources)
             && local_solution.num_fpga_used() <= local_solution.num_fpga_available()
             && success;
 
-        fpgaconvnet::logging::stdout() << "Resource usage:\n";
-
-        for (int i = 0 ; i < resources.size() ; i++) {
-            fpgaconvnet::logging::stdout()
-                << "fpga " << i
-                << fpgaconvnet::resource_model::resource_to_string(resources[i])
-                << "\n";
-        }
-
         fpgaconvnet::logging::stdout()
-            << "Meets constraints: "
+            << reference_wf
+            << " Meets constraints: "
             << (meets_resource_constraints ?  "YES" : "NO")
             << "\n";
-        fpgaconvnet::logging::stdout() << "\n";
+
+        if (meets_resource_constraints) {
+            assert(local_solution.num_fpga_used() == num_fpga);
+        };
+
+        if (meets_resource_constraints) {
+            fpgaconvnet::logging::Indentation indent;
+            fpgaconvnet::logging::stdout() << "Resource usage:\n";
+            for (int i = 0 ; i < resources.size() ; i++) {
+                fpgaconvnet::logging::stdout()
+                    << "fpga " << i
+                    << fpgaconvnet::resource_model::resource_to_string(resources[i])
+                    << "\n";
+            }
+        }
 
         if (meets_resource_constraints) {
             if (!is_best_solution_set ||
-                    fpgaconvnet::calculation::throughput(local_solution)
-                        > fpgaconvnet::calculation::throughput(best_solution)) {
+                    fpgaconvnet::calculation::pipeline_throughput(local_solution, -1)
+                        > fpgaconvnet::calculation::pipeline_throughput(best_solution, -1)) {
                 is_best_solution_set = true;
                 best_solution = local_solution;
             }
@@ -717,13 +484,108 @@ search_design_space_for_bistream(const fpgaconvnet::protos::Network & network, b
     return best_solution;
 }
 
+
+static fpgaconvnet::protos::Network
+search_design_space_for_bitstream(
+        const fpgaconvnet::protos::Network & network,
+        bool *p_success)
+{
+    bool success = false;
+    fpgaconvnet::protos::Network solution;
+
+    for (int i = 1; i <= std::min(network.num_fpga_available(), unsigned(network.layer_size())) ; i++) {
+        fpgaconvnet::logging::stdout()
+            << "Starting to search with " << i << " FPGAs\n";
+        fpgaconvnet::logging::Indentation indent;
+
+        bool this_success;
+        auto this_solution = search_design_space_for_bitstream_with_fixed_num_fpga(
+                network, &this_success, i);
+
+        if (this_success)  {
+            auto this_throughput = fpgaconvnet::calculation::pipeline_throughput(
+                    this_solution, -1);
+
+            fpgaconvnet::logging::stdout() << "Results of searching with "
+                << i << " FPGAs : " << "SUCCESS\n";
+            fpgaconvnet::calculation::explain_throughput(this_solution);
+            fpgaconvnet::logging::stdout() << "\n";
+
+            if (!success) {
+                solution = this_solution;
+            } else if(this_throughput > fpgaconvnet::calculation::pipeline_throughput(solution, -1)) {
+                solution = this_solution;
+            }
+
+            success = 1;
+        } else {
+            fpgaconvnet::logging::stdout() << "Results of searching with "
+                << i << " FPGAs : " << "FAILED\n";
+            fpgaconvnet::logging::stdout() << "\n";
+        }
+    }
+    *p_success = success;
+
+    return solution;
+}
+
+
+
+namespace fpgaconvnet {
+namespace modelling {
+
+BuildSingleBitStream::BuildSingleBitStream(fpgaconvnet::protos::Network network)
+    : reference_(network), success_(false), done_(false)
+{
+}
+
+
+bool BuildSingleBitStream::search()
+{
+    if (!done_) {
+        solution_ = search_design_space_for_bitstream(reference_, &success_);
+        done_ = true;
+    }
+    return success_;
+}
+
+
+fpgaconvnet::protos::Network
+BuildSingleBitStream::get_result()
+{
+    assert(done_ && success_);
+    return solution_;
+}
+
+}  // modelling
+}  // fpgaconvnet
+
 static fpgaconvnet::protos::Network
 search_design_space(
     fpgaconvnet::protos::Network network,
     bool *success)
 {
-  // TODO: Call PlaceBitstream class here ...
-  return search_design_space_for_bistream(network, success);
+    if (!network.allow_runtime_reconfiguration()) {
+        auto ret = search_design_space_for_bitstream(network, success);
+        if (*success) {
+            for (auto it = ret.mutable_layer()->begin()
+                    ; it != ret.mutable_layer()->end()
+                    ; it++) {
+                it->set_bitstream_id(0);
+            }
+        }
+        return ret;
+    }
+
+    fpgaconvnet::modelling::PlaceBitstream p(network);
+    *success = p.search();
+
+    if (!(*success)) {
+        return network;
+    }
+
+    *success = 1;
+    return p.translate_placement_to_protobuf(p.get_best_solution().placement);
 }
 
 
@@ -742,19 +604,27 @@ int main (int argc, char **argv)
             search_design_space(network, &success);
 
     if (success) {
-        double throughput = fpgaconvnet::calculation::throughput(solution);
         double ops = fpgaconvnet::calculation::ops(solution);
         fpgaconvnet::logging::stdout() << "Found an optimal solution!\n";
         fpgaconvnet::logging::stdout()
             << "Network Operations per image = " << ops << '\n';
-        fpgaconvnet::logging::stdout()
-            << "Projected Throughput = " << throughput << '\n';
+
+        fpgaconvnet::logging::stdout() << "Bitstrema throughput break down\n";
+
+        // true makes the calculation verbose
+        double throughput = fpgaconvnet::calculation::real_throughput(solution);
+        fpgaconvnet::calculation::explain_throughput(solution);
+
         fpgaconvnet::logging::stdout()
             << "Projected total GOps = " << ops * throughput * 1e-9 << '\n';
-        fpgaconvnet::logging::stdout()
-            << "Resource usage:\n"
-            << fpgaconvnet::resource_model::resource_to_string(
-                    fpgaconvnet::resource_model::project(solution));
+
+        const auto subnetworks = fpgaconvnet::split_by_bitstreams(solution);
+        for (unsigned i = 0; i < subnetworks.size(); i++) {
+            fpgaconvnet::logging::stdout()
+                << "Resource usage (Bitstream " << i << ") :\n"
+                << fpgaconvnet::resource_model::resource_to_string(
+                        fpgaconvnet::resource_model::project_single_bitstream(subnetworks[i]));
+        }
         fpgaconvnet::logging::stdout()
             << "Writing optimized protobuf to "
             << output_filename << std::endl;

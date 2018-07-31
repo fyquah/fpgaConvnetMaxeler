@@ -9,6 +9,7 @@ message Network
     optional uint32 frequency = 2 [default = 100];
     optional uint32 num_fpga_available = 3 [default = 1];
     optional uint32 num_fpga_used = 4 [default = 1];
+    optional bool   allow_runtime_reconfiguration = 5 [default = false];
 }
 
 

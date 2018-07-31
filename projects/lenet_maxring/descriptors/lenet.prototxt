@@ -47,4 +47,5 @@ layer {
     }
 }
 num_fpga_available: 8
+allow_runtime_reconfiguration: 1
 frequency: 100
