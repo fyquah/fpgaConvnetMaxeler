@@ -718,7 +718,11 @@ Convnet::get_address_byte_offset(uint64_t N)
         x = std::max(x, std::max(y, z));
     }
 
-    return N * x;
+    if (x % 384 == 0) {
+        return N * x;
+    } else {
+        return N * (x / 384 + 1) * 384;
+    }
 }
 
 uint64_t
@@ -801,6 +805,7 @@ Convnet::max_load_input_data(const float *images, uint64_t N)
             stream_size);
     max_run(dfe, write_action);
     max_actions_free(write_action);
+    max_unload(dfe);
     dfe = NULL;
 }
 
@@ -831,6 +836,7 @@ Convnet::max_read_output_data(float * images, uint64_t N)
             stream_size);
     max_run(dfe, read_action);
     max_actions_free(read_action);
+    max_unload(dfe);
     dfe = NULL;
 }
 
@@ -895,8 +901,8 @@ Convnet::max_run_single_bitstream(
             get_output_address_for_bitstream(bitstream_id, N));
 
 #ifdef __SIM__
-    void *tmp_buffer_in;
-    void *tmp_buffer_out;
+    void *tmp_buffer_in = NULL;
+    void *tmp_buffer_out = NULL;
 
     for (int i = 0; i < num_fpgas ; i++) {
         dfe = max_load(max_files[bitstream_id][i], load_spec);
