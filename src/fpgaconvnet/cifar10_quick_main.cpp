@@ -12,7 +12,7 @@
 
 
 #ifdef __SIM__
-    static const uint64_t N = 6;
+    static const uint64_t N = 12;
 #else
     static const uint64_t N = 10000;
 #endif
@@ -129,7 +129,11 @@ std::vector<float> run_feature_extraction(
     // warm up the DFE with the weights.
     std::cout << "Runnin inference" << std::endl;
     extracted_features = convnet.max_run_inference(N, images, false);
+
+#ifndef __SIM__
     extracted_features = convnet.max_run_inference(N, images, true);
+#endif
+
     fpgaconvnet::verify_conv_output(
             network_parameters,
             N,
