@@ -12,7 +12,7 @@
 
 
 #ifdef __SIM__
-    static const uint64_t N = 4;
+    static const uint64_t N = 6;
 #else
     static const uint64_t N = 1000000;
 #endif
@@ -28,9 +28,7 @@ std::vector<float> run_feature_extraction(
         const std::vector<float> & images
 )
 {
-    std::vector<max_file_t*> max_files;
-
-    max_files.push_back(target_0_init());
+    std::vector<max_file_t*> max_files = targets_init();
 
     std::vector<std::string> filenames = {
             "../weights/conv0_kernels.txt",
@@ -58,62 +56,20 @@ std::vector<float> run_feature_extraction(
             &extracted_features[0],
             "../test_data/output.txt");
 
+#ifndef __SIM__
     // this is to measure latency
     std::vector<double> times;
     for (int i = 0 ; i < 1000 ; i++) {
         double p;
-        convnet.max_run_inference(1, images, true, &p);
+        convnet.max_run_inference(6, images, true, &p);
         times.push_back(p);
     }
-    fpgaconvnet::dump_latencies("latency.txt", times);
+    fpgaconvnet::dump_latencies("latency_6.txt", times);
+#endif
 
     return extracted_features;
 }
 
-
-void load_cifar10(const char *filename, std::vector<float> &images, std::vector<int> &labels)
-{
-    labels = std::vector<int>(10000);
-    images = std::vector<float>(10000 * 1024 * 3);
-    std::ifstream fin(filename);
-
-    if (!fin.is_open()) {
-        throw fpgaconvnet::Exception("File not found");
-    }
-
-    for (unsigned iter = 0 ; iter < 10000 ; iter++) {
-        char byte;
-        std::vector<float> red(1024);
-        std::vector<float> blue(1024);
-        std::vector<float> green(1024);
-
-        fin.read(static_cast<char*>(&byte), 1);
-        labels.push_back(int(byte));
-
-        for (int i = 0 ; i< 1024 ; i++) {
-            fin.read(static_cast<char*>(&byte), 1);
-            red[i] = float((unsigned char) byte) / 255.0;
-        }
-
-        for (int i = 0 ; i< 1024 ; i++) {
-            fin.read(&byte, 1);
-            green[i] = float((unsigned char) byte) / 255.0;
-        }
-
-        for (int i = 0 ; i< 1024 ; i++) {
-            fin.read(&byte, 1);
-            blue[i] = float((unsigned char) byte) / 255.0;
-        }
-
-        for (int i = 0 ; i < 1024 ; i++) {
-            images[(iter * 3 * 1024) + 3 * i] = red[i];
-            images[(iter * 3 * 1024) + 3 * i + 1] = green[i];
-            images[(iter * 3 * 1024) + 3 * i + 2] = blue[i];
-        }
-    }
-
-    fin.close();
-}
 
 std::vector<float> duplicate_vector(const std::vector<float> &v, int count)
 {

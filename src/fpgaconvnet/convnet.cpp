@@ -167,13 +167,10 @@ void report_conv_performance(
             << "Time taken for " << N << " feature extractions  = "
             << delta << "microseconds" << std::endl;
     logging::stdout(logging::INFO)
-            << "Project Throughput (images per second) = "
-            << calculation::throughput(network)
-            << std::endl;
-    logging::stdout(logging::INFO)
             << "Actual Throughput (images per second) = " << throughput << std::endl;
     logging::stdout(logging::INFO)
-            << "GOps = " << throughput * total_ops / 1e9 << std::endl;
+            << "Actual GOps = " << throughput * total_ops / 1e9 << std::endl;
+    calculation::explain_throughput(network);
 }
 
 
@@ -514,7 +511,8 @@ void Convnet::constructor(
 #ifdef __SIM__
         dfe_array = NULL;
 #else
-        dfe_array = max_load_mixed_array((max_file_t**) &max_files[0], num_fpgas, load_spec);
+        dfe_array = max_load_mixed_array(
+                (max_file_t**) &max_files[0], num_fpgas, load_spec);
 #endif
     }
 
@@ -650,7 +648,7 @@ void Convnet::max_init_weights()
         max_set_param_uint64t(write_action, "size", stream_size);
         max_queue_input(
                 write_action,
-                "weights_in",
+                "data_in",
                 (void*) &worker_kernels[i][0],
                 stream_size);
 
@@ -687,6 +685,80 @@ std::vector<float> Convnet::max_run_inference(
     return max_run_inference(N, images, benchmark, &p);
 }
 
+uint64_t
+Convnet::get_input_address(uint64_t unused_N)
+{
+    return 0;
+}
+
+
+uint64_t
+Convnet::get_input_stream_size(uint64_t N)
+{
+    return N * input_size * sizeof(float);
+}
+
+
+uint64_t
+Convnet::get_output_address(uint64_t N)
+{
+    return N * input_size * sizeof(float);
+}
+
+
+uint64_t
+Convnet::get_output_stream_size(uint64_t N)
+{
+    return N * output_size * sizeof(float);
+}
+
+
+void
+Convnet::max_load_input_data(const float *images, uint64_t N)
+{
+    const uint64_t stream_size = get_input_stream_size(N);
+
+    logging::stdout(logging::INFO)
+        << "Writing " << N << " images with stream size of "
+        << stream_size << " bytes."
+        << std::endl;
+
+    max_actions_t *write_action = max_actions_init(
+            max_files[0], "writeLMem");
+    max_set_param_uint64t(write_action, "start", get_input_address(N));
+    max_set_param_uint64t(write_action, "size", stream_size);
+    max_queue_input(
+            write_action,
+            "data_in",
+            (void*) &images[0],
+            stream_size);
+    max_run(dfe, write_action);
+    max_actions_free(write_action);
+}
+
+void
+Convnet::max_read_output_data(float * images, uint64_t N)
+{
+    const uint64_t stream_size = get_output_stream_size(N);
+
+    logging::stdout(logging::INFO)
+        << "Reading " << N << " images with stream size of "
+        << stream_size << " bytes."
+        << std::endl;
+
+    max_actions_t *read_action = max_actions_init(
+            max_files[0], "readLMem");
+    max_set_param_uint64t(read_action, "start", get_output_address(N));
+    max_set_param_uint64t(read_action, "size", stream_size);
+    max_queue_output(
+            read_action,
+            "data_out",
+            (void*) &images[0],
+            stream_size);
+    max_run(dfe, read_action);
+    max_actions_free(read_action);
+}
+
 
 std::vector<float> Convnet::max_run_inference(
         uint64_t N,
@@ -704,6 +776,14 @@ std::vector<float> Convnet::max_run_inference(
 
     logging::stdout(logging::INFO)
         << "This bitstream use " << num_fpgas << " FPGAs  " << std::endl;
+
+    /* 1. Load images into off-chip memory. */
+    logging::stdout(logging::INFO)
+        << "Loading images to off-chip memory ... " << std::endl;
+    max_load_input_data(&images[0], N);
+    logging::stdout(logging::INFO) << "-- DONE!" << std::endl;
+
+    /* 2. Run inference */
     for (int i = 0 ; i < num_fpgas ; i++) {
         actions[i] = max_actions_init(max_files[i], "default");
     }
@@ -756,86 +836,90 @@ std::vector<float> Convnet::max_run_inference(
 
     initialized_weights = 1;
 
-    max_queue_input(actions[0],
-                    "fromcpu",
-                    (void*) &images[0],
-                    N * input_size * sizeof(float));
-    max_queue_output(actions[num_fpgas - 1],
-                     "tocpu",
-                     (void*) &ret[0],
-                     N * output_size * sizeof(float));
+    max_set_param_uint64t(
+            actions[0], "addressIn", get_input_address(N));
+    max_set_param_uint64t(
+            actions[num_fpgas - 1], "addressOut", get_output_address(N));
 
     logging::stdout(logging::INFO)
         << "Running feature extraction ... " << std::endl;
 
-#ifdef __SIM__
-    void *tmp_buffer_in;
-    void *tmp_buffer_out;
+    __sync_synchronize();
+    gettimeofday(&t_begin, NULL);
+    max_run(dfe, actions[0]);
+    gettimeofday(&t_end, NULL);
+    __sync_synchronize();
 
-    for (int i = 0; i < num_fpgas ; i++) {
-        logging::stdout(logging::INFO) << "Running on DFE " << i << " ..." << std::endl;
+// #ifdef __SIM__
+//     void *tmp_buffer_in;
+//     void *tmp_buffer_out;
+// 
+//     for (int i = 0; i < num_fpgas ; i++) {
+//         logging::stdout(logging::INFO) << "Running on DFE " << i << " ..." << std::endl;
+// 
+//         dfe = max_load(max_files[i], load_spec);
+// 
+//         if (i > 0) {
+//             max_queue_input(actions[i],
+//                             "mock_maxring_in",
+//                             tmp_buffer_in,
+//                             N * fpga_input_size[i] * 2);
+//         }
+// 
+//         if (i < num_fpgas - 1) {
+//             tmp_buffer_out = malloc(N * fpga_output_size[i] * 2);
+//             max_queue_output(actions[i],
+//                             "mock_maxring_out",
+//                             tmp_buffer_out,
+//                             N * fpga_output_size[i] * 2);
+//         }
+//         max_run(dfe, actions[i]);
+// 
+//         if (num_fpgas > 1) {
+//             max_unload(dfe);
+//         }
+// 
+//         tmp_buffer_in = tmp_buffer_out;
+//         tmp_buffer_out = NULL;
+//     }
+//     dfe = NULL;
+// 
+//     if (tmp_buffer_out != NULL) {
+//         delete[] tmp_buffer_out;
+//     }
+//     if (tmp_buffer_in != NULL) {
+//         delete[] tmp_buffer_in;
+//     }
+// #else
+//     if (num_fpgas == 1) {
+//         __sync_synchronize();
+//         gettimeofday(&t_begin, NULL);
+//         max_run(dfe, actions[0]);
+//         gettimeofday(&t_end, NULL);
+//         __sync_synchronize();
+// 
+//     } else {
+//         max_actarray_t *act_array = max_mixed_actarray_init(&max_files[0], num_fpgas);
+//         for (int i = 0 ; i < num_fpgas ; i++) {
+//             max_set_action(act_array, i, actions[i]);
+//         }
+// 
+//         __sync_synchronize();
+//         gettimeofday(&t_begin, NULL);
+//         max_run_array(dfe_array, act_array);
+//         gettimeofday(&t_end, NULL);
+//         __sync_synchronize();
+//     }
+// #endif
+    fpgaconvnet::logging::stdout() << "-- DONE" << std::endl;
 
-        if (num_fpgas > 1) {
-            dfe = max_load(max_files[i], load_spec);
-        }
-
-        if (i > 0) {
-            max_queue_input(actions[i],
-                            "mock_maxring_in",
-                            tmp_buffer_in,
-                            N * fpga_input_size[i] * 2);
-        }
-
-        if (i < num_fpgas - 1) {
-            tmp_buffer_out = malloc(N * fpga_output_size[i] * 2);
-            max_queue_output(actions[i],
-                            "mock_maxring_out",
-                            tmp_buffer_out,
-                            N * fpga_output_size[i] * 2);
-        }
-        max_run(dfe, actions[i]);
-
-        if (num_fpgas > 1) {
-            max_unload(dfe);
-        }
-
-        tmp_buffer_in = tmp_buffer_out;
-        tmp_buffer_out = NULL;
-    }
-    dfe = NULL;
-
-    if (tmp_buffer_out != NULL) {
-        delete[] tmp_buffer_out;
-    }
-    if (tmp_buffer_in != NULL) {
-        delete[] tmp_buffer_in;
-    }
-#else
-    if (num_fpgas == 1) {
-        __sync_synchronize();
-        gettimeofday(&t_begin, NULL);
-        max_run(dfe, actions[0]);
-        gettimeofday(&t_end, NULL);
-        __sync_synchronize();
-
-    } else {
-        max_actarray_t *act_array = max_mixed_actarray_init(&max_files[0], num_fpgas);
-        for (int i = 0 ; i < num_fpgas ; i++) {
-            max_set_action(act_array, i, actions[i]);
-        }
-
-        __sync_synchronize();
-        gettimeofday(&t_begin, NULL);
-        max_run_array(dfe_array, act_array);
-        gettimeofday(&t_end, NULL);
-        __sync_synchronize();
-    }
-#endif
+    // 3. Load data from off-chip memory back to the host
+    max_read_output_data(&ret[0], N);
+    fpgaconvnet::logging::stdout() << "-- DONE" << std::endl;
 
     if (benchmark) {
         report_conv_performance(network_params, N, t_begin, t_end);
     }
-    logging::stdout(logging::INFO) << "Done!" << std::endl;
 
     delete[] actions;
 

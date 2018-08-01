@@ -109,6 +109,10 @@ private:
             const protos::Network & network_params,
             std::vector<max_file_t*> max_files,
             const char* load_spec = "*");
+    uint64_t get_input_address(uint64_t N);
+    uint64_t get_input_stream_size(uint64_t N);
+    uint64_t get_output_address(uint64_t N);
+    uint64_t get_output_stream_size(uint64_t N);
 
 public:
     Convnet(const protos::Network & network_params,
@@ -124,11 +128,13 @@ public:
     void randomize_weights();
 
     void max_init_weights();
-    void max_load_input_data(const std::vector<float> & images, uint64_t N);
+    void max_load_input_data(const float * images, uint64_t N);
+    void max_read_output_data(float *images, uint64_t N);
     std::vector<float> max_run_inference(
             uint64_t N, const std::vector<float> & images, const bool benchmark);
     std::vector<float> max_run_inference(
-            uint64_t N, const std::vector<float> & images, const bool benchmark, double * p_time_taken);
+            uint64_t N, const std::vector<float> & images,
+            const bool benchmark, double * p_time_taken);
 
     std::vector<float> max_retrieve_features(uint64_t N);
 };
