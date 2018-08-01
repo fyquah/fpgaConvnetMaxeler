@@ -99,10 +99,24 @@ public class NetworkManager extends CustomManager {
                 networkParameters.getLayerCount() - 1).getBitstreamId() + 1;
     }
 
+    private int getBitstreamInputSize() {
+        for (int i = 0 ; i < networkParameters.getLayerCount() ; i++) {
+            Parameters.LayerParameter layerParams = networkParameters.getLayer(i);
+            if (layerParams.getBitstreamId() == bitstreamId) {
+                return layerParams.getInputHeight()
+                        * layerParams.getInputWidth()
+                        * layerParams.getNumInputs();
+            }
+        }
+
+        throw new RuntimeException("No layer with bistream id == " + bitstreamId);
+    }
+
     private int getFpgaInputSize() {
         for (int i = 0 ; i < networkParameters.getLayerCount() ; i++) {
             Parameters.LayerParameter layerParams = networkParameters.getLayer(i);
-            if (layerParams.getFpgaId() == fpgaId) {
+            if (layerParams.getBitstreamId() == bitstreamId
+                    && layerParams.getFpgaId() == fpgaId) {
                 return layerParams.getInputHeight()
                         * layerParams.getInputWidth()
                         * layerParams.getNumInputs();
@@ -115,7 +129,8 @@ public class NetworkManager extends CustomManager {
     private int getFpgaOutputSize() {
         for (int i = networkParameters.getLayerCount() - 1 ; i >= 0; i--) {
             Parameters.LayerParameter layerParams = networkParameters.getLayer(i);
-            if (layerParams.getFpgaId() == fpgaId) {
+            if (layerParams.getBitstreamId() == bitstreamId
+                    && layerParams.getFpgaId() == fpgaId) {
                 return layerParams.getOutputHeight()
                         * layerParams.getOutputWidth()
                         * layerParams.getNumOutputs();
@@ -123,6 +138,19 @@ public class NetworkManager extends CustomManager {
         }
 
         throw new RuntimeException("No layer with fpga id == " + fpgaId);
+    }
+
+    private int getBitstreamOutputSize() {
+        for (int i = networkParameters.getLayerCount() - 1 ; i >= 0; i--) {
+            Parameters.LayerParameter layerParams = networkParameters.getLayer(i);
+            if (layerParams.getBitstreamId() == bitstreamId) {
+                return layerParams.getOutputHeight()
+                        * layerParams.getOutputWidth()
+                        * layerParams.getNumOutputs();
+            }
+        }
+
+        throw new RuntimeException("No layer with bitstream id == " + fpgaId);
     }
 
     private EngineInterface interfaceDefault () {
@@ -144,8 +172,6 @@ public class NetworkManager extends CustomManager {
         Parameters.LayerParameter firstLayer = networkParameters.getLayer(0);
         Parameters.LayerParameter lastLayer = networkParameters.getLayer(
                 networkParameters.getLayerCount() - 1);
-        int inputSize = Utils.layerInputDimension(firstLayer).totalSize();
-        int outputSize = Utils.layerOutputDimension(lastLayer).totalSize();
 
         if (fpgaId == 0) {
             // load from CPU:
@@ -158,8 +184,8 @@ public class NetworkManager extends CustomManager {
                 bitstreamId == 0
                 ? CPUTypes.FLOAT.sizeInBytes()
                 : CPUTypes.UINT16.sizeInBytes();
-            System.out.println("input size per image = " + inputSize * numberSize);
-            InterfaceParam arrSize = N * inputSize * numberSize;
+            InterfaceParam arrSize =
+                N * getBitstreamInputSize() * numberSize;
 
             ei.setLMemLinearWrapped(
                     "fromcpu",           /* streamName  - This name is
@@ -184,8 +210,9 @@ public class NetworkManager extends CustomManager {
                 (bitstreamId == getNumBitstream() - 1)
                 ? CPUTypes.FLOAT.sizeInBytes()
                 : CPUTypes.UINT16.sizeInBytes();
-            System.out.println("output size per image = " + outputSize * numberSize);
-            InterfaceParam arrSize = N * outputSize * numberSize;
+            System.out.println("output size per image = " + getBitstreamOutputSize());
+            System.out.println("output numbert size = " + numberSize);
+            InterfaceParam arrSize = N * getBitstreamOutputSize() * numberSize;
 
             ei.setLMemLinearWrapped(
                     "tocpu",           /* streamName  - This name is
@@ -220,7 +247,7 @@ public class NetworkManager extends CustomManager {
         for (int i = 0, j = 0; i < networkParameters.getLayerCount() ; i++) {
             Parameters.LayerParameter layerParams = networkParameters.getLayer(i);
 
-            if (layerParams.getFpgaId() != fpgaId) {
+            if (layerParams.getBitstreamId() != bitstreamId || layerParams.getFpgaId() != fpgaId) {
                 continue;
             }
 
@@ -271,9 +298,11 @@ public class NetworkManager extends CustomManager {
         for (int i = 0 ; i < networkParameters.getLayerCount() ; i++) {
             Parameters.LayerParameter layer = networkParameters.getLayer(i);
 
-            if (layer.getFpgaId() != fpgaId) {
+            if (layer.getFpgaId() != fpgaId
+                    || layer.getBitstreamId() != bitstreamId ) {
                 continue;
             }
+
             if (isConvLayer(layer)) {
                 computationChains.add(new ConvolutionLayer(layer, this));
             } else if (isPoolLayer(layer)) {
