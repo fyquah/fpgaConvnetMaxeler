@@ -28,7 +28,7 @@ std::vector<float> run_feature_extraction(
         const std::vector<float> & images
 )
 {
-    std::vector<max_file_t*> max_files = targets_init();
+    auto max_files = targets_init();
 
     std::vector<std::string> filenames = {
             "../weights/conv0_kernels.txt",

@@ -26,13 +26,13 @@ public class GenericNetworkBuilder {
 
         public int getFpgaId() {
             return Integer.parseInt(
-                    ((String) getParam(s_target_name)).split("_")[1]);
+                    ((String) getParam(s_target_name)).split("_")[2]);
         }
 
         public int getBitstreamId() {
             System.out.println(((String) getParam(s_target_name)));
             return Integer.parseInt(
-                    ((String) getParam(s_target_name)).split("_")[2]);
+                    ((String) getParam(s_target_name)).split("_")[1]);
         }
 
         public NetworkEngineParameters(String[] args) {

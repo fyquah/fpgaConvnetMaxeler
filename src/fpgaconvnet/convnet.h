@@ -3,6 +3,7 @@
 
 #include <fcntl.h>
 #include <vector>
+#include <utility>
 
 #include "MaxSLiCInterface.h"
 
@@ -88,15 +89,13 @@ private:
 
     uint64_t input_size;
     uint64_t output_size;
-    bool initialized_weights;
     const char *load_spec;
 
-    int num_fpgas;
-    max_engine_t *dfe;          /* Used only when num_fpgas == 1 */
-    max_engarray_t *dfe_array;  /* Used only when num_fpgas > 1 */
-    std::vector<max_file_t *> max_files;
-    std::vector<int> fpga_input_size;
-    std::vector<int> fpga_output_size;
+    max_engine_t *dfe;          /* Used only when the bitstream uses  1 fpga */
+    max_engarray_t *dfe_array;  /* Used only when the bitstream uses >1 fpga */
+    std::vector<std::vector<max_file_t *> > max_files;
+    std::map<std::pair<int, int>, int> fpga_input_size;
+    std::map<std::pair<int, int>, int> fpga_output_size;
 
     Convnet(const Convnet &) {}
     void set_layer_weights(
@@ -107,12 +106,22 @@ private:
     );
     void constructor(
             const protos::Network & network_params,
-            std::vector<max_file_t*> max_files,
+            std::vector<std::vector<max_file_t*>> max_files,
             const char* load_spec = "*");
-    uint64_t get_input_address(uint64_t N);
-    uint64_t get_input_stream_size(uint64_t N);
-    uint64_t get_output_address(uint64_t N);
-    uint64_t get_output_stream_size(uint64_t N);
+
+    /* Returns a vector denoting the range of layers served by each binary. */
+    std::vector<std::pair<int, int>> get_range_list();
+
+    uint64_t get_address_byte_offset(uint64_t N);
+    uint64_t get_input_address_for_bitstream(unsigned bitstream, uint64_t N);
+    uint64_t get_input_stream_size_for_bitstream(unsigned bitstream, uint64_t N);
+    uint64_t get_output_address_for_bitstream(unsigned bitstream, uint64_t N);
+    uint64_t get_output_stream_size_for_bitstream(unsigned bitstream, uint64_t N);
+    unsigned get_num_fpga_for_bitstream(unsigned bitstream);
+    unsigned get_num_bitstreams();
+
+    void max_run_single_bitstream(
+            uint64_t N, unsigned bitstream_id, double *p_timetaken);
 
 public:
     Convnet(const protos::Network & network_params,
@@ -120,6 +129,9 @@ public:
             const char* load_spec);
     Convnet(const protos::Network & network_params,
             std::vector<max_file_t*> max_files,
+            const char* load_spec);
+    Convnet(const protos::Network & network_params,
+            std::vector<std::vector<max_file_t*>> max_files,
             const char* load_spec);
     ~Convnet ();
 
@@ -130,6 +142,7 @@ public:
     void max_init_weights();
     void max_load_input_data(const float * images, uint64_t N);
     void max_read_output_data(float *images, uint64_t N);
+
     std::vector<float> max_run_inference(
             uint64_t N, const std::vector<float> & images, const bool benchmark);
     std::vector<float> max_run_inference(

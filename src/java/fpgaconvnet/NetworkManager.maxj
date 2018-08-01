@@ -75,6 +75,25 @@ public class NetworkManager extends CustomManager {
         return ei;
     }
 
+    private int getNumFpgaUsedInBitstream() {
+        int numFpgaUsed = 0;
+
+        for (int i = 0; i < networkParameters.getLayerCount() ; i++) {
+            Parameters.LayerParameter layerParams = networkParameters.getLayer(i);
+            if (layerParams.getBitstreamId() == bitstreamId) {
+                numFpgaUsed = Math.max(numFpgaUsed, layerParams.getFpgaId() + 1);
+            }
+        }
+
+        if (numFpgaUsed == 0) {
+            throw new RuntimeException(
+                    "Cannot find any fpga that uses this bitstream ("
+                    + bitstreamId + ")");
+        }
+
+        return numFpgaUsed;
+    }
+
     private int getNumBitstream() {
         return networkParameters.getLayer(
                 networkParameters.getLayerCount() - 1).getBitstreamId() + 1;
@@ -155,7 +174,7 @@ public class NetworkManager extends CustomManager {
                     ei.addConstant(0l)); /* offset */
         }
 
-        if (fpgaId == networkParameters.getNumFpgaUsed() - 1) {
+        if (fpgaId == getNumFpgaUsedInBitstream() - 1) {
             // writeback to cpu
             // ei.setStream("tocpu", CPUTypes.FLOAT, N * outputSize * CPUTypes.FLOAT.sizeInBytes());
 
@@ -191,7 +210,7 @@ public class NetworkManager extends CustomManager {
                 System.out.println("mock maxring in = " + getFpgaInputSize());
             }
 
-            if (fpgaId < networkParameters.getNumFpgaUsed() - 1) {
+            if (fpgaId < getNumFpgaUsedInBitstream() - 1) {
                 ei.setStream("mock_maxring_out", CPUTypes.UINT8, 2 * N * getFpgaOutputSize());
                 System.out.println("mock maxring out = " + getFpgaOutputSize());
             }
@@ -282,7 +301,7 @@ public class NetworkManager extends CustomManager {
     }
 
     private Max4MAIARingConnection outputRingConnection() {
-        if (fpgaId == networkParameters.getNumFpgaUsed() - 1) {
+        if (fpgaId == getNumFpgaUsedInBitstream() - 1) {
             throw new RuntimeException("Output ring connection.");
         }
 
@@ -324,7 +343,7 @@ public class NetworkManager extends CustomManager {
             }
         }
 
-        if (fpgaId == networkParameters.getNumFpgaUsed() - 1) {
+        if (fpgaId == getNumFpgaUsedInBitstream() - 1) {
             toLink = lmem.addStreamToLMem(
                     "tocpu", LMemCommandGroup.MemoryAccessPattern.LINEAR_1D);
         } else {

@@ -36,7 +36,7 @@ std::vector<float> run_feature_extraction(
             "../weights/conv2_bias",
             "../weights/conv4_weights",
             "../weights/conv4_bias" };
-    std::vector<max_file_t*> max_files = targets_init();
+    auto max_files = targets_init();
 
     fpgaconvnet::Convnet convnet(network_parameters, max_files, "");
 
@@ -55,6 +55,7 @@ std::vector<float> run_feature_extraction(
             "../test_data/pool3.bin",
             fpgaconvnet::FORMAT_BINARY);
 
+#ifndef __SIM__
     // this is to measure latency
     std::vector<double> times;
     for (int i = 0 ; i < 1000 ; i++) {
@@ -63,6 +64,7 @@ std::vector<float> run_feature_extraction(
         times.push_back(p);
     }
     fpgaconvnet::dump_latencies("latency.txt", times);
+#endif
 
     return extracted_features;
 }
