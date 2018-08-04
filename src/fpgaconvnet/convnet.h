@@ -85,10 +85,7 @@ private:
     std::vector<fixed_point_t*> worker_kernels;
     std::vector<fixed_point_t*> bias;
     std::vector<fixed_point_t*> queue_weights;
-    std::vector<protos::LayerParameter> conv_layer_params;
 
-    uint64_t input_size;
-    uint64_t output_size;
     const char *load_spec;
 
     max_engine_t *dfe;          /* Used only when the bitstream uses  1 fpga */
