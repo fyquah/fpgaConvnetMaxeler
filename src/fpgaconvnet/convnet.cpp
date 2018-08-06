@@ -886,7 +886,6 @@ Convnet::max_run_single_bitstream(
     max_actions_t **actions = new max_actions_t*[num_fpgas];
     timeval t_begin;
     timeval t_end;
-
     t_begin.tv_sec  = 0.0;
     t_begin.tv_usec = 0.0;
     t_end.tv_sec  = 0.0;
@@ -952,7 +951,6 @@ Convnet::max_run_single_bitstream(
     void *tmp_buffer_out = NULL;
 
     for (unsigned i = 0; i < num_fpgas ; i++) {
-
         dfe = max_load(max_files[bitstream_id][i], load_spec);
 
         logging::stdout(logging::INFO) << "Simulating FPGA " << i << " ..." << std::endl;
