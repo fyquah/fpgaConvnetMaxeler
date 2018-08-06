@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <fstream>
 #include <iostream>
+#include <sstream>
 #include <cstring>
 
 #include "fpgaconvnet/protos/parameters.pb.h"
@@ -14,7 +15,7 @@
 #ifdef __SIM__
     static const uint64_t N = 6;
 #else
-    static const uint64_t N = 1000000;
+    static const uint64_t N = 300000;
 #endif
 
 
@@ -58,13 +59,27 @@ std::vector<float> run_feature_extraction(
 
 #ifndef __SIM__
     // this is to measure latency
-    std::vector<double> times;
-    for (int i = 0 ; i < 1000 ; i++) {
-        double p;
-        convnet.max_run_inference(6, images, true, &p);
-        times.push_back(p);
+    std::vector<unsigned> counts;
+    counts.push_back(6);
+    counts.push_back(12);
+    counts.push_back(18);
+
+    for (unsigned j = 0; j < counts.size() ; j++) {
+        std::vector<double> times;
+        std::stringstream ss;
+
+        for (int i = 0 ; i < 1000 ; i++) {
+            double p;
+            convnet.max_run_inference(counts[j], images, true, &p);
+            times.push_back(p);
+        }
+
+        ss << "../results/latency_";
+        ss << N;
+        ss << ".txt";
+        fpgaconvnet::dump_latencies(ss.str().c_str(), times);
     }
-    fpgaconvnet::dump_latencies("latency_6.txt", times);
+
 #endif
 
     return extracted_features;
