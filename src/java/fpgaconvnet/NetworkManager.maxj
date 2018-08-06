@@ -27,8 +27,8 @@ import fpgaconvnet.kernels.NullSourceKernel;
 
 public class NetworkManager extends CustomManager {
 
-    private NullSinkKernel nullSink = null;
-    private NullSourceKernel nullSource = null;
+    private List<NullSinkKernel> nullSinks;
+    private List<NullSourceKernel> nullSources;
     private final boolean isSimulation;
     private final int fpgaId;
     private final int bitstreamId;
@@ -138,11 +138,11 @@ public class NetworkManager extends CustomManager {
         for (int i = 0 ; i < computationChains.size() ; i++) {
             computationChains[i].setKernelTimings(ei, N, init);
         }
-        if (nullSink != null) {
-            ei.setTicks(nullSink.getName(), 0);
+        for (int i = 0 ; i < nullSinks.size() ; i++) {
+            ei.setTicks(nullSinks[i].getName(), 0);
         }
-        if (nullSource != null) {
-            ei.setTicks(nullSource.getName(), 0);
+        for (int i = 0 ; i < nullSources.size() ; i++) {
+            ei.setTicks(nullSources[i].getName(), 0);
         }
 
         Parameters.LayerParameter firstLayer = networkParameters.getLayer(0);
@@ -347,8 +347,9 @@ public class NetworkManager extends CustomManager {
                 MaxRingBidirectionalStream maxRingStream = addMaxRingBidirectionalStream(
                         "source_stream", inputRingConnection());
                 fromLink = maxRingStream.getLinkFromRemoteDFE();
-                nullSource = new NullSourceKernel(makeKernelParameters("null_source"));
+                NullSourceKernel nullSource = new NullSourceKernel(makeKernelParameters("null_source"));
                 maxRingStream.getLinkToRemoteDFE() <== addKernel(nullSource).getOutput("source");
+                nullSources.add(nullSource);
 
             }
         }
@@ -364,10 +365,32 @@ public class NetworkManager extends CustomManager {
                 MaxRingBidirectionalStream maxRingStream = addMaxRingBidirectionalStream(
                         "dest_stream", outputRingConnection());
                 toLink = maxRingStream.getLinkToRemoteDFE();
-                nullSink = new NullSinkKernel(makeKernelParameters("null_sink"));
+                NullSinkKernel nullSink = new NullSinkKernel(makeKernelParameters("null_sink"));
                 addKernel(nullSink).getInput("sink") <== maxRingStream.getLinkFromRemoteDFE();
-
+                nullSinks.add(nullSink);
             }
+        }
+
+        // When off-chip memory is used, maxeler requires a connection that
+        // goes into LMEM and goes out of LMEM.
+        if (fpgaId == 0 && getNumFpgaUsedInBitstream() > 1) {
+            DFELink dummy_link = lmem.addStreamToLMem(
+                    "tocpu_null",
+                    LMemCommandGroup.MemoryAccessPattern.LINEAR_1D);
+            NullSourceKernel nullSource = new NullSourceKernel(makeKernelParameters
+                    ("null_source_lmem"));
+            dummy_link <== addKernel(nullSource).getOutput("source");
+            nullSources.add(nullSource);
+
+        } else if (fpgaId == getNumFpgaUsedInBitstream() - 1 && fpgaId != 0) {
+            DFELink dummy_link = lmem.addStreamFromLMem(
+                    "fromcpu_null",
+                    LMemCommandGroup.MemoryAccessPattern.LINEAR_1D);
+            NullSinkKernel nullSink = new NullSinkKernel(
+                    makeKernelParameters("null_sink_lmem"));
+            addKernel(nullSink).getInput("sink") <== dummy_link;
+            nullSinks.add(nullSink);
+
         }
 
         /* Kernel logic transfer */
@@ -410,6 +433,8 @@ public class NetworkManager extends CustomManager {
         computationChains = new ArrayList<ComputationChain>();
         lmem = null;
         isSimulation = engineParameters.getTarget().toString().trim().equals("DFE_SIM");
+        nullSinks = new ArrayList<NullSinkKernel>();
+        nullSources = new ArrayList<NullSourceKernel>();
 
         config.setAllowNonMultipleTransitions(true);
         debug.setDebugLevel(new DebugLevel().setHasStreamStatus(true));
