@@ -94,6 +94,7 @@ private:
     max_file_t* lmem_maxfile;
     std::map<std::pair<int, int>, int> fpga_input_size;
     std::map<std::pair<int, int>, int> fpga_output_size;
+    int m_last_executed_bitstream;
 
     Convnet(const Convnet &) {}
     void set_layer_weights(

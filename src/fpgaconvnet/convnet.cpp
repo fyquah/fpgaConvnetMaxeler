@@ -448,46 +448,25 @@ void Convnet::set_layer_weights(
     char buffer[30];
     sprintf(buffer, "kernel_%d", layer.layer_id());
 
-    // TODO(fyq14): While it is not possible to be sure that that the weights is
-    //              there all the time, we can make some speculative claims.
-    //              This is possible when we invoke the maxfile two times in a row.
-    if (false) {
-        logging::stdout(logging::INFO)
-                << "Host-initialized weights has been set in previous calls."
-                << std::endl;
-        if (calculation::is_layer_cpu_initialized(layer)) {
-            sprintf(buffer, "kernel_%d", layer.layer_id());
-            max_queue_input(action, buffer, NULL, 0);
-        }
-        sprintf(buffer, "bias_%d", layer.layer_id());
-        max_queue_input(action, buffer, NULL, 0);
+    if (calculation::is_layer_cpu_initialized(layer)) {
+        uint64_t stream_size = calculation::cpu_weights_stream_size(layer);
+        uint16_t *values = new uint16_t[stream_size];
 
-    } else {
-        logging::stdout(logging::INFO)
-                << "Passing in host-initialized weights (This should only be done once)."
-                << buffer << std::endl;
-
-        if (calculation::is_layer_cpu_initialized(layer)) {
-            uint64_t stream_size = calculation::cpu_weights_stream_size(layer);
-            uint16_t *values = new uint16_t[stream_size];
-
-            queue_weights.push_back(values);
-            std::memcpy(
-                    values,
-                    worker_kernels,
-                    sizeof(fixed_point_t) * stream_size);
-            max_queue_input(
-                    action, buffer, values,
-                    sizeof(fixed_point_t) * stream_size);
-
-        }
-
-        sprintf(buffer, "bias_%d", layer.layer_id());
+        queue_weights.push_back(values);
+        std::memcpy(
+                values,
+                worker_kernels,
+                sizeof(fixed_point_t) * stream_size);
         max_queue_input(
-                action, buffer, bias,
-                sizeof(fixed_point_t) * calculation::bias_stream_size(layer));
+                action, buffer, values,
+                sizeof(fixed_point_t) * stream_size);
+
     }
 
+    sprintf(buffer, "bias_%d", layer.layer_id());
+    max_queue_input(
+            action, buffer, bias,
+            sizeof(fixed_point_t) * calculation::bias_stream_size(layer));
 }
 
 Convnet::Convnet(
@@ -540,6 +519,7 @@ void Convnet::constructor(
     dfe = NULL;
     dfe_array = NULL;
     lmem_maxfile = lmem_init();
+    m_last_executed_bitstream = -1;
 
     for (auto it = network_params.layer().begin();
             it != network_params.layer().end();
@@ -846,6 +826,7 @@ Convnet::max_load_input_data(const float *images, uint64_t N)
     max_actions_free(write_action);
     max_unload(dfe);
     dfe = NULL;
+    m_last_executed_bitstream = -1;
 }
 
 void
@@ -876,6 +857,7 @@ Convnet::max_read_output_data(float * images, uint64_t N)
     max_actions_free(read_action);
     max_unload(dfe);
     dfe = NULL;
+    m_last_executed_bitstream = -1;
 }
 
 void
@@ -883,6 +865,8 @@ Convnet::max_run_single_bitstream(
         uint64_t N, unsigned bitstream_id, double *p_timetaken)
 {
     const unsigned num_fpgas = get_num_fpga_for_bitstream(bitstream_id);
+    const bool initialised_weights = m_last_executed_bitstream == int(bitstream_id);
+
     max_actions_t **actions = new max_actions_t*[num_fpgas];
     timeval t_begin;
     timeval t_end;
@@ -897,14 +881,38 @@ Convnet::max_run_single_bitstream(
 
     for (int i = 0; i < network_params.layer_size() ; i++) {
         auto it = &network_params.layer(i);
+        auto layer = *it;
 
         if (it->bitstream_id() != bitstream_id) {
             continue;
         }
 
         if (it->has_conv()) {
-            set_layer_weights(
-                    actions[it->fpga_id()], *it, worker_kernels[i], bias[i]);
+            char buffer[30];
+            sprintf(buffer, "kernel_%d", it->layer_id());
+            max_actions_t *action = actions[it->fpga_id()];
+
+            if (initialised_weights) {
+                logging::stdout(logging::INFO)
+                        << "Host-initialized weights has been set "
+                        << "in previous calls."
+                        << std::endl;
+                if (calculation::is_layer_cpu_initialized(layer)) {
+                    sprintf(buffer, "kernel_%d", layer.layer_id());
+                    max_queue_input(action, buffer, NULL, 0);
+                }
+                sprintf(buffer, "bias_%d", layer.layer_id());
+                max_queue_input(action, buffer, NULL, 0);
+
+            } else {
+                logging::stdout(logging::INFO)
+                        << "Passing in host-initialized weights "
+                        << "(This should only be done once)."
+                        << buffer << std::endl;
+                set_layer_weights(
+                        action, *it, worker_kernels[i], bias[i]);
+            }
+
 
         } else if (it->has_lrn()) {
             /* assuming binomial approximation used. */
@@ -930,7 +938,12 @@ Convnet::max_run_single_bitstream(
 
     for (unsigned i = 0 ; i < num_fpgas ; i++) {
         max_set_param_uint64t(actions[i], "N", N);
-        max_set_param_uint64t(actions[i], "init", 1);
+
+        if (initialised_weights) {
+            max_set_param_uint64t(actions[i], "init", 0);
+        } else {
+            max_set_param_uint64t(actions[i], "init", 1);
+        }
     }
 
     const uint64_t addressIn = get_input_address_for_bitstream(
@@ -1028,6 +1041,7 @@ Convnet::max_run_single_bitstream(
     delete[] actions;
 
     *p_timetaken = compute_time_difference(t_begin, t_end);
+    m_last_executed_bitstream = bitstream_id;
 }
 
 
@@ -1063,6 +1077,7 @@ std::vector<float> Convnet::max_run_inference(
 
         logging::Indentation more_indent;
         double this_time_taken;
+        max_run_single_bitstream(N, i, &this_time_taken);
         max_run_single_bitstream(N, i, &this_time_taken);
 
         time_taken += this_time_taken;
