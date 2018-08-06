@@ -393,6 +393,7 @@ effective_throughput(const protos::Network & network, const unsigned bitstream_i
     throughput_t pt = pipeline_throughput(network, bitstream_id);
 
     if (num_parallel_pipelines * pt.throughput < bandwidth_throughput_limit(network, bitstream_id)) {
+      pt.throughput = pt.throughput * num_parallel_pipelines;
       return pt;
     } else {
       const throughput_t ret =

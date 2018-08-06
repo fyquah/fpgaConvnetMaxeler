@@ -86,8 +86,10 @@ PlaceBitstream::get_local_solution(unsigned start_inclusive, unsigned end_inclus
 
     auto optimized_subnetwork = b.get_result();
     ret.success = true;
-    ret.pipeline_throughput  = calculation::pipeline_throughput(optimized_subnetwork,  -1);
-    ret.effective_throughput = calculation::effective_throughput(optimized_subnetwork, -1);
+    ret.pipeline_throughput  = calculation::pipeline_throughput(
+            optimized_subnetwork,  -1).throughput;
+    ret.effective_throughput = calculation::effective_throughput(
+            optimized_subnetwork, -1).throughput;
 
     for (int i = 0; i < optimized_subnetwork.layer_size(); i++) {
         layer_config_t layer_config;
