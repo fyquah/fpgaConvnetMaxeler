@@ -91,6 +91,7 @@ private:
     max_engine_t *dfe;          /* Used only when the bitstream uses  1 fpga */
     max_engarray_t *dfe_array;  /* Used only when the bitstream uses >1 fpga */
     std::vector<std::vector<max_file_t *> > max_files;
+    max_file_t* lmem_maxfile;
     std::map<std::pair<int, int>, int> fpga_input_size;
     std::map<std::pair<int, int>, int> fpga_output_size;
 

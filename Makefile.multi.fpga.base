@@ -60,12 +60,7 @@ fpgaconvnet/target_main_sim.o: main.cpp $(TARGET_SIM_OBJS) targets.h
 		-D__SIM__ -c -o $@
 
 
-target_sim: fpgaconvnet/convnet_sim.o \
-		fpgaconvnet/common.o \
-		fpgaconvnet/target_main_sim.o \
-		fpgaconvnet/protos/parameters.pb.o \
-		$(TARGET_SIM_OBJS) \
-		$(ADDITIONAL_OBJS)
+target_sim: $(TARGET_SIM_OBJS) $(LMEM_SIM_OBJ) $(FPGACONVNET_SIM_OBJ_FILES) fpgaconvnet/target_main_sim.o $(ADDITIONAL_OBJS) 
 	$(CPUCOMPILER) -D__SIM__ $(ALL_FLAGS) -o $@ $^ $(LFLAGS)
 
 
@@ -114,11 +109,7 @@ target_main_dfe.o: main.cpp $(TARGET_DFE_OBJS) targets.h
 dfe_maxfiles: $(TARGET_DFE_MAXFILES)
 
 
-target_dfe: fpgaconvnet/convnet.o fpgaconvnet/common.o \
-		fpgaconvnet/protos/parameters.pb.o \
-		target_main_dfe.o \
-		$(TARGET_DFE_OBJS) \
-		$(ADDITIONAL_OBJS)
+target_dfe: $(TARGET_DFE_OBJS) $(LMEM_DFE_OBJ) $(FPGACONVNET_DFE_OBJ_FILES) target_main_dfe.o $(ADDITIONAL_OBJS)
 	$(CPUCOMPILER) $(ALL_FLAGS) -o $@ $^ $(LFLAGS)
 
 

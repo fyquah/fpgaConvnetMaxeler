@@ -2,6 +2,7 @@
 #include <fstream>
 #include <iostream>
 #include <cstring>
+#include <sstream>
 
 #include "fpgaconvnet/protos/parameters.pb.h"
 #include "fpgaconvnet/mnist.h"
@@ -12,9 +13,9 @@
 
 
 #ifdef __SIM__
-    static const uint64_t N = 6;
+    static const uint64_t N = 3;
 #else
-    static const uint64_t N = 10000;
+    static const uint64_t N = 30000;
 #endif
 
 
@@ -44,7 +45,7 @@ std::vector<float> run_feature_extraction(
     convnet.max_init_weights();
 
     /* warm up the DFE with the weights. */
-    extracted_features = convnet.max_run_inference(N, images, false);
+    extracted_features = convnet.max_run_inference(N, images, true);
 #ifndef __SIM__
     extracted_features = convnet.max_run_inference(N, images, true);
 #endif
@@ -57,13 +58,28 @@ std::vector<float> run_feature_extraction(
 
 #ifndef __SIM__
     // this is to measure latency
-    std::vector<double> times;
-    for (int i = 0 ; i < 1000 ; i++) {
-        double p;
-        convnet.max_run_inference(1, images, true, &p);
-        times.push_back(p);
+    std::vector<unsigned> counts;
+    counts.push_back(3);
+    counts.push_back(6);
+    counts.push_back(9);
+
+    for (unsigned j = 0; j < counts.size() ; j++) {
+        const uint64_t N = counts[j];
+
+        std::vector<double> times;
+        for (int i = 0 ; i < 1000 ; i++) {
+            double p;
+            convnet.max_run_inference(N, images, true, &p);
+            times.push_back(p);
+        }
+
+        std::stringstream ss;
+        ss << "../results/latency_reconfig_";
+        ss << N;
+        ss << ".txt";
+        fpgaconvnet::dump_latencies(ss.str().c_str(), times);
     }
-    fpgaconvnet::dump_latencies("latency.txt", times);
+
 #endif
 
     return extracted_features;

@@ -10,8 +10,20 @@
 
 #include <Eigen/Dense>
 
+
 #include "fpgaconvnet/convnet.h"
 #include "fpgaconvnet/protos/parameters.pb.h"
+
+// Generated from compiling maxfile for interacting with LMem
+#include "lmem.h"
+
+static double
+compute_time_difference(timeval t_begin, timeval t_end)
+{
+    double begin = double(t_begin.tv_sec) * 1000000 + double(t_begin.tv_usec);
+    double end = double(t_end.tv_sec) * 1000000 + double(t_end.tv_usec);
+    return end - begin;
+}
 
 
 static void generic_load(std::string filename, int count, float *output)
@@ -206,8 +218,9 @@ void verify_conv_output(
             total_pixel_magnitude += std::abs(obtained);
             total_pixels += 1;
 
-            if (std::abs(obtained - expected) > 0.01) {
+            if (isnan(obtained) || std::abs(obtained - expected) > 0.01) {
                 ctr++;
+                logging::stdout(logging::WARNING) << j << "\t| BAD: Obtained " << obtained << ", expected " << expected << std::endl;
             }
             // else {
             //     logging::stdout(WARNING) << j << "\t| OKAY: Obtained " << obtained << ", expected " << expected << std::endl;
@@ -526,6 +539,7 @@ void Convnet::constructor(
     load_spec = arg_load_spec;
     dfe = NULL;
     dfe_array = NULL;
+    lmem_maxfile = lmem_init();
 
     for (auto it = network_params.layer().begin();
             it != network_params.layer().end();
@@ -652,7 +666,7 @@ void Convnet::max_init_weights()
         }
 
         max_actions_t *write_action = max_actions_init(
-                max_files[0][0], "writeLMem");
+                lmem_maxfile, "writeLMem");
         const uint64_t address =
                 layer.conv().weight_address_base();
         const uint64_t stream_size =
@@ -677,7 +691,7 @@ void Convnet::max_init_weights()
                 (void*) &worker_kernels[i][0],
                 stream_size);
 
-        dfe = max_load(max_files[0][0], load_spec);
+        dfe = max_load(lmem_maxfile, load_spec);
         max_run(dfe, write_action);
         max_actions_free(write_action);
         max_unload(dfe);
@@ -751,13 +765,15 @@ Convnet::get_address_byte_offset(uint64_t N)
     }
 }
 
+uint64_t BASE_OFFSET = 384 * 100;
+
 uint64_t
 Convnet::get_input_address_for_bitstream(unsigned bitstream, uint64_t N)
 {
     if (bitstream % 2 == 0) {
-        return 0;
+        return BASE_OFFSET;
     } else {
-        return get_address_byte_offset(N);
+        return BASE_OFFSET + get_address_byte_offset(N);
     }
 }
 
@@ -766,9 +782,9 @@ uint64_t
 Convnet::get_output_address_for_bitstream(unsigned bitstream, uint64_t N)
 {
     if (bitstream % 2 == 1) {
-        return 0;
+        return BASE_OFFSET;
     } else {
-        return get_address_byte_offset(N);
+        return BASE_OFFSET + get_address_byte_offset(N);
     }
 }
 
@@ -817,9 +833,8 @@ Convnet::max_load_input_data(const float *images, uint64_t N)
         << address
         << std::endl;
 
-    dfe = max_load(max_files[0][0], load_spec);
-    max_actions_t *write_action = max_actions_init(
-            max_files[0][0], "writeLMem");
+    dfe = max_load(lmem_maxfile, load_spec);
+    max_actions_t *write_action = max_actions_init(lmem_maxfile, "writeLMem");
     max_set_param_uint64t(write_action, "start", address);
     max_set_param_uint64t(write_action, "size", stream_size);
     max_queue_input(
@@ -841,7 +856,7 @@ Convnet::max_read_output_data(float * images, uint64_t N)
     const uint64_t address = get_output_address_for_bitstream(
             get_num_bitstreams() - 1, N);
 
-    dfe = max_load(max_files[0][0], load_spec);
+    dfe = max_load(lmem_maxfile, load_spec);
     logging::stdout(logging::INFO)
         << "Reading " << N << " images with stream size of "
         << stream_size << " bytes from address "
@@ -849,7 +864,7 @@ Convnet::max_read_output_data(float * images, uint64_t N)
         << std::endl;
 
     max_actions_t *read_action = max_actions_init(
-            max_files[0][0], "readLMem");
+            lmem_maxfile, "readLMem");
     max_set_param_uint64t(read_action, "start", address);
     max_set_param_uint64t(read_action, "size", stream_size);
     max_queue_output(
@@ -937,6 +952,7 @@ Convnet::max_run_single_bitstream(
     void *tmp_buffer_out = NULL;
 
     for (unsigned i = 0; i < num_fpgas ; i++) {
+
         dfe = max_load(max_files[bitstream_id][i], load_spec);
 
         logging::stdout(logging::INFO) << "Simulating FPGA " << i << " ..." << std::endl;
@@ -974,7 +990,16 @@ Convnet::max_run_single_bitstream(
     }
 #else
     if (num_fpgas == 1) {
+        __sync_synchronize();
+        gettimeofday(&t_begin, NULL);
         dfe = max_load(max_files[bitstream_id][0], load_spec);
+        gettimeofday(&t_end, NULL);
+        __sync_synchronize();
+        logging::stdout(logging::INFO)
+            << "max_load took "
+            << compute_time_difference(t_begin, t_end)
+            << " microseconds\n";
+
         __sync_synchronize();
         gettimeofday(&t_begin, NULL);
         max_run(dfe, actions[0]);
@@ -985,9 +1010,10 @@ Convnet::max_run_single_bitstream(
 
     } else {
         dfe_array = max_load_mixed_array(
-                (max_file_t**) &max_files[bistream_id][0], num_fpgas, load_spec);
-        max_actarray_t *act_array = max_mixed_actarray_init(&max_files[0], num_fpgas);
-        for (int i = 0 ; i < num_fpgas ; i++) {
+                (max_file_t**) &max_files[bitstream_id][0], num_fpgas, load_spec);
+        max_actarray_t *act_array = max_mixed_actarray_init(
+                &max_files[bitstream_id][0], num_fpgas);
+        for (unsigned i = 0 ; i < num_fpgas ; i++) {
             max_set_action(act_array, i, actions[i]);
         }
 
@@ -997,16 +1023,13 @@ Convnet::max_run_single_bitstream(
         gettimeofday(&t_end, NULL);
         __sync_synchronize();
 
-        max_unload_mixed_array(dfe_array);
+        max_unload_array(dfe_array);
     }
 #endif
 
     delete[] actions;
 
-    double begin = double(t_begin.tv_sec) * 1000000 + double(t_begin.tv_usec);
-    double end = double(t_end.tv_sec) * 1000000 + double(t_end.tv_usec);
-    double delta = end - begin;
-    *p_timetaken = delta;
+    *p_timetaken = compute_time_difference(t_begin, t_end);
 }
 
 

@@ -51,30 +51,6 @@ public class NetworkManager extends CustomManager {
         return layer.getParamsCase().equals(Parameters.LayerParameter.ParamsCase.LRN);
     }
 
-    private static EngineInterface interfaceWrite(String name) {
-        EngineInterface ei = new EngineInterface(name);
-        InterfaceParam start = ei.addParam("start", CPUTypes.UINT64);
-        InterfaceParam size = ei.addParam("size", CPUTypes.UINT64);
-        InterfaceParam sizeInBytes = size;
-
-        ei.setStream("data_in", CPUTypes.FLOAT, sizeInBytes);
-        ei.setLMemLinear("cpu2lmem", start, sizeInBytes);
-        ei.ignoreAll(Direction.IN_OUT);
-        return ei;
-    }
-
-    private static EngineInterface interfaceRead(String name) {
-        EngineInterface ei = new EngineInterface(name);
-        InterfaceParam start = ei.addParam("start", CPUTypes.UINT64);
-        InterfaceParam size = ei.addParam("size", CPUTypes.UINT64);
-        InterfaceParam sizeInBytes = size;
-
-        ei.setStream("data_out", CPUTypes.FLOAT, sizeInBytes);
-        ei.setLMemLinear("lmem2cpu", start, sizeInBytes);
-        ei.ignoreAll(Direction.IN_OUT);
-        return ei;
-    }
-
     private int getNumFpgaUsedInBitstream() {
         int numFpgaUsed = 0;
 
@@ -420,21 +396,6 @@ public class NetworkManager extends CustomManager {
                 link.getSecond() <== dataStream;
             }
         }
-
-        /* Weights initialization. */
-        if (true) {
-            DFELink cpu2lmem = lmem.addStreamToLMem(
-                    "cpu2lmem", LMemCommandGroup.MemoryAccessPattern.LINEAR_1D);
-            DFELink dataIn = addStreamFromCPU("data_in");
-            cpu2lmem <== dataIn;
-        }
-
-        if (true) {
-            DFELink lmem2cpu = lmem.addStreamFromLMem(
-                    "lmem2cpu", LMemCommandGroup.MemoryAccessPattern.LINEAR_1D);
-            DFELink dataOut = addStreamToCPU("data_out");
-            dataOut <== lmem2cpu;
-        }
     }
 
     public NetworkManager(
@@ -482,12 +443,5 @@ public class NetworkManager extends CustomManager {
 
         /* Interfaces */
         createSLiCinterface(interfaceDefault());
-
-        // TODO: Move these two interfaces to a different maxfile to remove resource
-        //       contention.
-        if (bitstreamId == 0 && fpgaId == 0) {
-            createSLiCinterface(interfaceWrite("writeLMem"));
-            createSLiCinterface(interfaceRead("readLMem"));
-        }
     }
 }

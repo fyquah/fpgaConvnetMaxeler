@@ -1,0 +1,94 @@
+package fpgaconvnet;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import com.maxeler.maxcompiler.v2.build.EngineParameters;
+import com.maxeler.maxcompiler.v2.managers.BuildConfig;
+import com.maxeler.maxcompiler.v2.managers.custom.CustomManager;
+import com.maxeler.maxcompiler.v2.managers.custom.DFELink;
+import com.maxeler.maxcompiler.v2.managers.custom.stdlib.DebugLevel;
+import com.maxeler.maxcompiler.v2.managers.custom.stdlib.LMemInterface;
+import com.maxeler.maxcompiler.v2.managers.custom.stdlib.LMemCommandGroup;
+import com.maxeler.maxcompiler.v2.managers.engine_interfaces.CPUTypes;
+import com.maxeler.maxcompiler.v2.managers.engine_interfaces.EngineInterface;
+import com.maxeler.maxcompiler.v2.managers.engine_interfaces.EngineInterface.Direction;
+import com.maxeler.maxcompiler.v2.managers.engine_interfaces.InterfaceParam;
+
+
+// import com.maxeler.maxcompiler.v2.managers.custom.stdlib.LMemConfig;  /* FOR MAXCOMPILER 2018.1 */
+import com.maxeler.maxcompiler.v2.managers.custom.stdlib.MemoryControllerConfig; /* FOR MAXCOMPILER 2015.2 */
+
+
+public class LMemManager extends CustomManager {
+
+    private LMemInterface lmem;
+
+    private static EngineInterface interfaceWrite(String name) {
+        EngineInterface ei = new EngineInterface(name);
+        InterfaceParam start = ei.addParam("start", CPUTypes.UINT64);
+        InterfaceParam size = ei.addParam("size", CPUTypes.UINT64);
+        InterfaceParam sizeInBytes = size;
+
+        ei.setStream("data_in", CPUTypes.FLOAT, sizeInBytes);
+        ei.setLMemLinear("cpu2lmem", start, sizeInBytes);
+        ei.ignoreAll(Direction.IN_OUT);
+        return ei;
+    }
+
+    private static EngineInterface interfaceRead(String name) {
+        EngineInterface ei = new EngineInterface(name);
+        InterfaceParam start = ei.addParam("start", CPUTypes.UINT64);
+        InterfaceParam size = ei.addParam("size", CPUTypes.UINT64);
+        InterfaceParam sizeInBytes = size;
+
+        ei.setStream("data_out", CPUTypes.FLOAT, sizeInBytes);
+        ei.setLMemLinear("lmem2cpu", start, sizeInBytes);
+        ei.ignoreAll(Direction.IN_OUT);
+        return ei;
+    }
+
+    public LMemManager(EngineParameters engineParameters) {
+        super(engineParameters);
+
+        config.setAllowNonMultipleTransitions(true);
+        debug.setDebugLevel(new DebugLevel().setHasStreamStatus(true));
+
+        MemoryControllerConfig config = new MemoryControllerConfig();
+        config.setDataFIFODepth(32);
+        config.setDataFifoImplementUsingLUTRAM(true);
+        lmem = addLMemInterface();
+        lmem.setMemoryControllerConfig(config);
+
+        DFELink cpu2lmem = lmem.addStreamToLMem(
+                "cpu2lmem", LMemCommandGroup.MemoryAccessPattern.LINEAR_1D);
+        DFELink dataIn = addStreamFromCPU("data_in");
+        cpu2lmem <== dataIn;
+
+        DFELink lmem2cpu = lmem.addStreamFromLMem(
+                "lmem2cpu", LMemCommandGroup.MemoryAccessPattern.LINEAR_1D);
+        DFELink dataOut = addStreamToCPU("data_out");
+        dataOut <== lmem2cpu;
+
+        createSLiCinterface(interfaceWrite("writeLMem"));
+        createSLiCinterface(interfaceRead("readLMem"));
+    }
+
+    public static void main (String[] args) {
+        try {
+            EngineParameters engineParameters = new EngineParameters(args);
+            LMemManager manager = new LMemManager(engineParameters);
+            BuildConfig buildConfig = manager.getBuildConfig();
+            buildConfig.setBuildEffort(BuildConfig.Effort.HIGH);
+            buildConfig.setMPPRCostTableSearchRange(1, 20);
+            buildConfig.setMPPRParallelism(3);
+            buildConfig.setEnableTimingAnalysis(true);
+            manager.setBuildConfig(buildConfig);
+            manager.build();
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            System.exit(-1);
+        }
+    }
+}
