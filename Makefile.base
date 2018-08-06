@@ -125,6 +125,9 @@ fpgaconvnet/convnet.o: fpgaconvnet fpgaconvnet/protos/parameters.pb.h
 fpgaconvnet/modelling/optimizer.o: fpgaconvnet/protos/parameters.pb.h \
 				   fpgaconvnet/protos/parameters.pb.o
 
+fpgaconvnet/modelling/search_configuration.o: fpgaconvnet/protos/parameters.pb.h \
+				              fpgaconvnet/protos/parameters.pb.o
+
 fpgaconvnet/modelling/place_fpga.o: fpgaconvnet/protos/parameters.pb.h \
 				    fpgaconvnet/protos/parameters.pb.o
 
@@ -134,6 +137,7 @@ fpgaconvnet/modelling/place_bitstream.o: fpgaconvnet/protos/parameters.pb.h \
 fpgaconvnet/modelling/optimizer: fpgaconvnet/modelling/optimizer.o \
 				 fpgaconvnet/modelling/place_fpga.o \
 				 fpgaconvnet/modelling/place_bitstream.o \
+				 fpgaconvnet/modelling/search_configuration.o \
 				 fpgaconvnet/protos/parameters.pb.o \
 				 fpgaconvnet/modelling/resource_model.o \
 				 fpgaconvnet/common.o

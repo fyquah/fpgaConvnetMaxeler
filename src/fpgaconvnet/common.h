@@ -64,6 +64,38 @@ const double PCIE_BANDWIDTH    = 4e9;  // 2GB/s in each direction, so 4GB total
 const double LMEM_BANDWIDTH    = 38e9; // 38GB/s in TOTAL
 const double MAXRING_BANDWIDTH = 5e9;
 
+enum bottleneck_type_t {
+  BOTTLENECK_COMPUTE,
+  BOTTLENECK_IO,
+  BOTTLENECK_MAXRING,
+};
+
+
+struct compute_bottleneck_t {
+  uint32_t layer_id;
+};
+
+
+struct maxring_bottleneck_t {
+  uint32_t layer_id;
+};
+
+
+union bottleneck_t {
+  compute_bottleneck_t compute;
+  maxring_bottleneck_t maxring;
+};
+
+
+struct throughput_t {
+  double            throughput;
+  bottleneck_type_t bottleneck_type;
+  bottleneck_t      bottleneck;
+
+  bool operator<(const fpgaconvnet::calculation::throughput_t &) const;
+  bool operator>(const fpgaconvnet::calculation::throughput_t &) const;
+};
+
 /* Throughput calculation in terms of images a second.
  *
  * Bitstream, in the comment below, refers to the maxfiles that are used
@@ -100,12 +132,23 @@ const double MAXRING_BANDWIDTH = 5e9;
  *                         throughput whilist sacrificing effective
  *                         throughput. This is the primary evaluation
  *                         metric for latency-insensitive batch processing.
+ *
+ *                         Unlike pipeline and effective throughput,
+ *                         real throughput is a scalar. This is because
+ *                         there is not true bottleneck bitstream - the
+ *                         numbers are not minimised over, but rather, taken
+ *                         as the reciprocal of their sum. Namely:
+ *
+ *                         th = 1 / (1 / th_1 + 1/th_2 + ... + 1/th_n)
+ *
+ *                         where th refers to throughput.
  *                         
  */
-double pipeline_throughput(
+throughput_t pipeline_throughput(
         const protos::Network & network, const unsigned bitstream_id);
-double effective_throughput(
+throughput_t effective_throughput(
         const protos::Network & network, const unsigned bitstream_id);
+
 void explain_throughput(const protos::Network & network);
 double real_throughput(const protos::Network & network);
 double min_num_fpga_real_throughput(const protos::Network & network);
@@ -140,5 +183,39 @@ protos::Network insert_fpga_positions(protos::Network, std::vector<int>);
 std::vector<protos::Network> split_by_bitstreams(protos::Network);
 
 }  // fpgaconvnet
+
+
+std::ostream& operator<<(std::ostream & o, const fpgaconvnet::calculation::throughput_t &);
+
+
+/* Auxilary general-purpose utility functions */
+
+static void log_vector(const std::vector<double> & v)
+{
+    fpgaconvnet::logging::stdout() << "[ ";
+    for (int i = 0 ; i < v.size() ; i++) {
+        std::cout << v[i] << " ; ";
+    }
+    std::cout << "]" << std::endl;
+}
+
+
+/* Rounds up x such that ceil % x == 0 */
+static uint64_t ceil_divisible(double x, uint64_t ceil) {
+    uint64_t ret = std::ceil(x);
+
+    if (ret >= ceil) {
+        return ceil;
+    }
+
+    for (; ret < ceil ; ret++) {
+        if (ceil % ret == 0) {
+            return ret;
+        }
+    }
+
+    return ret;
+}
+
 
 #endif
