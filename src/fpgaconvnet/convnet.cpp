@@ -63,8 +63,9 @@ uint64_t total_rom_size(const protos::LayerParameter & layer)
 static inline uint16_t
 cast_float_to_fixed(const float arg) {
 
-    const int num_frac_bits = 12;
-    const int num_int_bits = 4;
+    /* TODO(fyq14): This should be configurable by the user */
+    const int num_frac_bits = 8;
+    const int num_int_bits  = 8;
     const float fixed_point_one = (1 << num_frac_bits);
 
     int x = (int) (arg * fixed_point_one);
