@@ -187,6 +187,7 @@ void verify_conv_output(
     std::ifstream fin(filename.c_str());
     uint32_t total_pixels = 0;
     float total_error = 0.0;
+    float max_error = 0.0;
 
     const protos::LayerParameter & final_layer = network.layer(network.layer_size() - 1);
     const int conv_out_size = (final_layer.output_height() *
@@ -212,10 +213,11 @@ void verify_conv_output(
                 break;
             }
 
+            max_error = std::max(max_error, std::abs(obtained  - expected));
             total_error += std::abs(obtained  - expected);
             total_pixels += 1;
 
-            if (std::abs(obtained - expected) > 0.01) {
+            if (std::abs(obtained - expected) > 0.05) {
                 logging::stdout(logging::WARNING) << j << "\t| ERROR: Obtained " << obtained << ", expected " << expected << std::endl;
             }
             // else {
@@ -224,8 +226,10 @@ void verify_conv_output(
         }
     }
     logging::stdout(logging::INFO)
-        << "Average pixel_error = "
+        << "Mean pixel_error = "
         << float(total_error) / float(total_pixels) << std::endl;
+    logging::stdout(logging::INFO)
+        << "Max pixel error = " << max_error << std::endl;
     fin.close();
 }
 
