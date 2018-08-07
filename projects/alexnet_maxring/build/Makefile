@@ -14,6 +14,20 @@ DFEModel=MAIA
 
 #### BEGIN: ADD CUSTOM TARGETS HERE
 
+model.caffemodel:
+	curl http://dl.caffe.berkeleyvision.org/bvlc_alexnet.caffemodel \
+	  >$@
+	  
+
+deploy.prototxt:
+	curl -sSL https://raw.githubusercontent.com/BVLC/caffe/master/models/bvlc_alexnet/deploy.prototxt \
+	  >$@
+
+testdata: ../gendata.py deploy.prototxt model.caffemodel
+	mkdir -p testdata/weights/
+	mkdir -p testdata/data/
+	python $<
+
 #### END: DO NOT ADD STUFF BEYOND THIS LINE
 
 ifeq ($(shell test -e Makefile.targets && echo -n yes), yes)
