@@ -42,11 +42,13 @@ def main():
 
     im_input  = np.transpose(im_input, (0, 2, 3, 1))
     im_output = np.transpose(net.blobs[last_layer_key].data, (0, 2, 3, 1))
+    logging.info("Input shape = %s" % str(im_input.shape))
+    logging.info("Output shape = %s" % str(im_output.shape))
 
     logging.info("Writing input data to data/input.bin")
     save_to_file("testdata/data/input.bin", im_input.flatten())
     logging.info("Writing input data to data/output.bin")
-    save_to_file("testdata/data/output.bin", im_input.flatten())
+    save_to_file("testdata/data/output.bin", im_output.flatten())
 
 
 if __name__ == "__main__":
