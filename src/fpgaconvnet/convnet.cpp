@@ -63,8 +63,9 @@ uint64_t total_rom_size(const protos::LayerParameter & layer)
 static inline uint16_t
 cast_float_to_fixed(const float arg) {
 
-    const int num_frac_bits = 12;
-    const int num_int_bits = 4;
+    /* TODO(fyq14): This should be configurable by the user */
+    const int num_frac_bits = 8;
+    const int num_int_bits  = 8;
     const float fixed_point_one = (1 << num_frac_bits);
 
     int x = (int) (arg * fixed_point_one);
@@ -187,6 +188,7 @@ void verify_conv_output(
     std::ifstream fin(filename.c_str());
     uint32_t total_pixels = 0;
     float total_error = 0.0;
+    float max_error = 0.0;
 
     const protos::LayerParameter & final_layer = network.layer(network.layer_size() - 1);
     const int conv_out_size = (final_layer.output_height() *
@@ -212,10 +214,11 @@ void verify_conv_output(
                 break;
             }
 
+            max_error = std::max(max_error, std::abs(obtained  - expected));
             total_error += std::abs(obtained  - expected);
             total_pixels += 1;
 
-            if (std::abs(obtained - expected) > 0.01) {
+            if (std::abs(obtained - expected) > 0.05) {
                 logging::stdout(logging::WARNING) << j << "\t| ERROR: Obtained " << obtained << ", expected " << expected << std::endl;
             }
             // else {
@@ -224,8 +227,10 @@ void verify_conv_output(
         }
     }
     logging::stdout(logging::INFO)
-        << "Average pixel_error = "
+        << "Mean pixel_error = "
         << float(total_error) / float(total_pixels) << std::endl;
+    logging::stdout(logging::INFO)
+        << "Max pixel error = " << max_error << std::endl;
     fin.close();
 }
 
