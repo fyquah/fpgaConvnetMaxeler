@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <iostream>
 
 #include "assert.h"
@@ -85,10 +86,41 @@ void PositionFpga::search_recur(
     }
 
     v.push_back(v.back());
-    if (true) {
-        // TODO(fyq14): check resource constraints here to prune
-        //              search space here
-        search_recur(network, v);
+    {
+      std::vector<fpgaconvnet::protos::LayerParameter> layers;
+      for (int i = v.size() - 1; i >= 0 ; i--) {
+        if (v[i] != v.back()) {
+          break;
+        } else {
+          layers.push_back(network.layer(i));
+        }
+      }
+      std::reverse(layers.begin(), layers.end());
+
+      std::vector<fpgaconvnet::resource_model::resource_t> resources;
+      resources.push_back(fpgaconvnet::resource_model::project_single_fpga(
+          fpgaconvnet::resource_model::STREAM_MAX_RING,
+          layers,
+          fpgaconvnet::resource_model::STREAM_MAX_RING));
+      resources.push_back(fpgaconvnet::resource_model::project_single_fpga(
+          fpgaconvnet::resource_model::STREAM_PCIE,
+          layers,
+          fpgaconvnet::resource_model::STREAM_MAX_RING));
+      resources.push_back(fpgaconvnet::resource_model::project_single_fpga(
+          fpgaconvnet::resource_model::STREAM_MAX_RING,
+          layers,
+          fpgaconvnet::resource_model::STREAM_PCIE));
+      resources.push_back(fpgaconvnet::resource_model::project_single_fpga(
+          fpgaconvnet::resource_model::STREAM_PCIE,
+          layers,
+          fpgaconvnet::resource_model::STREAM_PCIE));
+
+      for (int i = 0; i < resources.size() ; i++) {
+        if (fpgaconvnet::resource_model::meets_resource_constraints(resources[i])) {
+          search_recur(network, v);
+          break;
+        }
+      }
     }
     v.pop_back();
 

@@ -3,6 +3,7 @@
 
 #include <cmath>
 #include <iostream>
+#include <sys/time.h>
 
 #include <google/protobuf/text_format.h>
 #include <google/protobuf/io/zero_copy_stream_impl.h>
@@ -223,6 +224,17 @@ static uint64_t ceil_divisible(double x, uint64_t ceil) {
 
     return ret;
 }
+
+
+static double
+compute_time_difference(timeval t_begin, timeval t_end)
+{
+    double begin = double(t_begin.tv_sec) * 1000000 + double(t_begin.tv_usec);
+    double end = double(t_end.tv_sec) * 1000000 + double(t_end.tv_usec);
+    return end - begin;
+}
+
+
 
 
 #endif

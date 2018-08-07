@@ -10,21 +10,12 @@
 
 #include <Eigen/Dense>
 
-
+#include "fpgaconvnet/common.h"
 #include "fpgaconvnet/convnet.h"
 #include "fpgaconvnet/protos/parameters.pb.h"
 
 // Generated from compiling maxfile for interacting with LMem
 #include "lmem.h"
-
-static double
-compute_time_difference(timeval t_begin, timeval t_end)
-{
-    double begin = double(t_begin.tv_sec) * 1000000 + double(t_begin.tv_usec);
-    double end = double(t_end.tv_sec) * 1000000 + double(t_end.tv_usec);
-    return end - begin;
-}
-
 
 static void generic_load(std::string filename, int count, float *output)
 {

@@ -138,8 +138,17 @@ int main (int argc, char **argv)
         << "Running Design Space Exploration:"
         << std::endl;
     bool success = false;
-    fpgaconvnet::protos::Network solution =
-            search_design_space(network, &success);
+
+    timeval t_begin;
+    timeval t_end;
+    gettimeofday(&t_begin, NULL);
+    fpgaconvnet::protos::Network solution = search_design_space(
+          network, &success);
+    gettimeofday(&t_end, NULL);
+    fpgaconvnet::logging::stdout(fpgaconvnet::logging::INFO)
+      << "Design Space exploration took "
+      << compute_time_difference(t_begin, t_end) / 1e6
+      << " seconds"<< std::endl;;
 
     if (success) {
         double ops = fpgaconvnet::calculation::ops(solution);
