@@ -2,9 +2,11 @@
 #define PLACE_FPGA_H
 
 #include <fpgaconvnet/common.h>
+#include <fpgaconvnet/modelling/search_configuration.h>
 
 namespace fpgaconvnet {
 namespace modelling {
+
 
 class PositionFpga {
 private:
@@ -15,7 +17,7 @@ private:
   unsigned considered_solutions;
   unsigned accepted_solutions;
   std::vector<std::vector<int>> solutions;
-  void search_recur(std::vector<int>);
+  void search_recur(const fpgaconvnet::protos::Network &, std::vector<int>);
 public:
   PositionFpga(fpgaconvnet::protos::Network network, const unsigned num_fpga);
   void search();

@@ -36,7 +36,7 @@ TESTENGINEFILES=$(shell cd ${WHEREISROOT}/src && find ./javatest -name "*.maxj")
 CPUFILES=$(shell cd ${WHEREISROOT}/src && find . -name "*.cpp")
 
 # ---- Compiler settings ----
-CXXFLAGS+= -std=c++0x $(INCFLAGS) -g
+CXXFLAGS+= -std=c++0x $(INCFLAGS) -g -O3
 
 # detect the language: do we have .cpp extensions?
 ifneq ($(findstring cpp, $(CPUFILES)), )

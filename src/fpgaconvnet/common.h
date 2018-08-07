@@ -29,16 +29,18 @@ public:
 
 namespace logging {
 
-const int DEBUG = 0;
-const int INFO = 1;
-const int WARNING = 2;
-const int ERROR = 3;
+const int DDEBUG = 0;
+const int DEBUG = 1;
+const int INFO = 2;
+const int WARNING = 3;
+const int ERROR = 4;
 
 std::ostream& stdout(int level = INFO);
 void indent();
 void dedent();
 void log_prefix(const std::string & prefix);
 void set_level(int level);
+void set_level(const char *level);
 
 class Indentation {
 public:
@@ -150,6 +152,8 @@ struct throughput_t {
 throughput_t pipeline_throughput(
         const protos::Network & network, const unsigned bitstream_id);
 throughput_t effective_throughput(
+        const protos::Network & network, const unsigned bitstream_id);
+const double bandwidth_throughput_limit(
         const protos::Network & network, const unsigned bitstream_id);
 
 void explain_throughput(const protos::Network & network);

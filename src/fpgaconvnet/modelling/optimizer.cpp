@@ -1,5 +1,6 @@
 #include <fcntl.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 #include <cmath>
 #include <cstring>
@@ -124,6 +125,10 @@ search_design_space(
 
 int main (int argc, char **argv)
 {
+    if (const char* debug_level = std::getenv("FPGACONVNET_DEBUG_LEVEL")) {
+        fpgaconvnet::logging::set_level(debug_level);
+    }
+
     fpgaconvnet::logging::stdout() << "Loading convnet descriptor:" << std::endl;
     fpgaconvnet::protos::Network network =
 	    fpgaconvnet::load_network_proto(argv[1]);

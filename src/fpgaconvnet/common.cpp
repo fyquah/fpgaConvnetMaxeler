@@ -93,7 +93,7 @@ const char* Exception::what() const throw()
 namespace logging {
 
 static const char* level_strings[] = {
-        "DEBUG", "INFO", "WARNING", "ERROR"
+        "DDEBUG", "DEBUG", "INFO", "WARNING", "ERROR"
 };
 
 static std::string LOG_PREFIX = "default";
@@ -120,6 +120,20 @@ std::ostream& stdout(int level)
 void set_level(int level)
 {
     current_level = level;
+}
+
+void set_level(const char * p)
+{
+    if (p == NULL) {
+        return;
+    }
+
+    for (int i = 0; i < sizeof(level_strings) / sizeof(char*); i++) {
+        if (strcmp(p, level_strings[i]) == 0) {
+            set_level(i);
+            break;
+        }
+    }
 }
 
 void log_prefix(const std::string & prefix)
