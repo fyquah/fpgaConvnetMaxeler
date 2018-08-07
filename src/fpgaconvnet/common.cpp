@@ -276,10 +276,9 @@ throughput_t pipeline_throughput(
     double size =
         network.layer(0).input_height() * network.layer(0).input_width();
 
-    throughput_t ret =
-        { .throughput = bandwidth_throughput_limit(network, bitstream_id),
-          .bottleneck_type = BOTTLENECK_IO
-        };
+    throughput_t ret;
+    ret.throughput = bandwidth_throughput_limit(network, bitstream_id);
+    ret.bottleneck_type = BOTTLENECK_IO;
     int prev_fpga = 0;
 
     std::vector<protos::LayerParameter> relevant_layers;
@@ -329,13 +328,10 @@ throughput_t pipeline_throughput(
         }
 
         layer_throughput_ = layer_throughput_ * frequency;
-        throughput_t layer_throughput =
-          { .throughput = layer_throughput_ ,
-            .bottleneck_type = BOTTLENECK_COMPUTE,
-            .bottleneck = {
-              .compute = { .layer_id = layer.layer_id() }
-            }
-          };
+        throughput_t layer_throughput;
+        layer_throughput.throughput = layer_throughput_ ,
+        layer_throughput.bottleneck_type = BOTTLENECK_COMPUTE,
+        layer_throughput.bottleneck.compute.layer_id = layer.layer_id();
 
         ret = std::min(ret, layer_throughput);
 
@@ -348,13 +344,12 @@ throughput_t pipeline_throughput(
             const double maxring_throughput_ =
                 double(fpgaconvnet::calculation::MAXRING_BANDWIDTH)
                 / double(image_bytes);
-            const throughput_t maxring_throughput =
-              { .throughput = maxring_throughput_,
-                .bottleneck_type = BOTTLENECK_MAXRING,
-                .bottleneck = {
-                  .maxring = { .layer_id = relevant_layers[i - 1].layer_id() }
-                }
-              };
+            throughput_t maxring_throughput;
+            maxring_throughput.throughput = maxring_throughput_,
+            maxring_throughput.bottleneck_type = BOTTLENECK_MAXRING,
+            maxring_throughput.bottleneck.maxring.layer_id = 
+                    relevant_layers[i - 1].layer_id();
+            
 
             ret = std::min(ret, maxring_throughput);
         }
@@ -396,10 +391,10 @@ effective_throughput(const protos::Network & network, const unsigned bitstream_i
       pt.throughput = pt.throughput * num_parallel_pipelines;
       return pt;
     } else {
-      const throughput_t ret =
-        { .throughput = bandwidth_throughput_limit(network, bitstream_id),
-          .bottleneck_type = BOTTLENECK_IO
-        };
+      throughput_t ret;
+      ret.throughput = bandwidth_throughput_limit(network, bitstream_id);
+      ret.bottleneck_type = BOTTLENECK_IO;
+      
       return ret;
     }
 }

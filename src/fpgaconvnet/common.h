@@ -1,6 +1,9 @@
 #ifndef FPGACONVNET_COMMON_H
 #define FPGACONVNET_COMMON_H
 
+#include <cmath>
+#include <iostream>
+
 #include <google/protobuf/text_format.h>
 #include <google/protobuf/io/zero_copy_stream_impl.h>
 
