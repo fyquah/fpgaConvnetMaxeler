@@ -428,6 +428,8 @@ search_design_space_for_bitstream_with_fixed_num_fpga(
 
     fpgaconvnet::logging::stdout()
         << "Reference layer index = " << reference_layer_index << std::endl;
+    fpgaconvnet::logging::stdout()
+        << "Bandwith performance upper bound = " << hi << std::endl;
     fpgaconvnet::logging::stdout() << std::endl;
 
     std::vector<fpgaconvnet::protos::Network> valid_solutions;
@@ -562,16 +564,25 @@ reconfigure_from_layer_id(
                     reference_layer_index,
                     reference_wf,
                     relative_worker_factors);
-        const fpgaconvnet::protos::Network local_solution =
+        const fpgaconvnet::protos::Network this_partial_solution =
             solve_for_ideal_worker_factors(
                     optimizer, subnetwork, ideal_worker_factors);
+        fpgaconvnet::protos::Network this_full_solultion = reference_network;
+        for (int i = 0; i < this_partial_solution.layer_size() ; i++) {
+          *this_full_solultion.mutable_layer()->Mutable(i + starting_layer_index)
+              = this_partial_solution.layer(i);
+        }
+
+        const auto this_throughput = calculation::pipeline_throughput(
+              this_full_solultion, -1);
+
         fpgaconvnet::logging::stdout(fpgaconvnet::logging::DEBUG)
             << "wf = " << reference_wf
             << " | throughput = "
-            << calculation::pipeline_throughput(local_solution, -1)
+            << this_throughput
             << std::endl;
 
-        if (calculation::pipeline_throughput(local_solution, -1) > target_throughput) {
+        if (this_throughput > target_throughput) {
             hi = reference_wf;
             best_solution = reference_wf;
             is_best_solution_set = true;
