@@ -5,11 +5,19 @@ import logging
 
 # Maps from fpgaconvnet to caffe
 layers_mapping = {
-        "conv0": "conv1",
-        "conv3": "conv2",
-        "conv6": "conv3",
-        "conv7": "conv4",
-        "conv8": "conv5",
+        "conv0": "conv1_1",
+        "conv1": "conv1_2",
+        "conv3": "conv2_1",
+        "conv4": "conv2_2",
+        "conv6": "conv3_1",
+        "conv7": "conv3_2",
+        "conv8": "conv3_3",
+        "conv10": "conv4_1",
+        "conv11": "conv4_2",
+        "conv12": "conv4_3",
+        "conv14": "conv5_1",
+        "conv15": "conv5_2",
+        "conv16": "conv5_3",
         }
 last_layer_key = "pool5"
 
@@ -42,6 +50,10 @@ def main():
 
     im_input  = np.transpose(im_input, (0, 2, 3, 1))
     im_output = np.transpose(net.blobs[last_layer_key].data, (0, 2, 3, 1))
+
+    print np.transpose(net.blobs["pool5"].data, (0, 2, 3, 1))
+    print np.transpose(net.blobs["pool4"].data, (0, 2, 3, 1))
+
     logging.info("Input shape = %s" % str(im_input.shape))
     logging.info("Output shape = %s" % str(im_output.shape))
 

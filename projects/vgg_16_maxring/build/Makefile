@@ -14,6 +14,19 @@ DFEModel=MAIA
 
 #### BEGIN: ADD CUSTOM TARGETS HERE
 
+model.caffemodel:
+	curl http://www.robots.ox.ac.uk/~vgg/software/very_deep/caffe/VGG_ILSVRC_16_layers.caffemodel \
+	  >$@
+
+deploy.prototxt:
+	curl -sSL https://gist.githubusercontent.com/ksimonyan/211839e770f7b538e2d8/raw/ded9363bd93ec0c770134f4e387d8aaaaa2407ce/VGG_ILSVRC_16_layers_deploy.prototxt \
+	  >$@
+
+testdata: ../gendata.py deploy.prototxt model.caffemodel
+	mkdir -p testdata/weights/
+	mkdir -p testdata/data/
+	python $<
+
 #### END: DO NOT ADD STUFF BEYOND THIS LINE
 
 ifeq ($(shell test -e Makefile.targets && echo -n yes), yes)
