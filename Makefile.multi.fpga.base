@@ -11,10 +11,10 @@
 ##########################################################
 
 TARGET_SIMMAXDIRS := $(foreach name,$(TARGET_NAMES),$(MAXCOMPILER_BUILD_DIR)/$(name)_$(DFEModel)_DFE_SIM/results)
-TARGET_SIM_MAXFILES := $(foreach name,$(TARGET_NAMES),$(MAXCOMPILER_BUILD_DIR)/$(name)_$(DFEModel)_DFE_SIM/results/$(name).max)
+TARGET_SIM_MAXFILES := $(foreach name,$(TARGET_NAMES),$(MAXCOMPILER_BUILD_DIR)/$(name)_$(DFEModel)_DFE_SIM/$(name).max)
 TARGET_SIM_OBJS := $(foreach name,$(TARGET_NAMES),fpgaconvnet/$(name).sim.o)
 TARGET_DFEMAXDIRS := $(foreach name,$(TARGET_NAMES),$(MAXCOMPILER_BUILD_DIR)/$(name)_$(DFEModel)_DFE/results)
-TARGET_DFE_MAXFILES := $(foreach name,$(TARGET_NAMES),$(MAXCOMPILER_BUILD_DIR)/$(name)_$(DFEModel)_DFE/results/$(name).max)
+TARGET_DFE_MAXFILES := $(foreach name,$(TARGET_NAMES),$(MAXCOMPILER_BUILD_DIR)/$(name)_$(DFEModel)_DFE/$(name).max)
 TARGET_DFE_OBJS := $(foreach name,$(TARGET_NAMES),fpgaconvnet/$(name).dfe.o)
 
 # ==============================
@@ -46,6 +46,7 @@ $(TARGET_SIM_MAXFILES): $(ENGINEFILES) $(JAVA_PROTOS) $(PRJ_OPTIMIZED_DESCRIPTOR
                   target_name="$(notdir $(basename $@))" \
 		  descriptor="$(PRJ_OPTIMIZED_DESCRIPTOR)" \
 		  enableMPCX=$(MPCX)
+	cp $(dir $@)/results/$(notdir $@) $@
 
 
 $(TARGET_SIM_OBJS): $(TARGET_SIM_MAXFILES)
@@ -87,9 +88,10 @@ $(TARGET_DFE_MAXFILES): $(ENGINEFILES) $(JAVA_PROTOS)  $(PRJ_OPTIMIZED_DESCRIPTO
 		  DFEModel=$(DFEModel) \
 		  maxFileName=$(basename $(notdir $@)) \
 		  target="DFE" \
-                  target_name="$(notdir $(basename $@))" \
+		  target_name="$(notdir $(basename $@))" \
 		  descriptor="$(PRJ_OPTIMIZED_DESCRIPTOR)" \
 		  enableMPCX=$(MPCX)
+	cp $(dir $@)/results/$(notdir $@) $@
 
 
 dfe_maxfiles: $(TARGET_DFE_MAXFILES)
