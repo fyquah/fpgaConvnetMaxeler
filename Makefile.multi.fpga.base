@@ -118,7 +118,7 @@ dfe_maxfiles: $(TARGET_DFE_MAXFILES)
 
 $(TARGET_DFE_OBJS): $(TARGET_DFE_MAXFILES)
 	PATH="$(FPGACONVNET_JAVA8_HOME)/bin:$(PATH)" $(SLICCOMPILE) \
-	     $(MAXCOMPILER_BUILD_DIR)/$(basename $(basename $(notdir $@)))_$(DFEModel)_DFE/results/$(basename $(basename $(notdir $@))).max $@
+	     $(MAXCOMPILER_BUILD_DIR)/$(basename $(basename $(notdir $@)))_$(DFEModel)_DFE/$(basename $(basename $(notdir $@))).max $@
 
 
 target_main_dfe.o: main.cpp $(TARGET_DFE_OBJS) targets.h
