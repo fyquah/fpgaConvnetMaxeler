@@ -189,6 +189,9 @@ void verify_conv_output(
     uint32_t total_pixels = 0;
     float total_error = 0.0;
     float max_error = 0.0;
+    float total_squared_error = 0.0;
+    const std::vector<float> thresholds = { 0.01, 0.05, 0.1, 0.5 };
+    std::vector<unsigned> num_more_than_threshold(thresholds.size(), 0);
 
     const protos::LayerParameter & final_layer = network.layer(network.layer_size() - 1);
     const int conv_out_size = (final_layer.output_height() *
@@ -216,19 +219,40 @@ void verify_conv_output(
 
             max_error = std::max(max_error, std::abs(obtained  - expected));
             total_error += std::abs(obtained  - expected);
+            total_squared_error += std::pow(obtained  - expected, 2);
             total_pixels += 1;
 
-            if (std::abs(obtained - expected) > 0.05) {
-                logging::stdout(logging::WARNING) << j << "\t| ERROR: Obtained " << obtained << ", expected " << expected << std::endl;
+            for (int k = 0; k < thresholds.size() ; k++) {
+                if (std::abs(obtained - expected) > thresholds[k]) {
+                    num_more_than_threshold[k]++;
+                }
             }
+            // logging::stdout(logging::WARNING) << j << "\t| ERROR: Obtained " << obtained << ", expected " << expected << std::endl;
             // else {
             //     logging::stdout(WARNING) << j << "\t| OKAY: Obtained " << obtained << ", expected " << expected << std::endl;
             // }
         }
     }
+
+    float mean_error = float(total_error) / float(total_pixels);
+
+    for (int  k =0;k < thresholds.size() ; k++) {
+
+        logging::stdout(logging::INFO)
+            << "Num pixels with error > " 
+            << thresholds[k] << " = "
+            << num_more_than_threshold[k]
+            << " / "
+            << total_pixels
+            << std::endl;
+    }
     logging::stdout(logging::INFO)
         << "Mean pixel_error = "
-        << float(total_error) / float(total_pixels) << std::endl;
+        << mean_error << std::endl;
+    logging::stdout(logging::INFO)
+        << "pixel error standard deviation = "
+        << std::sqrt(total_squared_error / total_pixels - std::pow(mean_error, 2))
+        << std::endl;
     logging::stdout(logging::INFO)
         << "Max pixel error = " << max_error << std::endl;
     fin.close();
