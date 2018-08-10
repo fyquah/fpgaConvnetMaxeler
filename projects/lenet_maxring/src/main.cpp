@@ -15,7 +15,7 @@
 #ifdef __SIM__
     static const uint64_t N = 6;
 #else
-    static const uint64_t N = 30000;
+    static const uint64_t N = 384 * 64;
 #endif
 
 
@@ -45,11 +45,7 @@ std::vector<float> run_feature_extraction(
     convnet.load_weights_from_files(filenames, fpgaconvnet::FORMAT_TXT);
     convnet.max_init_weights();
 
-    // warm up the DFE with the weights.
-    extracted_features = convnet.max_run_inference(N, images, false);
-#ifndef __SIM__
     extracted_features = convnet.max_run_inference(N, images, true);
-#endif
 
     fpgaconvnet::verify_conv_output(
             network_parameters,
