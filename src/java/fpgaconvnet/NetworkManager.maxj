@@ -196,7 +196,7 @@ public class NetworkManager extends CustomManager {
 
             System.out.println("Adding LMEM output interface");
             System.out.println("Number size = " + numberSize + " bytes");
-            System.out.println("Bitstream output size = " + getBitstreamInputSize() + " numerical values");
+            System.out.println("Bitstream output size = " + getBitstreamOutputSize() + " numerical values");
 
             ei.setLMemLinearWrapped(
                     "tocpu",           /* streamName  - This name is
@@ -382,6 +382,7 @@ public class NetworkManager extends CustomManager {
         // When off-chip memory is used, maxeler requires a connection that
         // goes into LMEM and goes out of LMEM.
         if (fpgaId == 0 && getNumFpgaUsedInBitstream() > 1) {
+            System.out.println("Create dummy stream to lmem from a null source");
             DFELink dummy_link = lmem.addStreamToLMem(
                     "tocpu_null",
                     LMemCommandGroup.MemoryAccessPattern.LINEAR_1D);
@@ -391,6 +392,7 @@ public class NetworkManager extends CustomManager {
             nullSources.add(nullSource);
 
         } else if (fpgaId == getNumFpgaUsedInBitstream() - 1 && fpgaId != 0) {
+            System.out.println("Create dummy stream to a null sink from lmem");
             DFELink dummy_link = lmem.addStreamFromLMem(
                     "fromcpu_null",
                     LMemCommandGroup.MemoryAccessPattern.LINEAR_1D);
