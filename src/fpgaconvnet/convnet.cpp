@@ -858,6 +858,8 @@ Convnet::max_run_single_bitstream(
     const unsigned num_fpgas = get_num_fpga_for_bitstream(bitstream_id);
     const bool initialised_weights = m_last_executed_bitstream == int(bitstream_id);
 
+    logging::stdout(logging::INFO) << "Num fpga = " << num_fpgas << "\n";
+
     max_actions_t **actions = new max_actions_t*[num_fpgas];
     timeval t_begin;
     timeval t_end;
@@ -1026,6 +1028,7 @@ Convnet::max_run_single_bitstream(
         __sync_synchronize();
 
         max_unload_array(dfe_array);
+        dfe_array = NULL;
     }
 #endif
 
@@ -1069,7 +1072,6 @@ std::vector<float> Convnet::max_run_inference(
         logging::Indentation more_indent;
         double this_time_taken;
         max_run_single_bitstream(N, i, &this_time_taken);
-        max_run_single_bitstream(N, i, &this_time_taken);
 
         time_taken += this_time_taken;
     }
@@ -1086,6 +1088,7 @@ std::vector<float> Convnet::max_run_inference(
     *p_time_taken = time_taken;
     return ret;
 }
+
 
 void
 dump_latencies(std::string filename, std::vector<double> times)
