@@ -81,6 +81,14 @@ cast_float_to_fixed(const float arg) {
     return ((uint16_t) (int_bits << num_frac_bits)) | (frac_bits);
 }
 
+static inline float
+cast_fixed_to_float(const uint16_t arg)
+{
+    const int num_frac_bits = 12;
+    const float multiplier = (arg & 0x8000) ? -1.0 : 1.0 ;
+    return multiplier * ((float(arg & 0x7FFF) / float(1 << num_frac_bits)));
+}
+
 
 static void copy_float_to_fixed(fixed_point_t *dest, float *src, int size)
 {
@@ -179,6 +187,7 @@ void verify_conv_output(
     uint32_t total_pixels = 0;
     float total_error = 0.0;
     float total_pixel_magnitude = 0.0;
+    float max_error = 0.0;
 
     const protos::LayerParameter & final_layer = network.layer(network.layer_size() - 1);
     const unsigned conv_out_size = (final_layer.output_height() *
@@ -205,11 +214,12 @@ void verify_conv_output(
                 break;
             }
 
+            max_error = std::max(max_error, std::abs(obtained  - expected));
             total_error += std::abs(obtained  - expected);
             total_pixel_magnitude += std::abs(obtained);
             total_pixels += 1;
 
-            if (isnan(obtained) || std::abs(obtained - expected) > 0.01) {
+            if (isnan(obtained) || std::abs(obtained - expected) > 0.05) {
                 ctr++;
                 logging::stdout(logging::DEBUG) << j << "\t| BAD: Obtained " << obtained << ", expected " << expected << std::endl;
             }
@@ -218,6 +228,9 @@ void verify_conv_output(
             // }
         }
     }
+    logging::stdout(logging::INFO)
+        << "max pixel_error = "
+        << max_error << std::endl;
     logging::stdout(logging::INFO)
         << "Average pixel_error = "
         << float(total_error) / float(total_pixels) << std::endl;
@@ -795,24 +808,32 @@ Convnet::get_output_stream_size_for_bitstream(unsigned bitstream, uint64_t N)
 void
 Convnet::max_load_input_data(const float *images, uint64_t N)
 {
+    logging::stdout(logging::INFO)
+        << "Writing " << N << " input images to LMem" << "\n";
     const uint64_t stream_size = get_input_stream_size_for_bitstream(0, N);
     const uint64_t address = get_input_address_for_bitstream(0, N);
+    max_write_to_lmem(0, (void*) images, address, stream_size);
+}
+
+void
+Convnet::max_write_to_lmem(
+        const unsigned dfe_index,
+        const void *data, const uint64_t address, const uint64_t stream_size)
+{
+    char load_spec_buffer[10];
+    sprintf(load_spec_buffer, "*:%d", dfe_index);
 
     logging::stdout(logging::INFO)
-        << "Writing " << N << " images with stream size of "
-        << stream_size << " bytes to address "
-        << address
+        << "Writing " << stream_size << " bytes to address " << address
         << std::endl;
 
-    dfe = max_load(lmem_maxfile, load_spec);
+    dfe = max_load(lmem_maxfile, load_spec_buffer);
+    logging::stdout(logging::INFO) << "dfe.id = " << dfe->id << std::endl;
+
     max_actions_t *write_action = max_actions_init(lmem_maxfile, "writeLMem");
     max_set_param_uint64t(write_action, "start", address);
     max_set_param_uint64t(write_action, "size", stream_size);
-    max_queue_input(
-            write_action,
-            "data_in",
-            (void*) &images[0],
-            stream_size);
+    max_queue_input(write_action, "data_in", data, stream_size);
     max_run(dfe, write_action);
     max_actions_free(write_action);
     max_unload(dfe);
@@ -828,10 +849,22 @@ Convnet::max_read_output_data(float * images, uint64_t N)
     const uint64_t address = get_output_address_for_bitstream(
             get_num_bitstreams() - 1, N);
 
-    dfe = max_load(lmem_maxfile, load_spec);
     logging::stdout(logging::INFO)
-        << "Reading " << N << " images with stream size of "
-        << stream_size << " bytes from address "
+        << "Reading " << N << " feature maps from LMEM\n";
+    max_read_from_lmem(0, images, address, stream_size);
+}
+
+void
+Convnet::max_read_from_lmem(
+        const unsigned dfe_index,
+        void *data, const uint64_t address, const uint64_t stream_size)
+{
+    char load_spec_buffer[30];
+    sprintf(load_spec_buffer, "*:%d", dfe_index);
+
+    dfe = max_load(lmem_maxfile, load_spec_buffer);
+    logging::stdout(logging::INFO)
+        << "Reading " << stream_size << " bytes from address "
         << address
         << std::endl;
 
@@ -839,11 +872,7 @@ Convnet::max_read_output_data(float * images, uint64_t N)
             lmem_maxfile, "readLMem");
     max_set_param_uint64t(read_action, "start", address);
     max_set_param_uint64t(read_action, "size", stream_size);
-    max_queue_output(
-            read_action,
-            "data_out",
-            (void*) &images[0],
-            stream_size);
+    max_queue_output(read_action, "data_out", data, stream_size);
     max_run(dfe, read_action);
     max_actions_free(read_action);
     max_unload(dfe);
@@ -860,7 +889,8 @@ Convnet::max_run_single_bitstream(
 
     logging::stdout(logging::INFO) << "Num fpga = " << num_fpgas << "\n";
 
-    max_actions_t **actions = new max_actions_t*[num_fpgas];
+    std::vector<max_actions_t*> actions(num_fpgas);
+
     timeval t_begin;
     timeval t_end;
     t_begin.tv_sec  = 0.0;
@@ -957,7 +987,7 @@ Convnet::max_run_single_bitstream(
     void *tmp_buffer_out = NULL;
 
     for (unsigned i = 0; i < num_fpgas ; i++) {
-        dfe = max_load(max_files[bitstream_id][i], load_spec);
+        dfe = max_load(max_files[bitstream_id][i], "*");
 
         logging::stdout(logging::INFO) << "Simulating FPGA " << i << " ..." << std::endl;
 
@@ -994,11 +1024,14 @@ Convnet::max_run_single_bitstream(
     }
 #else
     if (num_fpgas == 1) {
+
         __sync_synchronize();
         gettimeofday(&t_begin, NULL);
-        dfe = max_load(max_files[bitstream_id][0], load_spec);
+        dfe = max_load(max_files[bitstream_id][0], "*:0");
         gettimeofday(&t_end, NULL);
         __sync_synchronize();
+
+        logging::stdout() << "dfe.id = " << dfe->id << "\n";
         logging::stdout(logging::INFO)
             << "max_load took "
             << compute_time_difference(t_begin, t_end)
@@ -1014,11 +1047,14 @@ Convnet::max_run_single_bitstream(
 
     } else {
         dfe_array = max_load_mixed_array(
-                (max_file_t**) &max_files[bitstream_id][0], num_fpgas, load_spec);
+                (max_file_t**) &max_files[bitstream_id][0], num_fpgas, "*");
+
         max_actarray_t *act_array = max_mixed_actarray_init(
                 &max_files[bitstream_id][0], num_fpgas);
         for (unsigned i = 0 ; i < num_fpgas ; i++) {
             max_set_action(act_array, i, actions[i]);
+            logging::stdout() << "dfe[" << i << "].id = "
+                << dfe_array->ids[i] << "\n";
         }
 
         __sync_synchronize();
@@ -1031,8 +1067,6 @@ Convnet::max_run_single_bitstream(
         dfe_array = NULL;
     }
 #endif
-
-    delete[] actions;
 
     *p_timetaken = compute_time_difference(t_begin, t_end);
     m_last_executed_bitstream = bitstream_id;
@@ -1089,6 +1123,71 @@ std::vector<float> Convnet::max_run_inference(
     return ret;
 }
 
+
+std::vector<float> Convnet::max_run_inference_with_single_bitstream(
+        uint64_t N,
+        const std::vector<float> & images,
+        const unsigned bitstream_id)
+{
+    const uint64_t input_stream_size =
+            get_input_stream_size_for_bitstream(bitstream_id, N);
+    const uint64_t output_stream_size =
+            get_output_stream_size_for_bitstream(bitstream_id, N);
+
+    double time_taken = 0.0;
+    void * const input_stream  = malloc(input_stream_size);
+    void * const output_stream = malloc(output_stream_size);
+    std::vector<float> ret;
+
+    /* 0. Cast images to fixed point (if necessary) */
+    if (bitstream_id == 0) {
+        memcpy(input_stream, &images[0], input_stream_size);
+    } else {
+        for (uint64_t i = 0; i < input_stream_size / 4; i++) {
+            ((fixed_point_t*) input_stream)[i] = cast_float_to_fixed(images[i]);
+        }
+    }
+
+    /* 1. Load images into off-chip memory. */
+    logging::stdout(logging::INFO)
+        << "Loading images to off-chip memory ... " << std::endl;
+    max_write_to_lmem(
+            0,
+            input_stream,
+            get_input_address_for_bitstream(bitstream_id, N),
+            input_stream_size);
+    logging::stdout(logging::INFO) << "-- DONE!" << std::endl;
+
+    /* 2. Run inference */
+    logging::stdout(logging::INFO)
+        << "Running feature extractions with only bitstream "
+        << bitstream_id << std::endl;
+    max_run_single_bitstream(N, bitstream_id, &time_taken);
+    fpgaconvnet::logging::stdout() << "-- DONE" << std::endl;
+
+    // 3. Load data from off-chip memory back to the host
+    logging::stdout(logging::INFO)
+        << "Reading images from off-chip memory " << std::endl;
+    max_read_from_lmem(
+            0,
+            output_stream,
+            get_output_address_for_bitstream(bitstream_id, N),
+            output_stream_size);
+    fpgaconvnet::logging::stdout() << "-- DONE" << std::endl;
+
+    // 4. Cast the data type back to float (if it is not the last layer)
+    if (bitstream_id == get_num_bitstreams() - 1) {
+        ret.resize(output_stream_size / 4);
+        memcpy(&ret[0], output_stream, output_stream_size);
+    } else {
+        ret.resize(output_stream_size / 2);
+        for (uint64_t i = 0; i < ret.size() ; i++) {
+            ret[i] = cast_fixed_to_float(((fixed_point_t *) output_stream)[i]);
+        }
+    }
+
+    return ret;
+}
 
 void
 dump_latencies(std::string filename, std::vector<double> times)

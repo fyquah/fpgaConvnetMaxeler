@@ -137,8 +137,19 @@ public:
     void load_weights_from_files(
             std::vector<std::string> filenames, file_format_t file_type);
     void randomize_weights();
-
     void max_init_weights();
+
+    void max_write_to_lmem(
+            const unsigned dfe_index,
+            const void *data,
+            const uint64_t addr,
+            const uint64_t num_bytes);
+    void max_read_from_lmem(
+            const unsigned dfe_index,
+            void *data,
+            const uint64_t addr,
+            const uint64_t num_bytes);
+
     void max_load_input_data(const float * images, uint64_t N);
     void max_read_output_data(float *images, uint64_t N);
 
@@ -149,6 +160,17 @@ public:
             const bool benchmark, double * p_time_taken);
 
     std::vector<float> max_retrieve_features(uint64_t N);
+
+    /// Runs inference using only part of the bitstreams. Helps debugging.
+    /** Debugging utilities:
+     *
+     * [max_run_inference_with_single_bitstream]
+     * */
+    std::vector<float> max_run_inference_with_single_bitstream(
+            uint64_t N,
+            const std::vector<float> & images,
+            const unsigned bitstream_id);
+
 };
 
 void dump_latencies(std::string filename, std::vector<double> times);

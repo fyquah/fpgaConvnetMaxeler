@@ -175,14 +175,18 @@ uint64_t total_iterations(const protos::LayerParameter &layer);
 
 /* Weight initialization */
 uint64_t total_kernel_weights(const protos::LayerParameter & layer);
-uint64_t conv_in_size(const protos::Network & network);
 uint64_t total_rom_size(const protos::LayerParameter & layer);
 uint64_t weights_vector_size(const protos::LayerParameter & layer);
 bool is_layer_cpu_initialized(const protos::LayerParameter & layer);
 
-/* Stream size for inputs */
+/* Stream size for weight initialisation */
 uint64_t bias_stream_size(const protos::LayerParameter & layer);
 uint64_t cpu_weights_stream_size(const protos::LayerParameter & layer);
+
+/* Number of numerical values for a single input image */
+uint64_t conv_in_size(const protos::Network & network);
+uint64_t conv_in_size_for_bitstream(
+        const protos::Network & network, const unsigned bitstream_id);
 
 
 }  // calculation
@@ -236,7 +240,7 @@ compute_time_difference(timeval t_begin, timeval t_end)
 
 
 static std::vector<float>
-load_stream(std::string filename, const unsigned total_size)
+load_float_stream(std::string filename, const unsigned total_size)
 {
     std::vector<float> images(total_size);
     std::ifstream fin(filename.c_str());
@@ -247,5 +251,33 @@ load_stream(std::string filename, const unsigned total_size)
     return images;
 }
 
+static std::vector<float>
+load_and_duplicate_float_stream(
+        const std::string & filename,
+        const unsigned single_input_size,
+        const unsigned num_copies_in_file,
+        const unsigned num_copies_to_make)
+{
+    const std::vector<float> sample = load_float_stream(
+            filename.c_str(), num_copies_in_file * single_input_size);
+    std::vector<float> pixel_stream(num_copies_to_make * single_input_size);
+    const unsigned num_batches = num_copies_to_make / num_copies_in_file;
+    const unsigned remainder = num_copies_to_make % num_copies_in_file;
+
+    // copy to pixel stream
+    for (unsigned i = 0; i < num_batches; i++) {
+        memcpy(&pixel_stream[i * single_input_size * num_copies_in_file],
+                &sample[0],
+                sizeof(float) * sample.size());
+    }
+
+    if (remainder != 0) {
+        memcpy(&pixel_stream[num_batches * single_input_size * num_copies_in_file],
+                &sample[0],
+                sizeof(float) * single_input_size * remainder);
+    }
+
+    return pixel_stream;
+}
 
 #endif

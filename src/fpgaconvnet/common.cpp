@@ -602,6 +602,12 @@ uint64_t conv_in_size(const protos::Network & network)
 	* network.layer(0).input_width();
 }
 
+uint64_t conv_in_size_for_bitstream(
+        const protos::Network & network, const unsigned bitstream_id)
+{
+    return conv_in_size(split_by_bitstreams(network)[bitstream_id]);
+}
+
 
 uint64_t total_rom_size(const protos::LayerParameter & layer)
 {
