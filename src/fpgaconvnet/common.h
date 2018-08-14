@@ -235,6 +235,17 @@ compute_time_difference(timeval t_begin, timeval t_end)
 }
 
 
+static std::vector<float>
+load_stream(std::string filename, const unsigned total_size)
+{
+    std::vector<float> images(total_size);
+    std::ifstream fin(filename.c_str());
+    for (unsigned i = 0; i < total_size ; i++) {
+        fin.read((char*) &images[i], 4);
+    }
+    fin.close();
+    return images;
+}
 
 
 #endif

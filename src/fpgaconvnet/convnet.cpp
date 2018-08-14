@@ -211,7 +211,7 @@ void verify_conv_output(
 
             if (isnan(obtained) || std::abs(obtained - expected) > 0.01) {
                 ctr++;
-                logging::stdout(logging::WARNING) << j << "\t| BAD: Obtained " << obtained << ", expected " << expected << std::endl;
+                logging::stdout(logging::DEBUG) << j << "\t| BAD: Obtained " << obtained << ", expected " << expected << std::endl;
             }
             // else {
             //     logging::stdout(WARNING) << j << "\t| OKAY: Obtained " << obtained << ", expected " << expected << std::endl;
