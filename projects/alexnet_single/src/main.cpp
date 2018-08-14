@@ -51,11 +51,6 @@ std::vector<float> run_feature_extraction(
 
     /* warm up the DFE with the weights. */
     extracted_features = convnet.max_run_inference(N, images, true);
-    // extracted_features = convnet.max_run_inference(N, images, true);
-
-    /* TODO: Verify the output is correct. You can use the
-     * fpgaconvnet::verify_conv_out function for this.
-     */
     fpgaconvnet::verify_conv_output(
             network_parameters,
             N,
@@ -64,30 +59,38 @@ std::vector<float> run_feature_extraction(
             fpgaconvnet::FORMAT_BINARY);
     return extracted_features;
 
-    // this is to measure latency
-    std::vector<unsigned> counts;
-    counts.push_back(4);
-    counts.push_back(8);
-    counts.push_back(12);
-    counts.push_back(16);
-    counts.push_back(20);
+    /* BEGIN  -- DEBUG Bitstream 0 */
+    fpgaconvnet::logging::stdout(fpgaconvnet::logging::INFO)
+        << "Checking bitstream 0\n";
+    extracted_features = convnet.max_run_inference_with_single_bitstream(
+            N, images, 0);
+    fpgaconvnet::verify_conv_output(
+            network_parameters,
+            N,
+            &extracted_features[0],
+            "./testdata/data/conv7.bin",
+            fpgaconvnet::FORMAT_BINARY);
+    /* END OF -- DEBUG Bitstream 0 */
 
-    for (unsigned j = 0; j < counts.size() ; j++) {
-        const unsigned N = counts[j];
-        std::vector<double> times;
-        fpgaconvnet::logging::stdout(fpgaconvnet::logging::INFO)
-            << "Measuring latency using " << N << " images" << std::endl;
-
-        for (int i = 0 ; i < 1000 ; i++) {
-            double p;
-            convnet.max_run_inference(N, images, true, &p);
-            times.push_back(p);
-        }
-
-        std::stringstream ss;
-        ss << "../results/latency_" << N << ".txt";
-        fpgaconvnet::dump_latencies(ss.str().c_str(), times);
-    }
+    /* BEGIN  -- DEBUG Bitstream 1 */
+    std::vector<float> bitstream_1_input =
+        load_and_duplicate_float_stream(
+                "./testdata/data/conv7.bin",
+                fpgaconvnet::calculation::conv_in_size_for_bitstream(
+                    network_parameters, 1),
+                10,
+                N);
+    fpgaconvnet::logging::stdout(fpgaconvnet::logging::INFO)
+        << "Checking bitstream 1\n";
+    extracted_features = convnet.max_run_inference_with_single_bitstream(
+            N, bitstream_1_input, 1);
+    fpgaconvnet::verify_conv_output(
+            network_parameters,
+            N,
+            &extracted_features[0],
+            "./testdata/data/output.bin",
+            fpgaconvnet::FORMAT_BINARY);
+    /* END OF -- DEBUG Bitstream 1 */
 
     return extracted_features;
 }
@@ -109,24 +112,12 @@ int main(int argc, char **argv)
 	    fpgaconvnet::load_network_proto(argv[1]);
 
     std::cout << "Reading images ..." << std::endl;
-    const unsigned single_input_size =
-            fpgaconvnet::calculation::conv_in_size(network_parameters);
-    const std::vector<float> images = load_stream(
-            "./testdata/data/input.bin", 10 * single_input_size);
-    std::vector<float> pixel_stream(N * single_input_size);
-
-    // copy to pixel stream
-    for (unsigned i = 0; i < N / 10; i++) {
-        memcpy(&pixel_stream[i * single_input_size * 10],
-                &images[0],
-                sizeof(float) * images.size());
-    }
-    if (N % 10 != 0) {
-        memcpy(&pixel_stream[(N / 10) * single_input_size * 10],
-                &images[0],
-                sizeof(float) * single_input_size * (N % 10));
-    }
-
+    std::vector<float> pixel_stream =
+        load_and_duplicate_float_stream(
+                "./testdata/data/input.bin",
+                fpgaconvnet::calculation::conv_in_size(network_parameters),
+                10,
+                N);
     std::vector<float> conv_out = run_feature_extraction(
 	    network_parameters, pixel_stream);
     return 0;
