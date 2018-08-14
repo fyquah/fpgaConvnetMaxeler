@@ -163,6 +163,10 @@ public class NetworkManager extends CustomManager {
             InterfaceParam arrSize =
                 N * getBitstreamInputSize() * numberSize;
 
+            System.out.println("Adding LMEM input interface");
+            System.out.println("Number size = " + numberSize + " bytes");
+            System.out.println("Bitstream input size = " + getBitstreamInputSize() + " numerical values");
+
             ei.setLMemLinearWrapped(
                     "fromcpu",           /* streamName  - This name is
                                                           called as such for
@@ -189,6 +193,10 @@ public class NetworkManager extends CustomManager {
             System.out.println("output size per image = " + getBitstreamOutputSize());
             System.out.println("output numbert size = " + numberSize);
             InterfaceParam arrSize = N * getBitstreamOutputSize() * numberSize;
+
+            System.out.println("Adding LMEM output interface");
+            System.out.println("Number size = " + numberSize + " bytes");
+            System.out.println("Bitstream output size = " + getBitstreamInputSize() + " numerical values");
 
             ei.setLMemLinearWrapped(
                     "tocpu",           /* streamName  - This name is
