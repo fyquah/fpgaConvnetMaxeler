@@ -2,6 +2,7 @@
 #define FPGACONVNET_COMMON_H
 
 #include <cmath>
+#include <fstream>
 #include <iostream>
 #include <sys/time.h>
 
