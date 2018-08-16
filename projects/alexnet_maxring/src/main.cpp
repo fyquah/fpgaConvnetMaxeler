@@ -15,7 +15,7 @@
 #ifdef __SIM__
     static const uint64_t N = 6;
 #else
-    static const uint64_t N = 16000;
+    static const uint64_t N = 2 * 96 * 100;
 #endif
 
 

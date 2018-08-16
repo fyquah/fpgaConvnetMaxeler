@@ -15,7 +15,7 @@
 #ifdef __SIM__
     static const uint64_t N = 6;
 #else
-    static const uint64_t N = 20;
+    static const uint64_t N = 384 * 10;
 #endif
 
 
