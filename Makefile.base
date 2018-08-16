@@ -145,7 +145,7 @@ fpgaconvnet/modelling/optimizer: fpgaconvnet/modelling/optimizer.o \
 
 fpgaconvnet/feedforward.o: fpgaconvnet
 
-LMEM_SIM_MAXFILE := $(MAXCOMPILER_BUILD_DIR)/lmem_$(DFEModel)_DFE_SIM/results/lmem.max
+LMEM_SIM_MAXFILE := $(MAXCOMPILER_BUILD_DIR)/lmem_$(DFEModel)_DFE_SIM/lmem.max
 LMEM_SIM_OBJ := fpgaconvnet/lmem_sim.o
 
 $(LMEM_SIM_MAXFILE): $(WHEREISROOT)/src/java/fpgaconvnet/LMemManager.maxj
@@ -159,6 +159,7 @@ $(LMEM_SIM_MAXFILE): $(WHEREISROOT)/src/java/fpgaconvnet/LMemManager.maxj
 		  maxFileName=lmem \
 		  target="DFE_SIM" \
 		  enableMPCX=$(MPCX)
+	cp $(dir $@)/results/$(notdir $@) $@
 
 $(LMEM_SIM_OBJ): $(LMEM_SIM_MAXFILE)
 	PATH="$(FPGACONVNET_JAVA8_HOME)/bin:$(PATH)" $(SLICCOMPILE) $(LMEM_SIM_MAXFILE) $@
@@ -169,7 +170,7 @@ fpgaconvnet/convnet_sim.o: fpgaconvnet/convnet.cpp fpgaconvnet/protos/parameters
 	$(CPUCOMPILER) $< $(ALL_FLAGS) \
 		-I$(MAXCOMPILER_BUILD_DIR) \
 		$(foreach name,$(RESOURCE_BENCH_SIMMAXDIRS),-I$(name)) \
-		-I$(dir $(LMEM_SIM_MAXFILE)) \
+		-I$(dir $(LMEM_SIM_MAXFILE))/results \
 		-D__SIM__ -c -o $@
 
 FPGACONVNET_SIM_OBJ_FILES=fpgaconvnet/protos/parameters.pb.o \
@@ -180,7 +181,7 @@ FPGACONVNET_SIM_OBJ_FILES=fpgaconvnet/protos/parameters.pb.o \
 		      fpgaconvnet/modelling/resource_model.o \
 		      fpgaconvnet/common.o
 
-LMEM_DFE_MAXFILE := $(MAXCOMPILER_BUILD_DIR)/lmem_$(DFEModel)_DFE/results/lmem.max
+LMEM_DFE_MAXFILE := $(MAXCOMPILER_BUILD_DIR)/lmem_$(DFEModel)_DFE/lmem.max
 LMEM_DFE_OBJ := fpgaconvnet/lmem_dfe.o
 
 $(LMEM_DFE_MAXFILE): $(WHEREISROOT)/src/java/fpgaconvnet/LMemManager.maxj
@@ -194,6 +195,7 @@ $(LMEM_DFE_MAXFILE): $(WHEREISROOT)/src/java/fpgaconvnet/LMemManager.maxj
 		  maxFileName=lmem \
 		  target="DFE" \
 		  enableMPCX=$(MPCX)
+	cp $(dir $@)/results/$(notdir $@) $@
 
 $(LMEM_DFE_OBJ): $(LMEM_DFE_MAXFILE)
 	PATH="$(FPGACONVNET_JAVA8_HOME)/bin:$(PATH)" $(SLICCOMPILE) $(LMEM_DFE_MAXFILE) $@
@@ -204,7 +206,7 @@ fpgaconvnet/convnet_dfe.o: fpgaconvnet/convnet.cpp fpgaconvnet/protos/parameters
 	$(CPUCOMPILER) $< $(ALL_FLAGS) \
 		-I$(MAXCOMPILER_BUILD_DIR) \
 		$(foreach name,$(RESOURCE_BENCH_DFEMAXDIRS),-I$(name)) \
-		-I$(dir $(LMEM_DFE_MAXFILE)) \
+		-I$(dir $(LMEM_DFE_MAXFILE))/results \
 		-D__DFE__ -c -o $@
 
 FPGACONVNET_DFE_OBJ_FILES=fpgaconvnet/protos/parameters.pb.o \

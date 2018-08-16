@@ -6,6 +6,9 @@ import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEFix.SignMode;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEType;
 
 public class GlobalConfig {
+    /* TODO(fyq14): This should be configurable by the user. See
+     * [convnet.cpp#67]
+     */
     public static final int intBits = 8;
     public static final int fracBits = 8;
     public static final int FMEM_LATENCY = 3;

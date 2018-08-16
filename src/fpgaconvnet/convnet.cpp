@@ -63,11 +63,15 @@ uint64_t total_rom_size(const protos::LayerParameter & layer)
 }
 
 
+/* TODO(fyq14): This should be configurable by the user in the descriptor.
+ *
+ * See [GlobalConfig.maxj] for more information.
+ */
+static const int num_frac_bits = 12;
+static const int num_int_bits  = 4;
+
 static inline uint16_t
 cast_float_to_fixed(const float arg) {
-
-    const int num_frac_bits = 12;
-    // const int num_int_bits = 4;
     const float fixed_point_one = (1 << num_frac_bits);
 
     int x = (int) (arg * fixed_point_one);
@@ -84,7 +88,6 @@ cast_float_to_fixed(const float arg) {
 static inline float
 cast_fixed_to_float(const uint16_t arg)
 {
-    const int num_frac_bits = 12;
     const float multiplier = (arg & 0x8000) ? -1.0 : 1.0 ;
     return multiplier * ((float(arg & 0x7FFF) / float(1 << num_frac_bits)));
 }
@@ -188,6 +191,9 @@ void verify_conv_output(
     float total_error = 0.0;
     float total_pixel_magnitude = 0.0;
     float max_error = 0.0;
+    float total_squared_error = 0.0;
+    const std::vector<float> thresholds = { 0.01, 0.05, 0.1, 0.5 };
+    std::vector<unsigned> num_more_than_threshold(thresholds.size(), 0);
 
     const protos::LayerParameter & final_layer = network.layer(network.layer_size() - 1);
     const unsigned conv_out_size = (final_layer.output_height() *
@@ -220,27 +226,46 @@ void verify_conv_output(
             total_pixels += 1;
 
             if (isnan(obtained) || std::abs(obtained - expected) > 0.05) {
-                ctr++;
-                logging::stdout(logging::DEBUG) << j << "\t| BAD: Obtained " << obtained << ", expected " << expected << std::endl;
+                logging::stdout(logging::DDEBUG)
+                    << j
+                    << "\t| BAD: Obtained " << obtained
+                    << ", expected "     << expected
+                    << std::endl;
             }
-            // else {
-            //     logging::stdout(WARNING) << j << "\t| OKAY: Obtained " << obtained << ", expected " << expected << std::endl;
-            // }
+            total_squared_error += std::pow(obtained  - expected, 2);
+
+            for (int k = 0; k < thresholds.size() ; k++) {
+                if (std::abs(obtained - expected) > thresholds[k]) {
+                    num_more_than_threshold[k]++;
+                }
+            }
         }
     }
+
+    const float mean_error = float(total_error) / float(total_pixels);
+
+    for (int k = 0 ;k < thresholds.size() ; k++) {
+        logging::stdout(logging::INFO)
+            << "Num pixels with error > " 
+            << thresholds[k] << " = "
+            << num_more_than_threshold[k]
+            << " / "
+            << total_pixels
+            << std::endl;
+    }
+    logging::stdout(logging::INFO)
+        << "Mean pixel_error = "
+        << mean_error << std::endl;
+    logging::stdout(logging::INFO)
+        << "pixel error standard deviation = "
+        << std::sqrt(total_squared_error / total_pixels - std::pow(mean_error, 2))
+        << std::endl;
     logging::stdout(logging::INFO)
         << "max pixel_error = "
         << max_error << std::endl;
     logging::stdout(logging::INFO)
-        << "Average pixel_error = "
-        << float(total_error) / float(total_pixels) << std::endl;
-    logging::stdout(logging::WARNING)
-        << "Average pixel magnitude = "
+        << "mean pixel magnitude = "
         << float(total_pixel_magnitude) / float(total_pixels) << std::endl;
-    logging::stdout(logging::WARNING)
-        << "Number of pixels with error > 0.01 = " << ctr 
-        << " out of "
-        << total_pixels << std::endl;
     fin.close();
 }
 
@@ -882,14 +907,25 @@ Convnet::max_read_from_lmem(
 
 void
 Convnet::max_run_single_bitstream(
-        uint64_t N, unsigned bitstream_id, double *p_timetaken)
+        uint64_t N, unsigned bitstream_id, double *p_timetaken,
+        const void *input, void *output)
 {
+    if (network_params.allow_runtime_reconfiguration()) {
+        assert(input == NULL);
+        assert(output == NULL);
+    } else {
+        assert(bitstream_id == 0);
+        assert(input != NULL);
+        assert(output != NULL);
+    }
+
     const unsigned num_fpgas = get_num_fpga_for_bitstream(bitstream_id);
     const bool initialised_weights = m_last_executed_bitstream == int(bitstream_id);
 
     logging::stdout(logging::INFO) << "Num fpga = " << num_fpgas << "\n";
 
     std::vector<max_actions_t*> actions(num_fpgas);
+    std::vector<bool> has_conv(num_fpgas, 0);
 
     timeval t_begin;
     timeval t_end;
@@ -906,14 +942,16 @@ Convnet::max_run_single_bitstream(
         auto it = &network_params.layer(i);
         auto layer = *it;
 
-        if (it->bitstream_id() != bitstream_id) {
+    if (it->bitstream_id() != bitstream_id) {
             continue;
         }
 
         if (it->has_conv()) {
             char buffer[30];
-            sprintf(buffer, "kernel_%d", it->layer_id());
             max_actions_t *action = actions[it->fpga_id()];
+
+            sprintf(buffer, "kernel_%d", it->layer_id());
+            has_conv[it->fpga_id()] = 1;
 
             if (initialised_weights) {
                 logging::stdout(logging::INFO)
@@ -962,25 +1000,43 @@ Convnet::max_run_single_bitstream(
     for (unsigned i = 0 ; i < num_fpgas ; i++) {
         max_set_param_uint64t(actions[i], "N", N);
 
-        if (initialised_weights) {
-            max_set_param_uint64t(actions[i], "init", 0);
-        } else {
-            max_set_param_uint64t(actions[i], "init", 1);
+        if (has_conv[i]) {
+            if (initialised_weights) {
+                max_set_param_uint64t(actions[i], "init", 0);
+            } else {
+                max_set_param_uint64t(actions[i], "init", 1);
+            }
         }
     }
 
-    const uint64_t addressIn = get_input_address_for_bitstream(
-            bitstream_id, N);
-    const uint64_t addressOut = get_output_address_for_bitstream(
-            bitstream_id, N);
 
-    max_set_param_uint64t(actions[0], "addressIn", addressIn);
-    max_set_param_uint64t(actions[num_fpgas - 1], "addressOut", addressOut);
+    if (input == NULL && output == NULL) {
+        const uint64_t addressIn = get_input_address_for_bitstream(
+                bitstream_id, N);
+        const uint64_t addressOut = get_output_address_for_bitstream(
+                bitstream_id, N);
 
-    fpgaconvnet::logging::stdout(logging::INFO)
-        << "input address = " << addressIn << "\n";
-    fpgaconvnet::logging::stdout(logging::INFO)
-        << "output address = " << addressOut << "\n";
+        fpgaconvnet::logging::stdout(logging::INFO)
+            << "Configuring I/O using DDR4 addresses\n";
+        fpgaconvnet::logging::stdout(logging::INFO)
+            << "input address = " << addressIn << "\n";
+        fpgaconvnet::logging::stdout(logging::INFO)
+            << "output address = " << addressOut << "\n";
+
+        max_set_param_uint64t(actions[0], "addressIn", addressIn);
+        max_set_param_uint64t(actions[num_fpgas - 1], "addressOut", addressOut);
+
+    } else {
+        max_queue_input(
+                actions[0], "fromcpu", input,
+                get_input_stream_size_for_bitstream(bitstream_id, N)
+        );
+        max_queue_output(
+                actions[num_fpgas - 1], "tocpu", output,
+                get_output_stream_size_for_bitstream(bitstream_id, N)
+        );
+    }
+
 
 #ifdef __SIM__
     void *tmp_buffer_in = NULL;
@@ -1087,17 +1143,31 @@ std::vector<float> Convnet::max_run_inference(
             * last_layer.num_outputs();
     std::vector<float> ret(N * output_size , 0);
     double time_taken = 0.0;
+    const bool use_ddr4 = network_params.allow_runtime_reconfiguration();
 
     /* 1. Load images into off-chip memory. */
-    logging::stdout(logging::INFO)
-        << "Loading images to off-chip memory ... " << std::endl;
-    max_load_input_data(&images[0], N);
-    logging::stdout(logging::INFO) << "-- DONE!" << std::endl;
+    if (use_ddr4) {
+        logging::stdout(logging::INFO)
+            << "Loading images to off-chip memory ... " << std::endl;
+        max_load_input_data(&images[0], N);
+        logging::stdout(logging::INFO) << "-- DONE!" << std::endl;
+    }
 
     /* 2. Run inference */
     logging::stdout(logging::INFO)
         << "Running feature extractions ... " << std::endl;
     for (unsigned i = 0 ; i < get_num_bitstreams() ; i++) {
+        const void *input;
+        void *output;
+
+        if (use_ddr4) {
+            input = NULL;
+            output = NULL;
+        } else {
+            input  = &images[0];
+            output = &ret[0];
+        }
+
         logging::Indentation indent;
 
         logging::stdout(logging::INFO)
@@ -1105,15 +1175,17 @@ std::vector<float> Convnet::max_run_inference(
 
         logging::Indentation more_indent;
         double this_time_taken;
-        max_run_single_bitstream(N, i, &this_time_taken);
+        max_run_single_bitstream(N, i, &this_time_taken, input, output);
 
         time_taken += this_time_taken;
     }
     fpgaconvnet::logging::stdout() << "-- DONE" << std::endl;
 
     // 3. Load data from off-chip memory back to the host
-    max_read_output_data(&ret[0], N);
-    fpgaconvnet::logging::stdout() << "-- DONE" << std::endl;
+    if (use_ddr4) {
+        max_read_output_data(&ret[0], N);
+        fpgaconvnet::logging::stdout() << "-- DONE" << std::endl;
+    }
 
     // 4. Report the results and write the time taken
     if (benchmark) {
@@ -1129,6 +1201,8 @@ std::vector<float> Convnet::max_run_inference_with_single_bitstream(
         const std::vector<float> & images,
         const unsigned bitstream_id)
 {
+    assert(!network_params.allow_runtime_reconfiguration());
+
     const uint64_t input_stream_size =
             get_input_stream_size_for_bitstream(bitstream_id, N);
     const uint64_t output_stream_size =
@@ -1162,7 +1236,7 @@ std::vector<float> Convnet::max_run_inference_with_single_bitstream(
     logging::stdout(logging::INFO)
         << "Running feature extractions with only bitstream "
         << bitstream_id << std::endl;
-    max_run_single_bitstream(N, bitstream_id, &time_taken);
+    max_run_single_bitstream(N, bitstream_id, &time_taken, NULL, NULL);
     fpgaconvnet::logging::stdout() << "-- DONE" << std::endl;
 
     // 3. Load data from off-chip memory back to the host

@@ -120,7 +120,8 @@ private:
     unsigned get_num_bitstreams();
 
     void max_run_single_bitstream(
-            uint64_t N, unsigned bitstream_id, double *p_timetaken);
+            uint64_t N, unsigned bitstream_id, double *p_timetaken,
+            const void *input, void *output);
 
 public:
     Convnet(const protos::Network & network_params,
