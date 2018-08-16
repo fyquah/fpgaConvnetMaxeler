@@ -821,7 +821,7 @@ Convnet::max_write_to_lmem(
         const void *data, const uint64_t address, const uint64_t stream_size)
 {
     char load_spec_buffer[10];
-    sprintf(load_spec_buffer, "*:%d", dfe_index);
+    sprintf(load_spec_buffer, "*");
 
     logging::stdout(logging::INFO)
         << "Writing " << stream_size << " bytes to address " << address
@@ -860,7 +860,7 @@ Convnet::max_read_from_lmem(
         void *data, const uint64_t address, const uint64_t stream_size)
 {
     char load_spec_buffer[30];
-    sprintf(load_spec_buffer, "*:%d", dfe_index);
+    sprintf(load_spec_buffer, "*");
 
     dfe = max_load(lmem_maxfile, load_spec_buffer);
     logging::stdout(logging::INFO)
@@ -1027,7 +1027,7 @@ Convnet::max_run_single_bitstream(
 
         __sync_synchronize();
         gettimeofday(&t_begin, NULL);
-        dfe = max_load(max_files[bitstream_id][0], "*:0");
+        dfe = max_load(max_files[bitstream_id][0], "*");
         gettimeofday(&t_end, NULL);
         __sync_synchronize();
 
