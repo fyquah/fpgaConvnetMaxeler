@@ -15,7 +15,7 @@
 #ifdef __SIM__
     static const uint64_t N = 6;
 #else
-    static const uint64_t N = 384 * 64;
+    static const uint64_t N = 1228800;
 #endif
 
 
@@ -52,6 +52,7 @@ std::vector<float> run_feature_extraction(
             N,
             &extracted_features[0],
             "../test_data/output.txt");
+    return extracted_features;
 
 #ifndef __SIM__
     // this is to measure latency
