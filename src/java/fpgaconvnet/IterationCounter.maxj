@@ -83,7 +83,7 @@ public class IterationCounter {
     /* The number of cycles required to populate the bias. */
     public int getBiasInitCycles() {
         // maxeler requires streams to be a multiple of 16 bytes = 4 * 4 bytes.
-        int bias_bytes = (GlobalConfig.fracBits + GlobalConfig.intBits) / 8;
+        int bias_bytes = (GlobalConfig.get().getNumDataBytes());
         int stream_chunk_size = 16 / bias_bytes;
         return Utils.divCeil(layerParams.getNumOutputs(), stream_chunk_size)
             * stream_chunk_size;
@@ -105,7 +105,7 @@ public class IterationCounter {
      * stream size multiple requirements).
      */
     public int getWeightsInitCycles() {
-        int number_bytes = (GlobalConfig.fracBits + GlobalConfig.intBits) / 8;
+        int number_bytes = (GlobalConfig.get().getNumDataBytes());
         int stream_chunk_size = 16 / number_bytes;
         int multipleBase =
                 ((int) Utils.lcm(

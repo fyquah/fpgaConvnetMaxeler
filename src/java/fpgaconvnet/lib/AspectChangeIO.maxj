@@ -179,7 +179,7 @@ public class AspectChangeIO extends KernelLib {
                     ).getCount();
 
             DFEVectorType<DFEVar> aspectVectorType =
-                new DFEVectorType<DFEVar>(GlobalConfig.dataType, aspectOutputSize);
+                new DFEVectorType<DFEVar>(GlobalConfig.get().getDataType(), aspectOutputSize);
             DFEVector<DFEVar> aspectOutput = aspectVectorType.newInstance(this);
 
             for (int i = 0 ; i < aspectOutputSize ; i++) {

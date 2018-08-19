@@ -95,7 +95,7 @@ public class SlidingWindow extends KernelLib {
          */
         int windowSize = output.size();
         DFEVectorType<DFEVar> returnType = new DFEVectorType<DFEVar>(
-                GlobalConfig.dataType, windowSize);
+                GlobalConfig.get().getDataType(), windowSize);
         DFEVector<DFEVar> ret = returnType.newInstance(this);
 
         for (int i = 0 ; i < windowSize ; i++) {

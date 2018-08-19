@@ -44,14 +44,14 @@ public class LrnLayerKernel extends Kernel {
             iter = control.count.simpleCounter(Utils.ceilLog2(getIterations()), getIterations());
         }
         channelFoldingFactor = layerParams.getLrn().getChannelFoldingFactor();
-        ioType = new DFEVectorType<DFEVar>(GlobalConfig.dataType, layerParams.getNumOutputs());
-        rawIoType = new DFEVectorType<DFEVar>(GlobalConfig.cpuType, layerParams.getNumOutputs());
+        ioType = new DFEVectorType<DFEVar>(GlobalConfig.get().getDataType(), layerParams.getNumOutputs());
+        rawIoType = new DFEVectorType<DFEVar>(GlobalConfig.get().getCpuType(), layerParams.getNumOutputs());
         input = ioType.newInstance(this);
         output = ioType.newInstance(this);
 
         if (layerParams.getLrn().getApproxMethod() == LrnParameter.ApproxMethod.BINOMIAL) {
-            approxLeft   = io.scalarInput("approx_left", GlobalConfig.cpuType).cast(GlobalConfig.dataType);
-            approxFactor = io.scalarInput("approx_factor", GlobalConfig.cpuType).cast(GlobalConfig.dataType);
+            approxLeft   = io.scalarInput("approx_left", GlobalConfig.get().getCpuType()).cast(GlobalConfig.get().getDataType());
+            approxFactor = io.scalarInput("approx_factor", GlobalConfig.get().getCpuType()).cast(GlobalConfig.get().getDataType());
         } else {
             approxLeft = null;
             approxFactor = null;
@@ -91,7 +91,7 @@ public class LrnLayerKernel extends Kernel {
                     pixelLocalRegionVars.add(
                             channel != -1
                             ? input[channel]
-                            : constant.var(GlobalConfig.dataType, 0.0));
+                            : constant.var(GlobalConfig.get().getDataType(), 0.0));
                 }
 
                 if (pixelLocalRegionVars.size() == 1) {
@@ -109,7 +109,7 @@ public class LrnLayerKernel extends Kernel {
          * in pooling layer.
          */
         for (int channel = 0 ; channel < layerParams.getNumOutputs() ; channel++) {
-            DFEVar acc = GlobalConfig.dataType.newInstance(this);
+            DFEVar acc = GlobalConfig.get().getDataType().newInstance(this);
             DFEVar initFlag = iter.eq(channel / channelFoldingFactor);
             DFEVar prevAcc = stream.offset(acc, -1);
 

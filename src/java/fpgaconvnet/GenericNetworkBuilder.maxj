@@ -1,5 +1,7 @@
 package fpgaconvnet;
 
+import fpgaconvnet.GlobalConfig;
+
 import com.google.protobuf.TextFormat;
 
 import com.maxeler.maxcompiler.v2.build.EngineParameters;
@@ -49,6 +51,7 @@ public class GenericNetworkBuilder {
             TextFormat.getParser().merge(protoText, networkParamsBuilder);
             Parameters.Network networkParameters = new ParametersTransformer(
                     networkParamsBuilder.build()).transform();
+            GlobalConfig.set(new GlobalConfig(networkParameters));
 
             NetworkManager manager = new NetworkManager(
                     engineParameters,
