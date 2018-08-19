@@ -15,7 +15,7 @@
 #ifdef __SIM__
     static const uint64_t N = 6;
 #else
-    static const uint64_t N = 20;
+    static const uint64_t N = 384 * 10;
 #endif
 
 
@@ -29,7 +29,7 @@ std::vector<float> run_feature_extraction(
         const std::vector<float> & images
 )
 {
-    std::vector<max_file_t*> max_files = targets_init();
+    std::vector<std::vector<max_file_t*>> max_files = targets_init();
 
     std::vector<float> extracted_features;
     fpgaconvnet::Convnet convnet(network_parameters, max_files, "");
@@ -60,7 +60,6 @@ std::vector<float> run_feature_extraction(
             &extracted_features[0],
             "./testdata/data/output.bin",
             fpgaconvnet::FORMAT_BINARY);
-    return extracted_features;
 
     // this is to measure latency
     std::vector<unsigned> counts;
@@ -73,8 +72,10 @@ std::vector<float> run_feature_extraction(
     for (unsigned j = 0; j < counts.size() ; j++) {
         const unsigned N = counts[j];
         std::vector<double> times;
+        fpgaconvnet::logging::set_level(fpgaconvnet::logging::INFO);
         fpgaconvnet::logging::stdout(fpgaconvnet::logging::INFO)
             << "Measuring latency using " << N << " images" << std::endl;
+        fpgaconvnet::logging::set_level(fpgaconvnet::logging::WARNING);
 
         for (int i = 0 ; i < 1000 ; i++) {
             double p;
@@ -105,19 +106,12 @@ int main(int argc, char **argv)
 	    fpgaconvnet::load_network_proto(argv[1]);
 
     std::cout << "Reading images ..." << std::endl;
-    const unsigned single_input_size =
-            fpgaconvnet::calculation::conv_in_size(network_parameters);
-    const std::vector<float> images = load_stream(
-            "./testdata/data/input.bin", 10 * single_input_size);
-    std::vector<float> pixel_stream(N * single_input_size);
-
-    // copy to pixel stream
-    for (unsigned i = 0; i < N / 10; i++) {
-        memcpy(&pixel_stream[i * single_input_size * 10],
-                &images[0],
-                sizeof(float) * images.size());
-    }
-
+    std::vector<float> pixel_stream =
+        load_and_duplicate_float_stream(
+                "./testdata/data/input.bin",
+                fpgaconvnet::calculation::conv_in_size(network_parameters),
+                10,
+                N);
     std::vector<float> conv_out = run_feature_extraction(
 	    network_parameters, pixel_stream);
     return 0;

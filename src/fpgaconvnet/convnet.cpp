@@ -10,9 +10,12 @@
 
 #include <Eigen/Dense>
 
+#include "fpgaconvnet/common.h"
 #include "fpgaconvnet/convnet.h"
 #include "fpgaconvnet/protos/parameters.pb.h"
 
+// Generated from compiling maxfile for interacting with LMem
+#include "lmem.h"
 
 static void generic_load(std::string filename, int count, float *output)
 {
@@ -60,12 +63,15 @@ uint64_t total_rom_size(const protos::LayerParameter & layer)
 }
 
 
+/* TODO(fyq14): This should be configurable by the user in the descriptor.
+ *
+ * See [GlobalConfig.maxj] for more information.
+ */
+static const int num_frac_bits = 12;
+static const int num_int_bits  = 4;
+
 static inline uint16_t
 cast_float_to_fixed(const float arg) {
-
-    /* TODO(fyq14): This should be configurable by the user */
-    const int num_frac_bits = 8;
-    const int num_int_bits  = 8;
     const float fixed_point_one = (1 << num_frac_bits);
 
     int x = (int) (arg * fixed_point_one);
@@ -77,6 +83,13 @@ cast_float_to_fixed(const float arg) {
     uint16_t frac_bits = (x & ((1 << num_frac_bits) - 1));
 
     return ((uint16_t) (int_bits << num_frac_bits)) | (frac_bits);
+}
+
+static inline float
+cast_fixed_to_float(const uint16_t arg)
+{
+    const float multiplier = (arg & 0x8000) ? -1.0 : 1.0 ;
+    return multiplier * ((float(arg & 0x7FFF) / float(1 << num_frac_bits)));
 }
 
 
@@ -127,7 +140,6 @@ void load_kernels_from_binary_file(
     std::ifstream fin(filename.c_str());
     int total_kernel_size = layer.conv().kernel_size() * layer.conv().kernel_size();
     int total_kernels = layer.num_outputs() / layer.conv().group() * layer.num_inputs();
-    float *buffer = new float[total_kernel_size];
 
     if (!fin.is_open()) {
         throw fpgaconvnet::Exception("Cannot open " + filename);
@@ -151,16 +163,8 @@ void load_bias_from_binary_file(
 }
 
 
-void report_conv_performance(
-    const protos::Network & network,
-    uint64_t N,
-    timeval t_begin,
-    timeval t_end
-)
+void report_conv_performance(const protos::Network & network, uint64_t N, double delta)
 {
-    double begin = double(t_begin.tv_sec) * 1000000 + double(t_begin.tv_usec);
-    double end = double(t_end.tv_sec) * 1000000 + double(t_end.tv_usec);
-    double delta = end - begin;
     double throughput = double(N) / delta * 1000000;
     double total_ops = calculation::ops(network);
    
@@ -168,13 +172,10 @@ void report_conv_performance(
             << "Time taken for " << N << " feature extractions  = "
             << delta << "microseconds" << std::endl;
     logging::stdout(logging::INFO)
-            << "Project Throughput (images per second) = "
-            << calculation::throughput(network)
-            << std::endl;
-    logging::stdout(logging::INFO)
             << "Actual Throughput (images per second) = " << throughput << std::endl;
     logging::stdout(logging::INFO)
-            << "GOps = " << throughput * total_ops / 1e9 << std::endl;
+            << "Actual GOps = " << throughput * total_ops / 1e9 << std::endl;
+    calculation::explain_throughput(network);
 }
 
 
@@ -188,20 +189,22 @@ void verify_conv_output(
     std::ifstream fin(filename.c_str());
     uint32_t total_pixels = 0;
     float total_error = 0.0;
+    float total_pixel_magnitude = 0.0;
     float max_error = 0.0;
     float total_squared_error = 0.0;
     const std::vector<float> thresholds = { 0.01, 0.05, 0.1, 0.5 };
     std::vector<unsigned> num_more_than_threshold(thresholds.size(), 0);
 
     const protos::LayerParameter & final_layer = network.layer(network.layer_size() - 1);
-    const int conv_out_size = (final_layer.output_height() *
+    const unsigned conv_out_size = (final_layer.output_height() *
                                final_layer.output_width() *
                                final_layer.num_outputs());
+    uint64_t ctr = 0;
 
     for (uint32_t i = 0 ; i < std::min(N, 10ul) ; i++) {
         std::cout << "verify_conv_output IMAGE_NUMBER : " << i << std::endl;
         for (uint32_t j = 0 ; j < conv_out_size; j++) {
-            float expected;
+            float expected = 0.0;
             float obtained = conv_out[conv_out_size * i + j];
 
             if (format == FORMAT_TXT) {
@@ -219,25 +222,29 @@ void verify_conv_output(
 
             max_error = std::max(max_error, std::abs(obtained  - expected));
             total_error += std::abs(obtained  - expected);
-            total_squared_error += std::pow(obtained  - expected, 2);
+            total_pixel_magnitude += std::abs(obtained);
             total_pixels += 1;
+
+            if (isnan(obtained) || std::abs(obtained - expected) > 0.05) {
+                logging::stdout(logging::DDEBUG)
+                    << j
+                    << "\t| BAD: Obtained " << obtained
+                    << ", expected "     << expected
+                    << std::endl;
+            }
+            total_squared_error += std::pow(obtained  - expected, 2);
 
             for (int k = 0; k < thresholds.size() ; k++) {
                 if (std::abs(obtained - expected) > thresholds[k]) {
                     num_more_than_threshold[k]++;
                 }
             }
-            // logging::stdout(logging::WARNING) << j << "\t| ERROR: Obtained " << obtained << ", expected " << expected << std::endl;
-            // else {
-            //     logging::stdout(WARNING) << j << "\t| OKAY: Obtained " << obtained << ", expected " << expected << std::endl;
-            // }
         }
     }
 
-    float mean_error = float(total_error) / float(total_pixels);
+    const float mean_error = float(total_error) / float(total_pixels);
 
-    for (int  k =0;k < thresholds.size() ; k++) {
-
+    for (int k = 0 ;k < thresholds.size() ; k++) {
         logging::stdout(logging::INFO)
             << "Num pixels with error > " 
             << thresholds[k] << " = "
@@ -254,7 +261,11 @@ void verify_conv_output(
         << std::sqrt(total_squared_error / total_pixels - std::pow(mean_error, 2))
         << std::endl;
     logging::stdout(logging::INFO)
-        << "Max pixel error = " << max_error << std::endl;
+        << "max pixel_error = "
+        << max_error << std::endl;
+    logging::stdout(logging::INFO)
+        << "mean pixel magnitude = "
+        << float(total_pixel_magnitude) / float(total_pixels) << std::endl;
     fin.close();
 }
 
@@ -265,11 +276,9 @@ void special_allign_and_place_kernel_weights(
         float *src_base
 )
 {
-    const uint64_t kernel_ff = layer.conv().kernel_folding_factor();
     const uint64_t conv_ff = layer.conv().conv_folding_factor();
     const uint64_t kernel_dim = layer.conv().kernel_size();
     const uint64_t worker_factor = layer.conv().worker_factor();
-    const uint64_t total_iter = calculation::total_iterations(layer);
     const uint64_t rom_per_worker =
             calculation::total_rom_size(layer) / layer.conv().worker_factor();
 
@@ -277,18 +286,18 @@ void special_allign_and_place_kernel_weights(
      *
      * wf * scheduler_iterations * cff * kff
      */
-    for (int i = 0 ; i < worker_factor ; i++) {
+    for (uint64_t i = 0 ; i < worker_factor ; i++) {
         float *dest = dest_base + (i * rom_per_worker);
         float *src = src_base + (i * kernel_dim * kernel_dim);
 
-        for (int w = 0; w < calculation::scheduler_iterations(layer); w++) {
+        for (uint64_t w = 0; w < calculation::scheduler_iterations(layer); w++) {
             const int worker_iter = w;  // the w-th channel that the worker's handling.
 
             if (i + worker_iter * worker_factor >= layer.num_inputs()) {
                 continue;
             }
 
-            for (int channel = 0
+            for (uint64_t channel = 0
                     ; channel < layer.num_outputs() / layer.conv().group()
                     ; channel++) {
                 const int k =
@@ -352,11 +361,11 @@ void allign_and_place_cpu_initialized_kernel_weights(
             tmp,
             src_base);
 
-    for (int iter = 0 ; iter < total_iterations ; iter++) {
+    for (unsigned iter = 0 ; iter < total_iterations ; iter++) {
         uint64_t addr = iter * calculation::total_multipliers(layer);
 
-        for (int worker = 0 ; worker < layer.conv().worker_factor() ; worker++) {
-            for (int conv = 0 ; conv < layer.conv().conv_folding_factor() ; conv++) {
+        for (unsigned worker = 0 ; worker < layer.conv().worker_factor() ; worker++) {
+            for (unsigned conv = 0 ; conv < layer.conv().conv_folding_factor() ; conv++) {
                 uint64_t offset =
                         (iter * layer.conv().kernel_folding_factor())
                         + (worker * rom_per_worker)
@@ -409,11 +418,11 @@ void allign_and_place_lmem_initialized_kernel_weights(
             tmp,
             src_base);
 
-    for (int iter = 0 ; iter < total_iterations ; iter++) {
+    for (uint64_t iter = 0 ; iter < total_iterations ; iter++) {
         uint64_t addr = iter * calculation::weights_vector_size(layer);
 
-        for (int worker = 0 ; worker < layer.conv().worker_factor() ; worker++) {
-            for (int conv = 0 ; conv < layer.conv().conv_folding_factor() ; conv++) {
+        for (unsigned worker = 0 ; worker < layer.conv().worker_factor() ; worker++) {
+            for (unsigned conv = 0 ; conv < layer.conv().conv_folding_factor() ; conv++) {
                 uint64_t offset =
                         (iter * layer.conv().kernel_folding_factor())
                         + (worker * rom_per_worker)
@@ -433,16 +442,20 @@ void allign_and_place_lmem_initialized_kernel_weights(
 
 void Convnet::randomize_weights()
 {
-    for (int i = 0 ; i < conv_layer_params.size() ; i++) {
-        auto conv_layer = conv_layer_params[i];
+    for (unsigned i = 0 ; i < kernels.size() ; i++) {
+        if (kernels[i] == NULL) {
+            continue;
+        }
+
+        auto conv_layer = network_params.layer(i);
         uint64_t total_weights = calculation::total_kernel_weights(conv_layer);
         uint64_t total_bias = conv_layer.num_outputs();
 
-        for (int j = 0 ; j < total_weights; j++) {
+        for (unsigned j = 0 ; j < total_weights; j++) {
             kernels[i][j] = (float) math::rng(-0.75, 0.75);
         }
 
-        for (int j = 0 ; j < total_bias ; j++) {
+        for (unsigned j = 0 ; j < total_bias ; j++) {
             bias[i][j] = (float) math::rng(-0.75, 0.75);
         }
     }
@@ -464,43 +477,33 @@ void Convnet::set_layer_weights(
     char buffer[30];
     sprintf(buffer, "kernel_%d", layer.layer_id());
 
-    if (initialized_weights) {
-        logging::stdout(logging::INFO)
-                << "Host-initialized weights has been set in previous calls."
-                << std::endl;
-        if (calculation::is_layer_cpu_initialized(layer)) {
-            sprintf(buffer, "kernel_%d", layer.layer_id());
-            max_queue_input(action, buffer, NULL, 0);
-        }
-        sprintf(buffer, "bias_%d", layer.layer_id());
-        max_queue_input(action, buffer, NULL, 0);
+    if (calculation::is_layer_cpu_initialized(layer)) {
+        uint64_t stream_size = calculation::cpu_weights_stream_size(layer);
+        uint16_t *values = new uint16_t[stream_size];
 
-    } else {
-        logging::stdout(logging::INFO)
-                << "Passing in host-initialized weights (This will only be done once)."
-                << buffer << std::endl;
-
-        if (calculation::is_layer_cpu_initialized(layer)) {
-            uint64_t stream_size = calculation::cpu_weights_stream_size(layer);
-            uint16_t *values = new uint16_t[stream_size];
-
-            queue_weights.push_back(values);
-            std::memcpy(
-                    values,
-                    worker_kernels,
-                    sizeof(fixed_point_t) * stream_size);
-            max_queue_input(
-                    action, buffer, values,
-                    sizeof(fixed_point_t) * stream_size);
-
-        }
-
-        sprintf(buffer, "bias_%d", layer.layer_id());
+        queue_weights.push_back(values);
+        std::memcpy(
+                values,
+                worker_kernels,
+                sizeof(fixed_point_t) * stream_size);
         max_queue_input(
-                action, buffer, bias,
-                sizeof(fixed_point_t) * calculation::bias_stream_size(layer));
+                action, buffer, values,
+                sizeof(fixed_point_t) * stream_size);
+
     }
 
+    sprintf(buffer, "bias_%d", layer.layer_id());
+    max_queue_input(
+            action, buffer, bias,
+            sizeof(fixed_point_t) * calculation::bias_stream_size(layer));
+}
+
+Convnet::Convnet(
+        const protos::Network & network_params,
+        std::vector<std::vector<max_file_t*> > max_files,
+        const char* load_spec)
+{
+    constructor(network_params, max_files, load_spec);
 }
 
 Convnet::Convnet(
@@ -508,7 +511,9 @@ Convnet::Convnet(
         std::vector<max_file_t*> max_files,
         const char* load_spec)
 {
-    constructor(network_params, max_files, load_spec);
+    std::vector<std::vector<max_file_t*> > b_max_files;
+    b_max_files.push_back(max_files);
+    constructor(network_params, b_max_files, load_spec);
 }
 
 
@@ -517,35 +522,33 @@ Convnet::Convnet(
         max_file_t* max_file,
         const char* load_spec)
 {
-    std::vector<max_file_t*> max_files;
-    max_files.push_back(max_file);
+    std::vector<std::vector<max_file_t*> > max_files(1);
+    max_files.back().push_back(max_file);
     constructor(network_params, max_files, load_spec);
+}
+
+unsigned Convnet::get_num_fpga_for_bitstream(unsigned bitstream)
+{
+    return max_files[bitstream].size();
+}
+
+unsigned Convnet::get_num_bitstreams()
+{
+    return max_files.size();
 }
 
 void Convnet::constructor(
         const protos::Network & arg_network_params,
-        std::vector<max_file_t*> arg_max_files,
+        std::vector<std::vector<max_file_t*>> arg_max_files,
         const char* arg_load_spec)
 {
     network_params = arg_network_params;
     max_files = arg_max_files;
-    initialized_weights = false;
-    num_fpgas = max_files.size();
     load_spec = arg_load_spec;
-    fpga_input_size = std::vector<int>(num_fpgas);
-    fpga_output_size = std::vector<int>(num_fpgas);
-
-    if (num_fpgas == 1) {
-        dfe_array = NULL;
-        dfe = max_load(max_files[0], load_spec);
-    } else {
-        dfe = NULL;
-#ifdef __SIM__
-        dfe_array = NULL;
-#else
-        dfe_array = max_load_mixed_array((max_file_t**) &max_files[0], num_fpgas, load_spec);
-#endif
-    }
+    dfe = NULL;
+    dfe_array = NULL;
+    lmem_maxfile = lmem_init();
+    m_last_executed_bitstream = -1;
 
     for (auto it = network_params.layer().begin();
             it != network_params.layer().end();
@@ -556,45 +559,43 @@ void Convnet::constructor(
                     * calculation::total_iterations(*it);
             uint64_t bias_total_size = calculation::bias_stream_size(*it);
 
-            conv_layer_params.push_back(*it);
             kernels.push_back(new float[calculation::total_kernel_weights(*it)]);
             bias.push_back(new fixed_point_t[bias_total_size]);
             worker_kernels.push_back(new fixed_point_t[worker_kernel_total_size]);
+        } else {
+            kernels.push_back(NULL);
+            bias.push_back(NULL);
+            worker_kernels.push_back(NULL);
         }
 
-        fpga_output_size[it->fpga_id()] =
+        // since the layers are traversed in order, this is guranteed to write
+        // the correct results in the end
+        fpga_output_size[std::make_pair(it->bitstream_id(), it->fpga_id())] =
                 it->output_height() * it->output_width() * it->num_outputs();
     }
 
-    fpga_input_size[0] =
-            network_params.layer(0).input_height()
-            * network_params.layer(0).input_width()
-            * network_params.layer(0).num_inputs();
-    for (int i = 1 ; i < num_fpgas ; i++) {
-        fpga_input_size[i] = fpga_output_size[i - 1];
+    for (auto it = network_params.layer().rbegin();
+            it != network_params.layer().rend();
+            it++) {
+        fpga_input_size[std::make_pair(it->bitstream_id(), it->fpga_id())] =
+                it->input_height() * it->input_width() * it->num_inputs();
     }
-
-    const protos::LayerParameter &first_layer = network_params.layer(0);
-    const protos::LayerParameter &final_layer = network_params.layer(
-            network_params.layer_size() - 1);
-
-    input_size =
-            first_layer.input_height() * first_layer.input_width()
-            * first_layer.num_inputs();
-
-    output_size =
-            final_layer.output_height() * final_layer.output_width()
-            * final_layer.num_outputs();
 }
 
 Convnet::~Convnet ()
 {
-    for (int i = 0 ; i < conv_layer_params.size() ; i++) {
-        delete[] kernels[i];
-        delete[] bias[i];
-        delete[] worker_kernels[i];
+    for (unsigned i = 0 ; i < kernels.size() ; i++) {
+        if (kernels[i] != NULL) {
+            delete[] kernels[i];
+        }
+        if (bias[i] != NULL) {
+            delete[] bias[i];
+        }
+        if (worker_kernels[i] != NULL) {
+            delete[] worker_kernels[i];
+        }
     }
-    for (int i = 0 ; i < queue_weights.size(); i++) {
+    for (unsigned i = 0 ; i < queue_weights.size(); i++) {
         delete[] queue_weights[i];
     }
     if (dfe) {
@@ -605,38 +606,50 @@ Convnet::~Convnet ()
     }
 }
 
-void Convnet::load_weights_from_files(std::vector<std::string> filenames, file_format_t file_type)
+void Convnet::load_weights_from_files(
+        std::vector<std::string> filenames, file_format_t file_type)
 {
     logging::stdout(logging::INFO) << "Loading weights from file." << std::endl;
-    for (int i = 0 ; i < conv_layer_params.size(); i++) {
-        float *bias_tmp = new float[calculation::bias_stream_size(
-                conv_layer_params[i])];
+    int j = 0;
+
+    for (int i = 0 ; i < network_params.layer_size(); i++) {
+        if (kernels[i] == NULL) {
+            continue;
+        }
+
+        auto layer = network_params.layer(i);
+
+        float *bias_tmp = new float[calculation::bias_stream_size(layer)];
 
         if (file_type == FORMAT_TXT) {
             load_kernels_from_file(
-                    filenames[2 * i], conv_layer_params[i], kernels[i]);
+                    filenames[j++], layer, kernels[i]);
             load_bias_from_file(
-                    filenames[2 * i + 1], conv_layer_params[i], bias_tmp);
+                    filenames[j++], layer, bias_tmp);
         } else {
             load_kernels_from_binary_file(
-                    filenames[2 * i], conv_layer_params[i], kernels[i]);
+                    filenames[j++], layer, kernels[i]);
             load_bias_from_binary_file(
-                    filenames[2 * i + 1], conv_layer_params[i], bias_tmp);
+                    filenames[j++], layer, bias_tmp);
         }
 
         copy_float_to_fixed(
-                bias[i], bias_tmp, calculation::bias_stream_size(conv_layer_params[i]));
+                bias[i], bias_tmp, calculation::bias_stream_size(layer));
 
         delete[] bias_tmp;
     }
     logging::stdout(logging::INFO) << "Alligning weights." << std::endl;
-    for (int i = 0; i < conv_layer_params.size() ; i++) {
-        if (calculation::is_layer_cpu_initialized(conv_layer_params[i])) {
-            allign_and_place_cpu_initialized_kernel_weights(
-                    conv_layer_params[i], worker_kernels[i], kernels[i]);
-        } else {
-            allign_and_place_lmem_initialized_kernel_weights(
-                    conv_layer_params[i], worker_kernels[i], kernels[i]);
+    for (int i = 0 ; i < network_params.layer_size(); i++) {
+        auto layer = network_params.layer(i);
+
+        if (kernels[i] != NULL) {
+            if (calculation::is_layer_cpu_initialized(layer)) {
+                allign_and_place_cpu_initialized_kernel_weights(
+                        layer, worker_kernels[i], kernels[i]);
+            } else {
+                allign_and_place_lmem_initialized_kernel_weights(
+                        layer, worker_kernels[i], kernels[i]);
+            }
         }
     }
     logging::stdout(logging::INFO) << "Done!" << std::endl;
@@ -645,22 +658,26 @@ void Convnet::load_weights_from_files(std::vector<std::string> filenames, file_f
 
 void Convnet::max_init_weights()
 {
-    uint64_t start = 0;
     std::vector<int8_t*> buffer_ptrs;
 
-    for (int i = 0; i < conv_layer_params.size() ; i++) {
-        if (calculation::is_layer_cpu_initialized(conv_layer_params[i])) {
+    for (int i = 0; i < network_params.layer_size() ; i++) {
+        if (kernels[i] == NULL) {
+            continue;
+        }
+
+        auto layer = network_params.layer(i);
+
+        if (calculation::is_layer_cpu_initialized(layer)) {
             logging::stdout(logging::INFO) << "layer "
-                    << conv_layer_params[i].layer_id()
+                    << layer.layer_id()
                     << " is host-initialized. Skipping .." << std::endl;
             continue;
         }
 
-        auto & layer = conv_layer_params[i];
         max_actions_t *write_action = max_actions_init(
-                max_files[conv_layer_params[i].fpga_id()], "writeLMem");
+                lmem_maxfile, "writeLMem");
         const uint64_t address =
-                conv_layer_params[i].conv().weight_address_base();
+                layer.conv().weight_address_base();
         const uint64_t stream_size =
                 calculation::total_iterations(layer)
                 * calculation::weights_vector_size(layer)
@@ -668,8 +685,8 @@ void Convnet::max_init_weights()
 
         logging::stdout(logging::INFO)
                 << "Initializing weights in LMEM at layer "
-                << conv_layer_params[i].layer_id()
-                << " [fpga_id = " << conv_layer_params[i].fpga_id() << "]"
+                << layer.layer_id()
+                << " [fpga_id = " << layer.fpga_id() << "]"
                 << std::endl;
         logging::stdout(logging::INFO)
                 << "Address = " << address << std::endl;
@@ -679,28 +696,16 @@ void Convnet::max_init_weights()
         max_set_param_uint64t(write_action, "size", stream_size);
         max_queue_input(
                 write_action,
-                "weights_in",
+                "data_in",
                 (void*) &worker_kernels[i][0],
                 stream_size);
 
-        if (num_fpgas == 1) {
-            max_run(dfe, write_action);
-        }
-#ifdef __SIM__
-        else {
-            dfe = max_load(max_files[conv_layer_params[i].fpga_id()], load_spec);
-            max_run(dfe, write_action);
-            max_unload(dfe);
-            dfe = NULL;
-        }
-#else
-        // TODO(fyq14): Complete this
-        else {
-            max_run(dfe, write_action);
-        }
-#endif
-
+        dfe = max_load(lmem_maxfile, load_spec);
+        max_run(dfe, write_action);
         max_actions_free(write_action);
+        max_unload(dfe);
+        dfe = NULL;
+
         logging::stdout(logging::INFO) << "Done!" << std::endl;
     }
 
@@ -717,38 +722,259 @@ std::vector<float> Convnet::max_run_inference(
 }
 
 
-std::vector<float> Convnet::max_run_inference(
-        uint64_t N,
-        const std::vector<float> & images,
-        const bool benchmark,
-        double *p_time_taken
-)
+std::vector<std::pair<int, int>>
+Convnet::get_range_list()
 {
-    timeval t_begin, t_end;
-    const uint64_t address_images = 0;
-    const uint64_t address_features = N * input_size * sizeof(float);
-    max_actions_t **actions = new max_actions_t*[num_fpgas];
-    std::vector<float> ret((N) * output_size , 0);
-    std::vector<bool> has_conv(num_fpgas, 0);
+    std::vector<std::pair<int, int>> v;
+    unsigned begin = 0;
 
-    logging::stdout(logging::INFO)
-        << "This bitstream use " << num_fpgas << " FPGAs  " << std::endl;
-    for (int i = 0 ; i < num_fpgas ; i++) {
-        actions[i] = max_actions_init(max_files[i], "default");
+    for (int i = 0; i < network_params.layer_size(); i++) {
+        if (i == network_params.layer_size() - 1 ||
+                network_params.layer(i).bitstream_id() != network_params.layer(i + 1).bitstream_id()) {
+            v.push_back(std::make_pair(begin, i));
+            begin = i + 1;
+        }
+
     }
 
-    logging::stdout(logging::INFO)
-        << "Setting up feature extraction actions ... " << std::endl;
+    return v;
+}
 
-    int i = 0;
-    for (auto it = network_params.layer().begin();
-            it != network_params.layer().end();
-            it++) {
+/* TODO: This is a pessimistic estimate of the required offset. */
+uint64_t
+Convnet::get_address_byte_offset(uint64_t N)
+{
+    uint64_t x = 0;
+
+    for (int i = 0; i < network_params.layer_size() ; i++) {
+        uint64_t y, z;
+        auto layer = network_params.layer(i);
+
+        y = layer.input_height() * layer.input_width() * layer.num_inputs();
+        if (i == 0) {
+            y = y * sizeof(float);
+        } else {
+            y = y * sizeof(fixed_point_t);
+        }
+
+        z = layer.output_height() * layer.output_width() * layer.num_outputs();
+        if (i == network_params.layer_size() - 1) {
+            z = z * sizeof(float);
+        } else {
+            z = z * sizeof(fixed_point_t);
+        }
+
+        x = std::max(x, std::max(y, z));
+    }
+
+    if (x % 384 == 0) {
+        return N * x;
+    } else {
+        return N * (x / 384 + 1) * 384;
+    }
+}
+
+uint64_t BASE_OFFSET = 384 * 100;
+
+uint64_t
+Convnet::get_input_address_for_bitstream(unsigned bitstream, uint64_t N)
+{
+    if (bitstream % 2 == 0) {
+        return BASE_OFFSET;
+    } else {
+        return BASE_OFFSET + get_address_byte_offset(N);
+    }
+}
+
+
+uint64_t
+Convnet::get_output_address_for_bitstream(unsigned bitstream, uint64_t N)
+{
+    if (bitstream % 2 == 1) {
+        return BASE_OFFSET;
+    } else {
+        return BASE_OFFSET + get_address_byte_offset(N);
+    }
+}
+
+
+uint64_t
+Convnet::get_input_stream_size_for_bitstream(unsigned bitstream, uint64_t N)
+{
+    const unsigned idx = get_range_list()[bitstream].first;
+    const auto layer = network_params.layer(idx);
+    const unsigned num_values =
+        layer.input_height() * layer.input_width() * layer.num_inputs();
+
+    if (idx == 0) {
+        return N * num_values * sizeof(float);
+    } else {
+        return N * num_values * sizeof(fixed_point_t);
+    }
+}
+
+
+uint64_t
+Convnet::get_output_stream_size_for_bitstream(unsigned bitstream, uint64_t N)
+{
+    const unsigned idx = get_range_list()[bitstream].second;
+    const auto layer = network_params.layer(idx);
+    const unsigned num_values =
+        layer.output_height() * layer.output_width() * layer.num_outputs();
+
+    if (int(idx) == network_params.layer_size() - 1) {
+        return N * num_values * sizeof(float);
+    } else {
+        return N * num_values * sizeof(fixed_point_t);
+    }
+}
+
+
+void
+Convnet::max_load_input_data(const float *images, uint64_t N)
+{
+    logging::stdout(logging::INFO)
+        << "Writing " << N << " input images to LMem" << "\n";
+    const uint64_t stream_size = get_input_stream_size_for_bitstream(0, N);
+    const uint64_t address = get_input_address_for_bitstream(0, N);
+    max_write_to_lmem(0, (void*) images, address, stream_size);
+}
+
+void
+Convnet::max_write_to_lmem(
+        const unsigned dfe_index,
+        const void *data, const uint64_t address, const uint64_t stream_size)
+{
+    char load_spec_buffer[10];
+    sprintf(load_spec_buffer, "*");
+
+    logging::stdout(logging::INFO)
+        << "Writing " << stream_size << " bytes to address " << address
+        << std::endl;
+
+    dfe = max_load(lmem_maxfile, load_spec_buffer);
+    logging::stdout(logging::INFO) << "dfe.id = " << dfe->id << std::endl;
+
+    max_actions_t *write_action = max_actions_init(lmem_maxfile, "writeLMem");
+    max_set_param_uint64t(write_action, "start", address);
+    max_set_param_uint64t(write_action, "size", stream_size);
+    max_queue_input(write_action, "data_in", data, stream_size);
+    max_run(dfe, write_action);
+    max_actions_free(write_action);
+    max_unload(dfe);
+    dfe = NULL;
+    m_last_executed_bitstream = -1;
+}
+
+void
+Convnet::max_read_output_data(float * images, uint64_t N)
+{
+    const uint64_t stream_size = get_output_stream_size_for_bitstream(
+            get_num_bitstreams() - 1, N);
+    const uint64_t address = get_output_address_for_bitstream(
+            get_num_bitstreams() - 1, N);
+
+    logging::stdout(logging::INFO)
+        << "Reading " << N << " feature maps from LMEM\n";
+    max_read_from_lmem(0, images, address, stream_size);
+}
+
+void
+Convnet::max_read_from_lmem(
+        const unsigned dfe_index,
+        void *data, const uint64_t address, const uint64_t stream_size)
+{
+    char load_spec_buffer[30];
+    sprintf(load_spec_buffer, "*");
+
+    dfe = max_load(lmem_maxfile, load_spec_buffer);
+    logging::stdout(logging::INFO)
+        << "Reading " << stream_size << " bytes from address "
+        << address
+        << std::endl;
+
+    max_actions_t *read_action = max_actions_init(
+            lmem_maxfile, "readLMem");
+    max_set_param_uint64t(read_action, "start", address);
+    max_set_param_uint64t(read_action, "size", stream_size);
+    max_queue_output(read_action, "data_out", data, stream_size);
+    max_run(dfe, read_action);
+    max_actions_free(read_action);
+    max_unload(dfe);
+    dfe = NULL;
+    m_last_executed_bitstream = -1;
+}
+
+void
+Convnet::max_run_single_bitstream(
+        uint64_t N, unsigned bitstream_id, double *p_timetaken,
+        const void *input, void *output)
+{
+    if (network_params.allow_runtime_reconfiguration()) {
+        assert(input == NULL);
+        assert(output == NULL);
+    } else {
+        assert(bitstream_id == 0);
+        assert(input != NULL);
+        assert(output != NULL);
+    }
+
+    const unsigned num_fpgas = get_num_fpga_for_bitstream(bitstream_id);
+    const bool initialised_weights = m_last_executed_bitstream == int(bitstream_id);
+
+    logging::stdout(logging::INFO) << "Num fpga = " << num_fpgas << "\n";
+
+    std::vector<max_actions_t*> actions(num_fpgas);
+    std::vector<bool> has_conv(num_fpgas, 0);
+
+    timeval t_begin;
+    timeval t_end;
+    t_begin.tv_sec  = 0.0;
+    t_begin.tv_usec = 0.0;
+    t_end.tv_sec  = 0.0;
+    t_end.tv_usec = 0.0;
+
+    for (unsigned i = 0 ; i < num_fpgas ; i++) {
+        actions[i] = max_actions_init(max_files[bitstream_id][i], "default");
+    }
+
+    for (int i = 0; i < network_params.layer_size() ; i++) {
+        auto it = &network_params.layer(i);
+        auto layer = *it;
+
+    if (it->bitstream_id() != bitstream_id) {
+            continue;
+        }
+
         if (it->has_conv()) {
-            set_layer_weights(
-                    actions[it->fpga_id()], *it, worker_kernels[i], bias[i]);
+            char buffer[30];
+            max_actions_t *action = actions[it->fpga_id()];
+
+            sprintf(buffer, "kernel_%d", it->layer_id());
             has_conv[it->fpga_id()] = 1;
-            i++;
+
+            if (initialised_weights) {
+                logging::stdout(logging::INFO)
+                        << "Host-initialized weights has been set "
+                        << "in previous calls."
+                        << std::endl;
+                if (calculation::is_layer_cpu_initialized(layer)) {
+                    sprintf(buffer, "kernel_%d", layer.layer_id());
+                    max_queue_input(action, buffer, NULL, 0);
+                }
+                sprintf(buffer, "bias_%d", layer.layer_id());
+                max_queue_input(action, buffer, NULL, 0);
+
+            } else {
+                logging::stdout(logging::INFO)
+                        << "Passing in host-initialized weights "
+                        << "(This should only be done once)."
+                        << buffer << std::endl;
+                set_layer_weights(
+                        action, *it, worker_kernels[i], bias[i]);
+            }
+
+
         } else if (it->has_lrn()) {
             /* assuming binomial approximation used. */
             char buffer[30];
@@ -771,10 +997,11 @@ std::vector<float> Convnet::max_run_inference(
         }
     }
 
-    for (int i = 0 ; i < num_fpgas ; i++) {
+    for (unsigned i = 0 ; i < num_fpgas ; i++) {
         max_set_param_uint64t(actions[i], "N", N);
+
         if (has_conv[i]) {
-            if (initialized_weights) {
+            if (initialised_weights) {
                 max_set_param_uint64t(actions[i], "init", 0);
             } else {
                 max_set_param_uint64t(actions[i], "init", 1);
@@ -783,50 +1010,62 @@ std::vector<float> Convnet::max_run_inference(
     }
 
 
-    initialized_weights = 1;
+    if (input == NULL && output == NULL) {
+        const uint64_t addressIn = get_input_address_for_bitstream(
+                bitstream_id, N);
+        const uint64_t addressOut = get_output_address_for_bitstream(
+                bitstream_id, N);
 
-    max_queue_input(actions[0],
-                    "fromcpu",
-                    (void*) &images[0],
-                    N * input_size * sizeof(float));
-    max_queue_output(actions[num_fpgas - 1],
-                     "tocpu",
-                     (void*) &ret[0],
-                     N * output_size * sizeof(float));
+        fpgaconvnet::logging::stdout(logging::INFO)
+            << "Configuring I/O using DDR4 addresses\n";
+        fpgaconvnet::logging::stdout(logging::INFO)
+            << "input address = " << addressIn << "\n";
+        fpgaconvnet::logging::stdout(logging::INFO)
+            << "output address = " << addressOut << "\n";
 
-    logging::stdout(logging::INFO)
-        << "Running feature extraction ... " << std::endl;
+        max_set_param_uint64t(actions[0], "addressIn", addressIn);
+        max_set_param_uint64t(actions[num_fpgas - 1], "addressOut", addressOut);
+
+    } else {
+        max_queue_input(
+                actions[0], "fromcpu", input,
+                get_input_stream_size_for_bitstream(bitstream_id, N)
+        );
+        max_queue_output(
+                actions[num_fpgas - 1], "tocpu", output,
+                get_output_stream_size_for_bitstream(bitstream_id, N)
+        );
+    }
+
 
 #ifdef __SIM__
-    void *tmp_buffer_in;
-    void *tmp_buffer_out;
+    void *tmp_buffer_in = NULL;
+    void *tmp_buffer_out = NULL;
 
-    for (int i = 0; i < num_fpgas ; i++) {
-        logging::stdout(logging::INFO) << "Running on DFE " << i << " ..." << std::endl;
+    for (unsigned i = 0; i < num_fpgas ; i++) {
+        dfe = max_load(max_files[bitstream_id][i], "*");
 
-        if (num_fpgas > 1) {
-            dfe = max_load(max_files[i], load_spec);
-        }
+        logging::stdout(logging::INFO) << "Simulating FPGA " << i << " ..." << std::endl;
 
         if (i > 0) {
+            logging::stdout(logging::INFO) << "Mocking maxring input" << std::endl;
             max_queue_input(actions[i],
                             "mock_maxring_in",
                             tmp_buffer_in,
-                            N * fpga_input_size[i] * 2);
+                            N * fpga_input_size[std::make_pair(bitstream_id, i)] * 2);
         }
 
         if (i < num_fpgas - 1) {
-            tmp_buffer_out = malloc(N * fpga_output_size[i] * 2);
+            logging::stdout(logging::INFO) << "Mocking maxring output" << std::endl;
+            tmp_buffer_out = malloc(
+                    N * fpga_output_size[std::make_pair(bitstream_id, i)] * 2);
             max_queue_output(actions[i],
                             "mock_maxring_out",
                             tmp_buffer_out,
-                            N * fpga_output_size[i] * 2);
+                            N * fpga_output_size[std::make_pair(bitstream_id, i)] * 2);
         }
         max_run(dfe, actions[i]);
-
-        if (num_fpgas > 1) {
-            max_unload(dfe);
-        }
+        max_unload(dfe);
 
         tmp_buffer_in = tmp_buffer_out;
         tmp_buffer_out = NULL;
@@ -834,23 +1073,44 @@ std::vector<float> Convnet::max_run_inference(
     dfe = NULL;
 
     if (tmp_buffer_out != NULL) {
-        delete[] tmp_buffer_out;
+        free(tmp_buffer_out);
     }
     if (tmp_buffer_in != NULL) {
-        delete[] tmp_buffer_in;
+        free(tmp_buffer_in);
     }
 #else
     if (num_fpgas == 1) {
+
+        __sync_synchronize();
+        gettimeofday(&t_begin, NULL);
+        dfe = max_load(max_files[bitstream_id][0], "*");
+        gettimeofday(&t_end, NULL);
+        __sync_synchronize();
+
+        logging::stdout() << "dfe.id = " << dfe->id << "\n";
+        logging::stdout(logging::INFO)
+            << "max_load took "
+            << compute_time_difference(t_begin, t_end)
+            << " microseconds\n";
+
         __sync_synchronize();
         gettimeofday(&t_begin, NULL);
         max_run(dfe, actions[0]);
         gettimeofday(&t_end, NULL);
         __sync_synchronize();
+        max_unload(dfe);
+        dfe = NULL;
 
     } else {
-        max_actarray_t *act_array = max_mixed_actarray_init(&max_files[0], num_fpgas);
-        for (int i = 0 ; i < num_fpgas ; i++) {
+        dfe_array = max_load_mixed_array(
+                (max_file_t**) &max_files[bitstream_id][0], num_fpgas, "*");
+
+        max_actarray_t *act_array = max_mixed_actarray_init(
+                &max_files[bitstream_id][0], num_fpgas);
+        for (unsigned i = 0 ; i < num_fpgas ; i++) {
             max_set_action(act_array, i, actions[i]);
+            logging::stdout() << "dfe[" << i << "].id = "
+                << dfe_array->ids[i] << "\n";
         }
 
         __sync_synchronize();
@@ -858,20 +1118,147 @@ std::vector<float> Convnet::max_run_inference(
         max_run_array(dfe_array, act_array);
         gettimeofday(&t_end, NULL);
         __sync_synchronize();
+
+        max_unload_array(dfe_array);
+        dfe_array = NULL;
     }
 #endif
 
-    if (benchmark) {
-        report_conv_performance(network_params, N, t_begin, t_end);
+    *p_timetaken = compute_time_difference(t_begin, t_end);
+    m_last_executed_bitstream = bitstream_id;
+}
+
+
+std::vector<float> Convnet::max_run_inference(
+        uint64_t N,
+        const std::vector<float> & images,
+        const bool benchmark,
+        double *p_time_taken
+)
+{
+    const auto last_layer = network_params.layer(
+            network_params.layer_size() - 1);
+    const uint64_t output_size =
+            last_layer.output_height() * last_layer.output_width()
+            * last_layer.num_outputs();
+    std::vector<float> ret(N * output_size , 0);
+    double time_taken = 0.0;
+    const bool use_ddr4 = network_params.allow_runtime_reconfiguration();
+
+    /* 1. Load images into off-chip memory. */
+    if (use_ddr4) {
+        logging::stdout(logging::INFO)
+            << "Loading images to off-chip memory ... " << std::endl;
+        max_load_input_data(&images[0], N);
+        logging::stdout(logging::INFO) << "-- DONE!" << std::endl;
     }
-    logging::stdout(logging::INFO) << "Done!" << std::endl;
 
-    delete[] actions;
+    /* 2. Run inference */
+    logging::stdout(logging::INFO)
+        << "Running feature extractions ... " << std::endl;
+    for (unsigned i = 0 ; i < get_num_bitstreams() ; i++) {
+        const void *input;
+        void *output;
 
-    double begin = double(t_begin.tv_sec) * 1000000 + double(t_begin.tv_usec);
-    double end = double(t_end.tv_sec) * 1000000 + double(t_end.tv_usec);
-    double delta = end - begin;
-    *p_time_taken = delta;
+        if (use_ddr4) {
+            input = NULL;
+            output = NULL;
+        } else {
+            input  = &images[0];
+            output = &ret[0];
+        }
+
+        logging::Indentation indent;
+
+        logging::stdout(logging::INFO)
+            << "Running bitstream " << i << " ... " << std::endl;
+
+        logging::Indentation more_indent;
+        double this_time_taken;
+        max_run_single_bitstream(N, i, &this_time_taken, input, output);
+
+        time_taken += this_time_taken;
+    }
+    fpgaconvnet::logging::stdout() << "-- DONE" << std::endl;
+
+    // 3. Load data from off-chip memory back to the host
+    if (use_ddr4) {
+        max_read_output_data(&ret[0], N);
+        fpgaconvnet::logging::stdout() << "-- DONE" << std::endl;
+    }
+
+    // 4. Report the results and write the time taken
+    if (benchmark) {
+        report_conv_performance(network_params, N, time_taken);
+    }
+    *p_time_taken = time_taken;
+    return ret;
+}
+
+
+std::vector<float> Convnet::max_run_inference_with_single_bitstream(
+        uint64_t N,
+        const std::vector<float> & images,
+        const unsigned bitstream_id)
+{
+    assert(!network_params.allow_runtime_reconfiguration());
+
+    const uint64_t input_stream_size =
+            get_input_stream_size_for_bitstream(bitstream_id, N);
+    const uint64_t output_stream_size =
+            get_output_stream_size_for_bitstream(bitstream_id, N);
+
+    double time_taken = 0.0;
+    void * const input_stream  = malloc(input_stream_size);
+    void * const output_stream = malloc(output_stream_size);
+    std::vector<float> ret;
+
+    /* 0. Cast images to fixed point (if necessary) */
+    if (bitstream_id == 0) {
+        memcpy(input_stream, &images[0], input_stream_size);
+    } else {
+        for (uint64_t i = 0; i < input_stream_size / 4; i++) {
+            ((fixed_point_t*) input_stream)[i] = cast_float_to_fixed(images[i]);
+        }
+    }
+
+    /* 1. Load images into off-chip memory. */
+    logging::stdout(logging::INFO)
+        << "Loading images to off-chip memory ... " << std::endl;
+    max_write_to_lmem(
+            0,
+            input_stream,
+            get_input_address_for_bitstream(bitstream_id, N),
+            input_stream_size);
+    logging::stdout(logging::INFO) << "-- DONE!" << std::endl;
+
+    /* 2. Run inference */
+    logging::stdout(logging::INFO)
+        << "Running feature extractions with only bitstream "
+        << bitstream_id << std::endl;
+    max_run_single_bitstream(N, bitstream_id, &time_taken, NULL, NULL);
+    fpgaconvnet::logging::stdout() << "-- DONE" << std::endl;
+
+    // 3. Load data from off-chip memory back to the host
+    logging::stdout(logging::INFO)
+        << "Reading images from off-chip memory " << std::endl;
+    max_read_from_lmem(
+            0,
+            output_stream,
+            get_output_address_for_bitstream(bitstream_id, N),
+            output_stream_size);
+    fpgaconvnet::logging::stdout() << "-- DONE" << std::endl;
+
+    // 4. Cast the data type back to float (if it is not the last layer)
+    if (bitstream_id == get_num_bitstreams() - 1) {
+        ret.resize(output_stream_size / 4);
+        memcpy(&ret[0], output_stream, output_stream_size);
+    } else {
+        ret.resize(output_stream_size / 2);
+        for (uint64_t i = 0; i < ret.size() ; i++) {
+            ret[i] = cast_fixed_to_float(((fixed_point_t *) output_stream)[i]);
+        }
+    }
 
     return ret;
 }
@@ -881,7 +1268,7 @@ dump_latencies(std::string filename, std::vector<double> times)
 {
     std::ofstream o(filename.c_str());
     o << "[";
-    for (int i = 0 ; i < times.size() ; i++) {
+    for (unsigned i = 0 ; i < times.size() ; i++) {
         o << times[i] << ", ";
     }
     o << "]";

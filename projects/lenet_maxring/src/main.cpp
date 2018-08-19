@@ -14,7 +14,7 @@
 #ifdef __SIM__
     static const uint64_t N = 4;
 #else
-    static const uint64_t N = 500000;
+    static const uint64_t N = 1228800;
 #endif
 
 
@@ -59,12 +59,14 @@ std::vector<float> run_feature_extraction(
             "../test_data/output.txt");
 
     // this is to measure latency
+    fpgaconvnet::logging::set_level(fpgaconvnet::logging::WARNING);
     std::vector<double> times;
     for (int i = 0 ; i < 100 ; i++) {
         double p;
         convnet.max_run_inference(1, images, false, &p);
         times.push_back(p);
     }
+    fpgaconvnet::logging::set_level(fpgaconvnet::logging::INFO);
     fpgaconvnet::dump_latencies("latency.txt", times);
 
     return extracted_features;

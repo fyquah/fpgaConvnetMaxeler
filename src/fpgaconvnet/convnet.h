@@ -3,6 +3,7 @@
 
 #include <fcntl.h>
 #include <vector>
+#include <utility>
 
 #include "MaxSLiCInterface.h"
 
@@ -84,19 +85,16 @@ private:
     std::vector<fixed_point_t*> worker_kernels;
     std::vector<fixed_point_t*> bias;
     std::vector<fixed_point_t*> queue_weights;
-    std::vector<protos::LayerParameter> conv_layer_params;
 
-    uint64_t input_size;
-    uint64_t output_size;
-    bool initialized_weights;
     const char *load_spec;
 
-    int num_fpgas;
-    max_engine_t *dfe;          /* Used only when num_fpgas == 1 */
-    max_engarray_t *dfe_array;  /* Used only when num_fpgas > 1 */
-    std::vector<max_file_t *> max_files;
-    std::vector<int> fpga_input_size;
-    std::vector<int> fpga_output_size;
+    max_engine_t *dfe;          /* Used only when the bitstream uses  1 fpga */
+    max_engarray_t *dfe_array;  /* Used only when the bitstream uses >1 fpga */
+    std::vector<std::vector<max_file_t *> > max_files;
+    max_file_t* lmem_maxfile;
+    std::map<std::pair<int, int>, int> fpga_input_size;
+    std::map<std::pair<int, int>, int> fpga_output_size;
+    int m_last_executed_bitstream;
 
     Convnet(const Convnet &) {}
     void set_layer_weights(
@@ -107,8 +105,23 @@ private:
     );
     void constructor(
             const protos::Network & network_params,
-            std::vector<max_file_t*> max_files,
+            std::vector<std::vector<max_file_t*>> max_files,
             const char* load_spec = "*");
+
+    /* Returns a vector denoting the range of layers served by each binary. */
+    std::vector<std::pair<int, int>> get_range_list();
+
+    uint64_t get_address_byte_offset(uint64_t N);
+    uint64_t get_input_address_for_bitstream(unsigned bitstream, uint64_t N);
+    uint64_t get_input_stream_size_for_bitstream(unsigned bitstream, uint64_t N);
+    uint64_t get_output_address_for_bitstream(unsigned bitstream, uint64_t N);
+    uint64_t get_output_stream_size_for_bitstream(unsigned bitstream, uint64_t N);
+    unsigned get_num_fpga_for_bitstream(unsigned bitstream);
+    unsigned get_num_bitstreams();
+
+    void max_run_single_bitstream(
+            uint64_t N, unsigned bitstream_id, double *p_timetaken,
+            const void *input, void *output);
 
 public:
     Convnet(const protos::Network & network_params,
@@ -117,20 +130,48 @@ public:
     Convnet(const protos::Network & network_params,
             std::vector<max_file_t*> max_files,
             const char* load_spec);
+    Convnet(const protos::Network & network_params,
+            std::vector<std::vector<max_file_t*>> max_files,
+            const char* load_spec);
     ~Convnet ();
 
     void load_weights_from_files(
             std::vector<std::string> filenames, file_format_t file_type);
     void randomize_weights();
-
     void max_init_weights();
-    void max_load_input_data(const std::vector<float> & images, uint64_t N);
+
+    void max_write_to_lmem(
+            const unsigned dfe_index,
+            const void *data,
+            const uint64_t addr,
+            const uint64_t num_bytes);
+    void max_read_from_lmem(
+            const unsigned dfe_index,
+            void *data,
+            const uint64_t addr,
+            const uint64_t num_bytes);
+
+    void max_load_input_data(const float * images, uint64_t N);
+    void max_read_output_data(float *images, uint64_t N);
+
     std::vector<float> max_run_inference(
             uint64_t N, const std::vector<float> & images, const bool benchmark);
     std::vector<float> max_run_inference(
-            uint64_t N, const std::vector<float> & images, const bool benchmark, double * p_time_taken);
+            uint64_t N, const std::vector<float> & images,
+            const bool benchmark, double * p_time_taken);
 
     std::vector<float> max_retrieve_features(uint64_t N);
+
+    /// Runs inference using only part of the bitstreams. Helps debugging.
+    /** Debugging utilities:
+     *
+     * [max_run_inference_with_single_bitstream]
+     * */
+    std::vector<float> max_run_inference_with_single_bitstream(
+            uint64_t N,
+            const std::vector<float> & images,
+            const unsigned bitstream_id);
+
 };
 
 void dump_latencies(std::string filename, std::vector<double> times);

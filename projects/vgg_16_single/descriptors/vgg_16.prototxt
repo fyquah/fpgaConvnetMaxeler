@@ -1,0 +1,174 @@
+num_fpga_available: 1
+frequency: 100
+allow_runtime_reconfiguration: true
+
+layer {
+    input_height: 224
+    input_width: 224
+    num_inputs: 3
+    num_outputs: 64
+
+    conv: {
+        kernel_size: 3
+        pad: 1
+    }
+
+    activation: Relu
+}
+
+layer {
+    num_outputs: 64
+
+    conv {
+        kernel_size: 3
+        pad: 1
+    }
+
+    activation: Relu
+}
+layer {
+    pool: {
+        type: Max
+        dim: 2
+        stride: 2
+    }
+}
+layer {
+    num_outputs: 128
+
+    conv {
+        kernel_size: 3
+        pad: 1
+    }
+
+    activation: Relu
+}
+layer {
+    num_outputs: 128
+
+    conv {
+        kernel_size: 3
+        pad: 1
+    }
+
+    activation: Relu
+}
+layer {
+    pool: {
+        type: Max
+        dim: 2
+        stride: 2
+    }
+}
+layer {
+    num_outputs: 256
+
+    conv {
+        kernel_size: 3
+        pad: 1
+    }
+
+    activation: Relu
+}
+layer {
+    num_outputs: 256
+
+    conv {
+        kernel_size: 3
+        pad: 1
+    }
+
+    activation: Relu
+}
+layer {
+    num_outputs: 256
+
+    conv {
+        kernel_size: 3
+        pad: 1
+    }
+
+    activation: Relu
+}
+layer {
+    pool: {
+        type: Max
+        dim: 2
+        stride: 2
+    }
+}
+layer {
+    num_outputs: 512
+
+    conv {
+        kernel_size: 3
+        pad: 1
+    }
+
+    activation: Relu
+}
+layer {
+    num_outputs: 512
+
+    conv {
+        kernel_size: 3
+        pad: 1
+    }
+
+    activation: Relu
+}
+layer {
+    num_outputs: 512
+
+    conv {
+        kernel_size: 3
+        pad: 1
+    }
+
+    activation: Relu
+}
+layer {
+    pool: {
+        type: Max
+        dim: 2
+        stride: 2
+    }
+}
+
+layer {
+    num_outputs: 512
+
+    conv {
+        kernel_size: 3
+        pad: 1
+    }
+
+    activation: Relu
+}
+layer {
+    num_outputs: 512
+
+    conv {
+        kernel_size: 3
+        pad: 1
+    }
+
+    activation: Relu
+}
+layer {
+    num_outputs: 512
+
+    conv {
+        kernel_size: 3
+        pad: 1
+    }
+
+    activation: Relu
+}
+layer {
+    pool: {
+        type: Max
+        dim: 2
+        stride: 2
+    }
+}

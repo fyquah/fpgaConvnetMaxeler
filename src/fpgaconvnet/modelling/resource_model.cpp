@@ -32,20 +32,6 @@ resource_to_string(const resource_t & res)
     return std::string(buffer);
 }
 
-std::string
-resource_to_string(const std::vector<resource_t> & resources)
-{
-    std::stringstream ss;
-
-    for (int i = 0 ; i < resources.size() ; i++) {
-        ss << "- [fpga "  << i << ": "
-            << resource_to_string(resources[i]) << "]\n";
-    }
-
-    return ss.str();
-}
-
-
 static resource_t
 conv_resource(const protos::LayerParameter & layer)
 {
@@ -239,7 +225,7 @@ project_single_fpga(
 
 
 std::vector<resource_t>
-project(const protos::Network & network)
+project_single_bitstream(const protos::Network & network)
 {
     std::vector<std::vector<fpgaconvnet::protos::LayerParameter>>
         layers_by_fpga(network.num_fpga_used());
@@ -248,7 +234,7 @@ project(const protos::Network & network)
     for (auto it = network.layer().begin()
             ; it != network.layer().end()
             ; it++) {
-        layers_by_fpga[it->fpga_id()].push_back(*it);
+        layers_by_fpga.at(it->fpga_id()).push_back(*it);
     }
 
     for (int i = 0; i < layers_by_fpga.size() ; i++) {
@@ -272,7 +258,7 @@ project(const protos::Network & network)
 bool
 meets_resource_constraints(const resource_t & resource)
 {
-    return (resource.dsp < 0.7 * MAX_DSP
+    return (resource.dsp < 0.8 * MAX_DSP
             && resource.bram < 0.9 * MAX_BRAM);
 }
 

@@ -4,18 +4,20 @@ import com.google.protobuf.TextFormat;
 
 import com.maxeler.maxcompiler.v2.build.EngineParameters;
 import com.maxeler.maxcompiler.v2.managers.BuildConfig;
+import java.util.ArrayList;
+import java.util.List;
 
 import fpgaconvnet.protos.Parameters;
 
 public class GenericNetworkBuilder {
     public static class NetworkEngineParameters extends EngineParameters {
         private final String s_descriptor = "descriptor";
-        private final String s_fpgaId = "fpga_id";
+        private final String s_target_name = "target_name";
 
         @Override
         protected void declarations() {
             declareParam(s_descriptor, DataType.STRING, "");
-            declareParam(s_fpgaId, DataType.STRING, "0");
+            declareParam(s_target_name, DataType.STRING, "");
         }
 
         public String getDescriptor() {
@@ -23,7 +25,14 @@ public class GenericNetworkBuilder {
         }
 
         public int getFpgaId() {
-            return Integer.parseInt((String) getParam(s_fpgaId));
+            return Integer.parseInt(
+                    ((String) getParam(s_target_name)).split("_")[2]);
+        }
+
+        public int getBitstreamId() {
+            System.out.println(((String) getParam(s_target_name)));
+            return Integer.parseInt(
+                    ((String) getParam(s_target_name)).split("_")[1]);
         }
 
         public NetworkEngineParameters(String[] args) {
@@ -42,11 +51,14 @@ public class GenericNetworkBuilder {
                     networkParamsBuilder.build()).transform();
 
             NetworkManager manager = new NetworkManager(
-                    engineParameters, networkParameters, engineParameters.getFpgaId());
+                    engineParameters,
+                    networkParameters,
+                    engineParameters.getBitstreamId(),
+                    engineParameters.getFpgaId());
             BuildConfig buildConfig = manager.getBuildConfig();
             buildConfig.setBuildEffort(BuildConfig.Effort.HIGH);
             buildConfig.setMPPRCostTableSearchRange(1, 20);
-            buildConfig.setMPPRParallelism(2);
+            buildConfig.setMPPRParallelism(3);
             buildConfig.setEnableTimingAnalysis(true);
             manager.setBuildConfig(buildConfig);
             manager.build();

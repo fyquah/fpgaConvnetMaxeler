@@ -25,22 +25,8 @@ gen_makefile: $(WHEREISROOT)/scripts/generate_multi_fpga_makefile.py $(PRJ_OPTIM
 	PYTHONPATH=. python $< --descriptor $(PRJ_OPTIMIZED_DESCRIPTOR) \
 		--output Makefile.targets
 
-targets.h: $(PRJ_OPTIMIZED_DESCRIPTOR) Makefile.targets
-	echo "#ifndef FPGACONVNET_TARGETS_H" >targets.h
-	echo "#define FPGACONVNET_TARGETS_H" >>targets.h
-	echo "" >>targets.h
-	for target in $(TARGET_NAMES); do \
-	    echo "#include \"$$target.h\"" >>targets.h ; \
-	done
-	echo "" >>targets.h
-	echo "static std::vector<max_file_t*> targets_init() {" >>targets.h
-	echo "  std::vector<max_file_t*> ret;" >>targets.h
-	for target in $(TARGET_NAMES); do \
-	    echo "  ret.push_back($$target"_init"());" >>targets.h ; \
-	done
-	echo "  return ret;" >>targets.h
-	echo "}" >>targets.h
-	echo "#endif" >>targets.h
+targets.h: $(WHEREISROOT)/scripts/generate_targets_header.py $(PRJ_OPTIMIZED_DESCRIPTOR) Makefile.targets
+	python $< $(TARGET_NAMES) >$@
 
 
 # ==============================
@@ -57,7 +43,7 @@ $(TARGET_SIM_MAXFILES): $(ENGINEFILES) $(JAVA_PROTOS) $(PRJ_OPTIMIZED_DESCRIPTOR
 		  DFEModel=$(DFEModel) \
 		  maxFileName=$(basename $(notdir $@)) \
 		  target="DFE_SIM" \
-                  fpga_id="$(lastword $(subst _, ,$(notdir $(basename $@))))" \
+                  target_name="$(notdir $(basename $@))" \
 		  descriptor="$(PRJ_OPTIMIZED_DESCRIPTOR)" \
 		  enableMPCX=$(MPCX)
 	cp $(dir $@)/results/$(notdir $@) $@
@@ -65,7 +51,7 @@ $(TARGET_SIM_MAXFILES): $(ENGINEFILES) $(JAVA_PROTOS) $(PRJ_OPTIMIZED_DESCRIPTOR
 
 $(TARGET_SIM_OBJS): $(TARGET_SIM_MAXFILES)
 	PATH="$(FPGACONVNET_JAVA8_HOME)/bin:$(PATH)" $(SLICCOMPILE) \
-	     $(MAXCOMPILER_BUILD_DIR)/$(basename $(basename $(notdir $@)))_$(DFEModel)_DFE_SIM/results/$(basename $(basename $(notdir $@))).max $@
+	     $(MAXCOMPILER_BUILD_DIR)/$(basename $(basename $(notdir $@)))_$(DFEModel)_DFE_SIM/$(basename $(basename $(notdir $@))).max $@
 
 
 fpgaconvnet/target_main_sim.o: main.cpp $(TARGET_SIM_OBJS) targets.h
@@ -75,12 +61,7 @@ fpgaconvnet/target_main_sim.o: main.cpp $(TARGET_SIM_OBJS) targets.h
 		-D__SIM__ -c -o $@
 
 
-target_sim: fpgaconvnet/convnet_sim.o \
-		fpgaconvnet/common.o \
-		fpgaconvnet/target_main_sim.o \
-		fpgaconvnet/protos/parameters.pb.o \
-		$(TARGET_SIM_OBJS) \
-		$(ADDITIONAL_OBJS)
+target_sim: $(TARGET_SIM_OBJS) $(LMEM_SIM_OBJ) $(FPGACONVNET_SIM_OBJ_FILES) fpgaconvnet/target_main_sim.o $(ADDITIONAL_OBJS) 
 	$(CPUCOMPILER) -D__SIM__ $(ALL_FLAGS) -o $@ $^ $(LFLAGS)
 
 
@@ -107,7 +88,7 @@ $(TARGET_DFE_MAXFILES): $(ENGINEFILES) $(JAVA_PROTOS)  $(PRJ_OPTIMIZED_DESCRIPTO
 		  DFEModel=$(DFEModel) \
 		  maxFileName=$(basename $(notdir $@)) \
 		  target="DFE" \
-                  fpga_id="$(lastword $(subst _, ,$(notdir $(basename $@))))" \
+		  target_name="$(notdir $(basename $@))" \
 		  descriptor="$(PRJ_OPTIMIZED_DESCRIPTOR)" \
 		  enableMPCX=$(MPCX)
 	cp $(dir $@)/results/$(notdir $@) $@
@@ -130,11 +111,7 @@ target_main_dfe.o: main.cpp $(TARGET_DFE_OBJS) targets.h
 dfe_maxfiles: $(TARGET_DFE_MAXFILES)
 
 
-target_dfe: fpgaconvnet/convnet.o fpgaconvnet/common.o \
-		fpgaconvnet/protos/parameters.pb.o \
-		target_main_dfe.o \
-		$(TARGET_DFE_OBJS) \
-		$(ADDITIONAL_OBJS)
+target_dfe: $(TARGET_DFE_OBJS) $(LMEM_DFE_OBJ) $(FPGACONVNET_DFE_OBJ_FILES) target_main_dfe.o $(ADDITIONAL_OBJS)
 	$(CPUCOMPILER) $(ALL_FLAGS) -o $@ $^ $(LFLAGS)
 
 

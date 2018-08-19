@@ -39,10 +39,9 @@ project_single_fpga(
         const std::vector<protos::LayerParameter> & layers,
         const stream_t output_stream);
 
-std::vector<resource_t> project(const protos::Network & network);
-
-std::string
-resource_to_string(const std::vector<resource_t> & resources);
+/* Assumes that the argumet network is meant for only one bitstream. */
+std::vector<resource_t> project_single_bitstream(
+        const protos::Network & network);
 
 std::string resource_to_string(const resource_t & res);
 

@@ -3,10 +3,10 @@
 #include <cmath>
 
 #include <iostream>
+#include <fstream>
 
 #include "fpgaconvnet/common.h"
 #include "fpgaconvnet/protos/parameters.pb.h"
-
 
 
 namespace fpgaconvnet
@@ -93,11 +93,13 @@ const char* Exception::what() const throw()
 namespace logging {
 
 static const char* level_strings[] = {
-        "DEBUG", "INFO", "WARNING", "ERROR"
+        "DDEBUG", "DEBUG", "INFO", "WARNING", "ERROR"
 };
 
 static std::string LOG_PREFIX = "default";
 static std::string INDENTATION = "";
+static unsigned current_level = 1;
+static std::ofstream unopened_ofstream;
 
 std::ostream& stdout(int level)
 {
@@ -106,8 +108,32 @@ std::ostream& stdout(int level)
     } else if (level < 0) {
         level = 0;
     }
-    return std::cout << "[" << LOG_PREFIX << "\t "
-            << level_strings[level] << "]\t" << INDENTATION;
+
+    if (level >= current_level) {
+        return std::cout << "[" << LOG_PREFIX << "\t "
+                << level_strings[level] << "]\t" << INDENTATION;
+    } else {
+        return unopened_ofstream;  // hack
+    }
+}
+
+void set_level(int level)
+{
+    current_level = level;
+}
+
+void set_level(const char * p)
+{
+    if (p == NULL) {
+        return;
+    }
+
+    for (int i = 0; i < sizeof(level_strings) / sizeof(char*); i++) {
+        if (strcmp(p, level_strings[i]) == 0) {
+            set_level(i);
+            break;
+        }
+    }
 }
 
 void log_prefix(const std::string & prefix)
@@ -181,29 +207,116 @@ uint64_t div_ceil(uint64_t a, uint64_t b)
 
 namespace calculation {
 
-double throughput(const protos::Network & network)
+const protos::LayerParameter get_bitstream_first_layer(
+        const protos::Network & network, const unsigned bitstream_id)
+{
+    if (bitstream_id == -1) {
+        return network.layer(0);
+    }
+
+    for (int i = 0 ; i < network.layer_size() ; i++) {
+        if (network.layer(i).bitstream_id() == bitstream_id) {
+            return network.layer(i);
+        }
+    }
+
+    assert(false);
+}
+
+
+const protos::LayerParameter get_bitstream_final_layer(
+        const protos::Network & network, const unsigned bitstream_id)
+{
+    if (bitstream_id == -1) {
+        return network.layer(network.layer_size() - 1);
+    }
+
+    for (int i =  network.layer_size() - 1; i >= 0 ; i--) {
+        if (network.layer(i).bitstream_id() == bitstream_id) {
+            return network.layer(i);
+        }
+    }
+
+    assert(false);
+}
+
+const double
+compute_input_num_bytes(const protos::LayerParameter l)
+{
+    return l.num_inputs() * l.input_height() * l.input_width();
+}
+
+const double 
+compute_output_num_bytes(const protos::LayerParameter l)
+{
+    return l.num_outputs() * l.output_height() * l.output_width();
+}
+
+
+const double
+bandwidth_throughput_limit(
+        const protos::Network & network, const unsigned bitstream_id)
+{
+    // TODO: Allow user to configure PCIE or LMEM?
+    /* In terms of images per clock cycle */
+    const unsigned total_values =
+        (compute_input_num_bytes(get_bitstream_first_layer(network, bitstream_id))
+         + compute_output_num_bytes(get_bitstream_final_layer(network, bitstream_id)));
+    const unsigned num_bytes = total_values * sizeof(fixed_point_t);
+    return LMEM_BANDWIDTH / double(num_bytes);
+}
+
+
+
+bool
+throughput_t::operator<(const throughput_t & o) const
+{
+    return throughput < o.throughput;
+}
+
+
+bool
+throughput_t::operator>(const throughput_t & o) const
+{
+    return throughput > o.throughput;
+}
+
+
+throughput_t pipeline_throughput(
+        const protos::Network & network, const unsigned bitstream_id)
 {
     double frequency = network.frequency() * 1e6;
     double cycle_length = 1.0 / frequency;
     double size =
         network.layer(0).input_height() * network.layer(0).input_width();
 
-    double input_image_bytes =
-        size * network.layer(0).num_inputs() * sizeof(fixed_point_t);
-
-    /* In terms of images per clock cycle */
-    double throughput = PCIE_BANDWIDTH / input_image_bytes * cycle_length;
+    throughput_t ret;
+    ret.throughput = bandwidth_throughput_limit(network, bitstream_id);
+    ret.bottleneck_type = BOTTLENECK_IO;
     int prev_fpga = 0;
 
+    std::vector<protos::LayerParameter> relevant_layers;
     for (int i = 0 ; i < network.layer_size() ; i++) {
         auto layer = network.layer(i);
+        const bool should_do_layer =
+            bitstream_id == -1
+            || !network.allow_runtime_reconfiguration()
+            || bitstream_id == layer.bitstream_id();
+        if (should_do_layer) {
+            relevant_layers.push_back(network.layer(i));
+        }
+    }
+
+    for (int i = 0 ; i < relevant_layers.size() ; i++) {
+        auto layer = relevant_layers[i];
+
         const double input_size =
                 layer.input_height() * layer.input_width();
 
         const double output_size =
                 layer.output_height() * layer.output_width();
 
-        double layer_throughput = 0.0;
+        double layer_throughput_ = 0.0;
 
         if (layer.has_conv()) {
             const double scheduler_throughput =
@@ -212,36 +325,184 @@ double throughput(const protos::Network & network)
             const double computation_throughput =
                 1.0 / (calculation::total_iterations(layer) * output_size);
 
-            layer_throughput = std::min(
+            layer_throughput_ = std::min(
                     scheduler_throughput, computation_throughput);
 
         } else if (layer.has_pool()) {
-            layer_throughput =
+            layer_throughput_ =
                 1.0 / (calculation::total_iterations(layer) * input_size);
 
         } else if (layer.has_lrn()) {
-            layer_throughput =
+            layer_throughput_ =
                 1.0 / (calculation::total_iterations(layer) * input_size);
+
+        } else {
+            assert(false);
 
         }
 
-        throughput = std::min(throughput, layer_throughput);
+        layer_throughput_ = layer_throughput_ * frequency;
+        throughput_t layer_throughput;
+        layer_throughput.throughput = layer_throughput_ ,
+        layer_throughput.bottleneck_type = BOTTLENECK_COMPUTE,
+        layer_throughput.bottleneck.compute.layer_id = layer.layer_id();
+
+        ret = std::min(ret, layer_throughput);
+
         if (layer.fpga_id() != prev_fpga) {
             const uint64_t image_bytes =
                 network.layer(i).input_height()
                 * network.layer(i).input_width()
                 * network.layer(i).num_inputs()
                 * sizeof(fpgaconvnet::fixed_point_t);
+            const double maxring_throughput_ =
+                double(fpgaconvnet::calculation::MAXRING_BANDWIDTH)
+                / double(image_bytes);
+            throughput_t maxring_throughput;
+            maxring_throughput.throughput = maxring_throughput_,
+            maxring_throughput.bottleneck_type = BOTTLENECK_MAXRING,
+            maxring_throughput.bottleneck.maxring.layer_id = 
+                    relevant_layers[i - 1].layer_id();
+            
 
-            throughput = std::min(
-                    throughput,
-                    double(fpgaconvnet::calculation::MAXRING_BANDWIDTH)
-                    / double(image_bytes));
+            ret = std::min(ret, maxring_throughput);
         }
         prev_fpga = layer.fpga_id();
     }
 
-    return throughput * frequency;
+
+    return ret;
+}
+
+
+unsigned optimal_num_parallel_pipelines(
+    const protos::Network & reference_network,
+    unsigned bitstream_id)
+{
+    protos::Network network;
+    if (bitstream_id == -1) {
+        network = reference_network;
+    } else {
+        network = split_by_bitstreams(reference_network)[bitstream_id];
+    }
+
+    throughput_t t = pipeline_throughput(
+          network, bitstream_id);
+    return std::min(
+            std::floor(double(network.num_fpga_available()) / network.num_fpga_used()),
+            std::ceil(bandwidth_throughput_limit(network, bitstream_id) / t.throughput));
+}
+
+
+throughput_t
+effective_throughput(const protos::Network & network, const unsigned bitstream_id)
+{
+    unsigned num_parallel_pipelines = optimal_num_parallel_pipelines(
+            network, bitstream_id);
+    throughput_t pt = pipeline_throughput(network, bitstream_id);
+
+    if (num_parallel_pipelines * pt.throughput < bandwidth_throughput_limit(network, bitstream_id)) {
+      pt.throughput = pt.throughput * num_parallel_pipelines;
+      return pt;
+    } else {
+      throughput_t ret;
+      ret.throughput = bandwidth_throughput_limit(network, bitstream_id);
+      ret.bottleneck_type = BOTTLENECK_IO;
+      
+      return ret;
+    }
+}
+
+
+double
+real_throughput(const protos::Network & network)
+{
+    if (network.allow_runtime_reconfiguration()) {
+        double inverse_throughput = 0.0;
+        for (int i = 0; i <= network.layer(network.layer_size() - 1).bitstream_id() ; i++) {
+            inverse_throughput += 1.0 / effective_throughput(network, i).throughput;
+        }
+        return 1.0 / inverse_throughput;
+    } else {
+        return effective_throughput(network, -1).throughput;
+    }
+}
+
+
+double min_num_fpga_real_throughput(const protos::Network & ref)
+{
+  auto network = ref;
+  network.set_num_fpga_available(min_num_fpga_needed(ref));
+  return real_throughput(network);
+}
+
+
+void explain_throughput(const protos::Network & network)
+{
+    using namespace fpgaconvnet;
+    const double total_ops = fpgaconvnet::calculation::ops(network);
+
+    logging::stdout()
+        << "Projected Image Throughput (with "
+        << network.num_fpga_available()
+        << " FPGAS) = "
+        << real_throughput(network)
+        << " images/s\n";
+    logging::stdout()
+        << "Projected Ops Throughput (with "
+        << network.num_fpga_available()
+        << " FPGAS) = "
+        << real_throughput(network) * total_ops * 1e-9
+        << " GOp/s\n";
+    fpgaconvnet::logging::stdout()
+        << "Projected Image Throughput (with "
+        << fpgaconvnet::calculation::min_num_fpga_needed(network)
+        << " FPGAs) = "
+        << min_num_fpga_real_throughput(network)
+        << " images/s\n";
+    logging::stdout()
+        << "Projected Ops Throughput (with "
+        << fpgaconvnet::calculation::min_num_fpga_needed(network)
+        << " FPGAS) = "
+        << min_num_fpga_real_throughput(network) * total_ops * 1e-9
+        << " GOp/s\n";
+
+    logging::Indentation indent;
+
+    for (int i = 0; i <= network.layer(network.layer_size() - 1).bitstream_id() ; i++) {
+        logging::stdout() << "Bitstream " << i << "\n";
+        logging::Indentation indent;
+
+        const auto effective_throughput =
+            fpgaconvnet::calculation::effective_throughput(network, i);
+        const auto pipeline_throughput =
+            fpgaconvnet::calculation::pipeline_throughput(network, i);
+
+        logging::stdout()
+            << "Num parallel pipelines " << optimal_num_parallel_pipelines(network, i) << "\n";
+        logging::stdout()
+            << "Pipeline Throughput "
+            << pipeline_throughput
+            << "\n";
+        logging::stdout()
+            << "Effective Throughput = "
+            << effective_throughput
+            << "\n";
+    }
+
+    // TODO
+}
+
+unsigned
+min_num_fpga_needed(const protos::Network & network)
+{
+  const auto subnetworks = split_by_bitstreams(network);
+  assert(subnetworks.size() > 0);
+  unsigned best = 1;
+  for (int i = 0; i < subnetworks.size() ; i++) {
+    best = std::max(best, subnetworks[i].num_fpga_used());
+  }
+  return best;
 }
 
 
@@ -311,6 +572,8 @@ uint64_t total_iterations(const protos::LayerParameter &layer)
 
 
     }
+
+    assert(false);
 }
 
 
@@ -337,6 +600,12 @@ uint64_t conv_in_size(const protos::Network & network)
     return network.layer(0).num_inputs()
 	* network.layer(0).input_height()
 	* network.layer(0).input_width();
+}
+
+uint64_t conv_in_size_for_bitstream(
+        const protos::Network & network, const unsigned bitstream_id)
+{
+    return conv_in_size(split_by_bitstreams(network)[bitstream_id]);
 }
 
 
@@ -413,5 +682,57 @@ insert_fpga_positions(protos::Network network, std::vector<int> v)
     return network;
 }
 
+std::vector<protos::Network>
+split_by_bitstreams(protos::Network ref)
+{
+    std::vector<protos::Network> subnetworks(
+            ref.layer(ref.layer_size() - 1).bitstream_id() + 1, ref);
+
+    for (unsigned i = 0 ; i < subnetworks.size() ; i++) {
+        subnetworks[i].clear_layer();
+    }
+
+    for (auto it = ref.layer().begin(); it != ref.layer().end() ; it++) {
+        unsigned i = it->bitstream_id();
+        *subnetworks[i].add_layer() = *it;
+
+        if (subnetworks[i].has_num_fpga_used()) {
+            subnetworks[i].set_num_fpga_used(
+                std::max(subnetworks[i].num_fpga_used(), it->fpga_id() + 1));
+        } else {
+            subnetworks[i].set_num_fpga_used(it->fpga_id() + 1);
+        }
+    }
+    return subnetworks;
+}
+
 
 }  // fpgaconvnet
+
+static std::ostream&
+print_bottleneck(std::ostream & o, const fpgaconvnet::calculation::throughput_t & t)
+{
+    using namespace fpgaconvnet::calculation;
+
+    switch (t.bottleneck_type) {
+      case BOTTLENECK_COMPUTE:
+        return o << "COMPUTE[Layer " << t.bottleneck.compute.layer_id << "]";
+      
+      case BOTTLENECK_IO:
+        return o << "IO";
+
+      case BOTTLENECK_MAXRING:
+        return o << "MAXRING[Layer " << t.bottleneck.maxring.layer_id << "]";
+
+      default:
+        assert(false);
+    }
+}
+
+
+std::ostream&
+operator<<(std::ostream & o, const fpgaconvnet::calculation::throughput_t & t)
+{
+    o << t.throughput << " images / s (Bottleneck = ";
+    return print_bottleneck(o, t) << ")";
+}
