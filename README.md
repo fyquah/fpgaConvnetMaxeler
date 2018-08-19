@@ -193,10 +193,10 @@ make rundfe
 
 ## Examples
 
-- [lenet](projects/lenet_maxring)
-- [alexnet](projects/alexnet_maxring)
-- [vgg\_16](projects/vgg_16_maxring)
-- [vgg\_s](projects/vgg_s_maxring)
+- lenet [multi FPGA](projects/lenet_maxring), [with reconfiguration](projects/lenet_single)
+- cifar10 [multi FPGA](projects/cifar10_maxring), [with reconfiguration](projects/cifar10_single)
+- alexnet [multi FPGA](projects/alexnet_maxring), [with reconfiguration](projects/alexnet_single)
+- vgg16 [multi FPGA](projects/vgg16_maxring), [with reconfiguration](projects/vgg16_single)
 
 ## License
 
