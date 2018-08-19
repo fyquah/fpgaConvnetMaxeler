@@ -1,18 +1,50 @@
 syntax = "proto2";
 package fpgaconvnet.protos;
 
+message Precision
+{
+    optional uint32 integer_bits    = 1;
+    optional uint32 fractional_bits = 2;
+}
+
 message Network
 {
+    /* The layers that will be compiled. The tool currently supports only
+     * sequential layers (like AlexNet and VGG) and not ireregular nets
+     * (like GoogLenet and ResNet).
+     */
     repeated LayerParameter layer = 1;
 
-    /* Frequency of design in MHz. Note that all kernels will run at the same frequency. */
+    /* Frequency of design in MHz. Note that all kernels across all FPGAs
+     * will run at the same frequency.
+     */
     optional uint32 frequency = 2 [default = 100];
     optional uint32 num_fpga_available = 3 [default = 1];
+
+    /* Defines whether design-space exploration should consider separate
+     * layers across several FPGA bitstreams. When this is true, the
+     * I/O interface is DDR4 and the design targets only a single FPGA.
+     * When this is false, the I/O interface is PCIe and can utilise a
+     * FPGA pipeline comprising of as many as specified by
+     * [num_fpga_available].
+     * 
+     * If this is true, [num_fpga_available] must be set to 1. This is a
+     * current limitation of the tool. See the report's section on future
+     * work for information about multiple FPGAs with reconfiguration.
+     */
     optional bool   allow_runtime_reconfiguration = 5 [default = false];
 
-    /* For internal usage */
+    /* Our tool currently supports only fixed point precision. This field
+     * defines the precision that will be used in layers. This field
+     * must be specified.
+     */
+    optional Precision default_precision = 6;
 
-    /* When used as a bitstream subnetwork, [num_fpga_used] signifies the
+    /* =================================
+     *        For internal usage
+     * =================================
+     *
+     * When used as a bitstream subnetwork, [num_fpga_used] signifies the
      * number of FPGA used for just that single bitstream.
      *
      * When used for the entire network, [num_fpga_used] is the maximum
