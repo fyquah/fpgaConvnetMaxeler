@@ -261,11 +261,12 @@ public class Utils {
 
     public static Bits doubleToBits(double arg) {
         double x = Math.abs(arg);
-        Bits ret = Bits.allZeros(GlobalConfig.fracBits + GlobalConfig.intBits);
+        Bits ret = Bits.allZeros(GlobalConfig.getNumDataBits());
 
-        double top = Math.pow(2, GlobalConfig.intBits - 2);
+        double top = Math.pow(
+                2, GlobalConfig.getPrecision.getIntegerBits() - 2);
 
-        for (int i = GlobalConfig.fracBits + GlobalConfig.intBits - 2 ; i >= 0; i--) {
+        for (int i = GlobalConfig.getNumDataBits() - 2 ; i >= 0; i--) {
             if (top < x) {
                 x = x - top;
                 ret.setBit(i, true);
@@ -286,7 +287,10 @@ public class Utils {
         double ret = 0.0;
         double tmp = 0.5;
 
-        for (int i = GlobalConfig.fracBits - 1; i >= 0; i--) {
+        final int fracBits = GlobalConfig.get().getPrecision().getFractionalBits();
+        final int intBits = GlobalConfig.get().getPrecision().getIntegerBits();
+
+        for (int i = fracBits - 1; i >= 0; i--) {
             if (bits.getBit(i)) {
                 ret += tmp;
             }
@@ -295,16 +299,16 @@ public class Utils {
         }
 
         tmp = 1;
-        for (int i = 0 ; i < GlobalConfig.intBits - 1 ; i++) {
-            if (bits.getBit(i + GlobalConfig.fracBits)) {
+        for (int i = 0 ; i < intBits - 1 ; i++) {
+            if (bits.getBit(i + fracBits)) {
                 ret += tmp;
             }
 
             tmp *= 2;
         }
 
-        if (bits.getBit(GlobalConfig.intBits + GlobalConfig.fracBits - 1)) {
-            double mostNegative = -Math.pow(2, GlobalConfig.intBits - 1);
+        if (bits.getBit(GlobalConfig.get().getNumDataBits() - 1)) {
+            double mostNegative = -Math.pow(2, intBits - 1);
             return mostNegative + ret;
         }
 

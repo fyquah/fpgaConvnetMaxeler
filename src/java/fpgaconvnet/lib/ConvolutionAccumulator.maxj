@@ -173,12 +173,12 @@ public class ConvolutionAccumulator extends KernelLib {
         layerParams = params;
         convParams = params.getConv();
         inputVectorType = new DFEVectorType<DFEVar>(
-                GlobalConfig.dataType, layerParams.getConv().getConvFoldingFactor());
+                GlobalConfig.get().getDataType(), layerParams.getConv().getConvFoldingFactor());
         outputVectorType = new DFEVectorType<DFEVar>(
-                GlobalConfig.dataType, layerParams.getNumOutputs());
+                GlobalConfig.get().getDataType(), layerParams.getNumOutputs());
         enableSignal = dfeBool().newInstance(this);
         DFEVectorType<DFEVar> biasVectorType = new DFEVectorType<DFEVar>(
-                GlobalConfig.dataType, layerParams.getNumOutputs());
+                GlobalConfig.get().getDataType(), layerParams.getNumOutputs());
 
         output = outputVectorType.newInstance(this);
         inputVectors = new ArrayList<DFEVector<DFEVar>>();
@@ -302,7 +302,7 @@ public class ConvolutionAccumulator extends KernelLib {
         outputControlFlag.simWatch("outputControlFlag");
 
         // Kernel IO interfaces
-        biasInput = GlobalConfig.dataType.newInstance(this);
+        biasInput = GlobalConfig.get().getDataType().newInstance(this);
 
         for (int i = 0 ; i < layerParams.getConv().getWorkerFactor() ; i++) {
             inputVectors.add(inputVectorType.newInstance(this));
@@ -310,7 +310,7 @@ public class ConvolutionAccumulator extends KernelLib {
 
         DFEVector<DFEVar> biasBuffer = biasVectorType.newInstance(this);
 
-        biasStore = mem.alloc(GlobalConfig.dataType, params.getNumOutputs());
+        biasStore = mem.alloc(GlobalConfig.get().getDataType(), params.getNumOutputs());
         biasStore.write(loadChannel, biasInput, ~weightsAllLoaded);
         DFEVar biasRead = biasStore.read(loadChannel);
 
@@ -344,7 +344,7 @@ public class ConvolutionAccumulator extends KernelLib {
                 final int totalGroups = layerParams.getConv().getGroup();
                 final int numOutputs = layerParams.getNumOutputs();
 
-                DFEVar acc = GlobalConfig.dataType.newInstance(this);
+                DFEVar acc = GlobalConfig.get().getDataType().newInstance(this);
                 DFEVar initFlag =
                         lookAheadIter.eq(lookAhead) & pixelIter.eq(0);
                 DFEVar channelOutputFlag = (

@@ -1,19 +1,116 @@
 package fpgaconvnet;
 // package nothing;
 
+import fpgaconvnet.protos.Parameters;
+import fpgaconvnet.protos.Precision;
+
 import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEFix.SignMode;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEType;
 
 public class GlobalConfig {
-    /* TODO(fyq14): This should be configurable by the user. See
-     * [convnet.cpp#67]
+    /* These datatypes are specified by the protobuf, but independent of the
+     * layer being compiled or optimistaion phases. This isn't exposed
+     * directly as the compilation network protobuf to
+     *
+     * (0) allow the compiler the freedom to perform term / spec rewriting
+     *     without concern for the data structure here.
+     * (1) prevent the programmer from abusing data fields that are not
+     *     "globally configurable", such as output / input dimensions of
+     *     layers.
+     *
+     * For reason (1), accessor methods for this class should be maintained
+     * with extreme care.
      */
-    public static final int intBits = 8;
-    public static final int fracBits = 8;
-    public static final int FMEM_LATENCY = 3;
-    public static final DFEType dataType = Kernel.dfeFix(intBits, fracBits, SignMode.TWOSCOMPLEMENT);
-    public static final DFEType cpuType = Kernel.dfeFloat(8, 24);
+    private final Parameter m_parameter;
+    private final DFEType m_dataType;
 
-    public static int burstSizeBytes = 384; // in bytes
+    /* These datatype are independent of the protobuf descriptor. They are
+     * represented as private static types mainly for legacy reasons.
+     */
+    private static final int FMEM_LATENCY = 3;
+    private static final int BURST_SIZE_BYTES = 384; // in bytes
+    private static final DFEType CPU_TYPE = Kernel.dfeFloat(8, 24);
+
+    private static GlobalConfig m_global_config = null;
+
+    public GlobalConfig(Parameter parameter) {
+        if (parameter == null) {
+            throw new RuntimeException(
+                "Parameter object passed to GlobalConfig is null");
+        }
+
+        m_parameter = parameter;
+        m_dataType = Kernel.dfeFixed(
+                m_parameter.getDefaultPrecision().getIntegerBits(),
+                m_parameter.getDefaultPrecision().getFractionalBits(),
+                SignMode.TWOSCOMPLEMENT);
+
+        final int total_bits =
+                m_parameter.getDefaultPrecision().getIntegerBits() +
+                m_parameter.getDefaultPrecision().getFractionalBits();
+
+        if (total_bits != 16) {
+            throw new RuntimeException(
+                "Integer bits and fractional point bits must sum up to"
+                + " 16 bits!");
+        }
+    }
+
+    public int getFmemLatency() {
+        return FMEM_LATENCY;
+    }
+
+    public DFEType getCpuType() {
+        return CPU_TYPE;
+    }
+
+    public int getBurstSizeBytes() {
+        return BURST_SIZE_BYTES;
+    }
+
+    public DFEType getDataType() {
+        return m_dataType;
+    }
+
+    public Precision getDefaultPrecision() {
+        return m_parameter.getDefaultPrecision();
+    }
+
+    public int getNumDataBits() {
+        return m_parameter.getDefaultPrecision().getIntegerBits() +
+                m_parameter.getDefaultPrecision().getFractionalBits();
+    }
+
+    public int getNumDataBytes() {
+        final int num_bits =
+                m_parameter.getDefaultPrecision().getIntegerBits() +
+                m_parameter.getDefaultPrecision().getFractionalBits();
+        if (num_bits % 8 != 0) {
+            throw new RuntimeException(
+                "num_bits is not divisible by 8");
+        }
+        return num_bits / 8;
+    }
+
+    /* Static methods exposed to the user for accessing the global
+     * configuration.
+     */
+    public static GlobalConfig get() {
+        if (m_global_config == null) {
+            throw new RuntimeException(
+                "GlobalConfig has not previously been set");
+        }
+
+        return m_global_config;
+    }
+
+    public static set(GlobalConfig globalConfig) {
+        if (m_global_config != null) {
+            throw new RuntimeException(
+                "GlobalConfig has previously been set");
+        }
+
+        m_global_config = globalConfig;
+    }
 }

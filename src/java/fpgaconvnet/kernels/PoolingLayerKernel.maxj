@@ -82,9 +82,9 @@ public class PoolingLayerKernel extends Kernel {
         // derived properties
         int nChannels = inputDimension.channels();
         outputType = new DFEVectorType<DFEVar>(
-                GlobalConfig.dataType, channelFoldingFactor);
+                GlobalConfig.get().getDataType(), channelFoldingFactor);
         inputType = new DFEVectorType<DFEVar>(
-                GlobalConfig.dataType, channelFoldingFactor);
+                GlobalConfig.get().getDataType(), channelFoldingFactor);
 
         input = inputType.newInstance(this);
         output = outputType.newInstance(this);
@@ -131,7 +131,7 @@ public class PoolingLayerKernel extends Kernel {
         poolingUnits = new DFEVar[channelFoldingFactor];
         DFEVector<DFEVar> poolerInput =
             new DFEVectorType<DFEVar>(
-                    GlobalConfig.dataType, channelFoldingFactor)
+                    GlobalConfig.get().getDataType(), channelFoldingFactor)
             .newInstance(this);
         for (int i = 0 ; i < channelFoldingFactor ; i++) {
             poolerInput[i] <== input[i];
@@ -144,7 +144,7 @@ public class PoolingLayerKernel extends Kernel {
             inputDimension.width(),
             poolingDim,
             getPixelIterations(),
-            constant.var(GlobalConfig.dataType, (double) paddedPixel),
+            constant.var(GlobalConfig.get().getDataType(), (double) paddedPixel),
             -(poolingDim / 2)
         );
         System.out.println("Sliding window offset = " + (-(poolingDim / 2)));
@@ -194,7 +194,7 @@ public class PoolingLayerKernel extends Kernel {
         if (layerParams.getIsFirstLayer()) {
             /* Last layer - cast from fixed point to dfe float. */
             DFEVectorType<DFEVar> rawInputVectorType = new DFEVectorType<DFEVar>(
-                    GlobalConfig.cpuType, channelFoldingFactor);
+                    GlobalConfig.get().getCpuType(), channelFoldingFactor);
             DFEVector<DFEVar> rawInput =
                     io.input("x", rawInputVectorType);
             input <== rawInput.cast(inputType);
@@ -255,7 +255,7 @@ public class PoolingLayerKernel extends Kernel {
         if (layerParams.getIsLastLayer()) {
             /* Last layer - cast from fixed point to dfe float. */
             DFEVectorType<DFEVar> rawOutputVectorType = new DFEVectorType<DFEVar>(
-                    GlobalConfig.cpuType, channelFoldingFactor);
+                    GlobalConfig.get().getCpuType(), channelFoldingFactor);
             io.output(getOutputName(),
                       output.cast(rawOutputVectorType),
                       rawOutputVectorType,
@@ -278,7 +278,7 @@ public class PoolingLayerKernel extends Kernel {
             postProcess = new Functional.F1<DFEVector<DFEVar>, DFEVector<DFEVar>>() {
                 public DFEVector<DFEVar> call(DFEVector<DFEVar> v) {
                     DFEVectorType<DFEVar> rawAspectOutputType = 
-                        new DFEVectorType<DFEVar>(GlobalConfig.cpuType, v.getSize());
+                        new DFEVectorType<DFEVar>(GlobalConfig.get().getCpuType(), v.getSize());
                     return v.cast(rawAspectOutputType);
                 }
             };
@@ -293,7 +293,7 @@ public class PoolingLayerKernel extends Kernel {
         }
 
         DFEVectorType<DFEVar> outputVectorType = new DFEVectorType<DFEVar>(
-                GlobalConfig.dataType, layerParams.getNumOutputs());
+                GlobalConfig.get().getDataType(), layerParams.getNumOutputs());
 
         aspectIO.outputScheduled(
                 getOutputName(), outputVectorType, output, enable,
@@ -315,13 +315,13 @@ public class PoolingLayerKernel extends Kernel {
         int lastCol = lastColTopLeft + poolingDim / 2;
 
         final DFEVar fullDim = constant.var(
-                GlobalConfig.dataType, 1.0 / ((double) poolingDim * poolingDim));
+                GlobalConfig.get().getDataType(), 1.0 / ((double) poolingDim * poolingDim));
         final DFEVar rowBorder = constant.var(
-                GlobalConfig.dataType, 1.0 / ((double) poolingDim * heightResidue));
+                GlobalConfig.get().getDataType(), 1.0 / ((double) poolingDim * heightResidue));
         final DFEVar colBorder = constant.var(
-                GlobalConfig.dataType, 1.0 / ((double) poolingDim * widthResidue));
+                GlobalConfig.get().getDataType(), 1.0 / ((double) poolingDim * widthResidue));
         final DFEVar corner = constant.var(
-                GlobalConfig.dataType, 1.0 / ((double) heightResidue * widthResidue));
+                GlobalConfig.get().getDataType(), 1.0 / ((double) heightResidue * widthResidue));
 
 
         if (heightResidue != poolingDim && widthResidue != poolingDim) {
