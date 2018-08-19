@@ -3,8 +3,8 @@ package fpgaconvnet.protos;
 
 message Precision
 {
-    optional uint32 integer_bits    = 1;
-    optional uint32 fractional_bits = 2;
+    optional uint32 integer_bits    = 1 [default = 8];
+    optional uint32 fractional_bits = 2 [default = 8];
 }
 
 message Network
