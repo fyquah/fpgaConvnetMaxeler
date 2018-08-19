@@ -6,12 +6,17 @@ import logging
 # Maps from fpgaconvnet to caffe
 layers_mapping = {
         "conv0": "conv1",
+        "lrn1" : "norm1",
+        "pool2": "pool1",
         "conv3": "conv2",
+        "lrn4" : "norm2",
+        "pool5": "pool2",
         "conv6": "conv3",
         "conv7": "conv4",
         "conv8": "conv5",
+        "pool9": "pool5",
         }
-last_layer_key = "pool5"
+last_layer_key = "conv4"
 
 caffe.set_mode_cpu()
 
@@ -28,6 +33,8 @@ def main():
 
     # weights
     for fpgaconvnet_key, caffe_key in layers_mapping.iteritems():
+        if "conv" not in fpgaconvnet_key:
+            continue
         save_to_file(
                 "testdata/weights/" + fpgaconvnet_key + "_weights",
                 net.params[caffe_key][0].data.flatten())
@@ -40,8 +47,7 @@ def main():
     net.blobs['data'].data[...] = im_input
     net.forward()
 
-    im_input  = np.transpose(im_input, (0, 2, 3, 1))
-    im_output = np.transpose(net.blobs[last_layer_key].data, (0, 2, 3, 1))
+    im_output = np.transpose(net.blobs["pool5"].data, (0, 2, 3, 1))
     logging.info("Input shape = %s" % str(im_input.shape))
     logging.info("Output shape = %s" % str(im_output.shape))
 
@@ -49,6 +55,12 @@ def main():
     save_to_file("testdata/data/input.bin", im_input.flatten())
     logging.info("Writing input data to data/output.bin")
     save_to_file("testdata/data/output.bin", im_output.flatten())
+
+    for fpgaconvnet_key, caffe_key in layers_mapping.iteritems():
+        data = np.transpose(net.blobs[caffe_key].data, (0, 2, 3, 1))
+        fname = "testdata/data/%s.bin" % fpgaconvnet_key
+        logging.info("Writing input data to %s" % fname)
+        save_to_file(fname, data.flatten())
 
 
 if __name__ == "__main__":
