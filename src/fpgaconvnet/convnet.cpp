@@ -63,15 +63,19 @@ uint64_t total_rom_size(const protos::LayerParameter & layer)
 }
 
 
-/* TODO(fyq14): This should be configurable by the user in the descriptor.
- *
- * See [GlobalConfig.maxj] for more information.
- */
-static const int num_frac_bits = 12;
-static const int num_int_bits  = 4;
+static inline void
+verify_precision_specification(const protos::Precision & precision)
+{
+    const unsigned total_bits =
+          precision.fractional_bits() + precision.integer_bits();
+    assert(total_bits % 4 == 0);
+    assert(total_bits / 8 == sizeof(fixed_point_t));
+}
 
 static inline uint16_t
-cast_float_to_fixed(const float arg) {
+cast_float_to_fixed(const protos::Precision & precision, const float arg) {
+    verify_precision_specification(precision);
+    const uint32_t num_frac_bits = precision.fractional_bits();
     const float fixed_point_one = (1 << num_frac_bits);
 
     int x = (int) (arg * fixed_point_one);
@@ -86,17 +90,20 @@ cast_float_to_fixed(const float arg) {
 }
 
 static inline float
-cast_fixed_to_float(const uint16_t arg)
+cast_fixed_to_float(const protos::Precision & precision, const uint16_t arg)
 {
+    verify_precision_specification(precision);
+    const uint32_t num_frac_bits = precision.fractional_bits();
     const float multiplier = (arg & 0x8000) ? -1.0 : 1.0 ;
     return multiplier * ((float(arg & 0x7FFF) / float(1 << num_frac_bits)));
 }
 
 
-static void copy_float_to_fixed(fixed_point_t *dest, float *src, int size)
+static void copy_float_to_fixed(
+    const protos::Precision & precision, fixed_point_t *dest, float *src, int size)
 {
     for (int i = 0 ; i < size ; i++) {
-        dest[i] = cast_float_to_fixed(src[i]);
+        dest[i] = cast_float_to_fixed(precision, src[i]);
     }
 }
 
@@ -343,6 +350,7 @@ void special_allign_and_place_kernel_weights(
 }
 
 void allign_and_place_cpu_initialized_kernel_weights(
+        const protos::Precision & precision,
         const protos::LayerParameter & layer,
         fixed_point_t *dest_base,
         float *src_base
@@ -386,6 +394,7 @@ void allign_and_place_cpu_initialized_kernel_weights(
                 */
 
                 copy_float_to_fixed(
+                        precision,
                         dest_base + addr,
                         tmp + offset,
                         layer.conv().kernel_folding_factor());
@@ -429,6 +438,7 @@ void allign_and_place_lmem_initialized_kernel_weights(
                         + (conv * rom_per_conv);
 
                 copy_float_to_fixed(
+                        precision,
                         dest_base + addr,
                         tmp + offset,
                         layer.conv().kernel_folding_factor());
@@ -611,6 +621,7 @@ void Convnet::load_weights_from_files(
 {
     logging::stdout(logging::INFO) << "Loading weights from file." << std::endl;
     int j = 0;
+    const auto precision = network_params.default_precision();
 
     for (int i = 0 ; i < network_params.layer_size(); i++) {
         if (kernels[i] == NULL) {
@@ -634,6 +645,7 @@ void Convnet::load_weights_from_files(
         }
 
         copy_float_to_fixed(
+                precision,
                 bias[i], bias_tmp, calculation::bias_stream_size(layer));
 
         delete[] bias_tmp;
@@ -641,14 +653,15 @@ void Convnet::load_weights_from_files(
     logging::stdout(logging::INFO) << "Alligning weights." << std::endl;
     for (int i = 0 ; i < network_params.layer_size(); i++) {
         auto layer = network_params.layer(i);
+        const protos::Precision precision = network_params.default_precision();
 
         if (kernels[i] != NULL) {
             if (calculation::is_layer_cpu_initialized(layer)) {
                 allign_and_place_cpu_initialized_kernel_weights(
-                        layer, worker_kernels[i], kernels[i]);
+                        precision, layer, worker_kernels[i], kernels[i]);
             } else {
                 allign_and_place_lmem_initialized_kernel_weights(
-                        layer, worker_kernels[i], kernels[i]);
+                        precision, layer, worker_kernels[i], kernels[i]);
             }
         }
     }
@@ -1207,6 +1220,7 @@ std::vector<float> Convnet::max_run_inference_with_single_bitstream(
             get_input_stream_size_for_bitstream(bitstream_id, N);
     const uint64_t output_stream_size =
             get_output_stream_size_for_bitstream(bitstream_id, N);
+    const auto precision = network_params.default_precision();
 
     double time_taken = 0.0;
     void * const input_stream  = malloc(input_stream_size);
@@ -1218,7 +1232,8 @@ std::vector<float> Convnet::max_run_inference_with_single_bitstream(
         memcpy(input_stream, &images[0], input_stream_size);
     } else {
         for (uint64_t i = 0; i < input_stream_size / 4; i++) {
-            ((fixed_point_t*) input_stream)[i] = cast_float_to_fixed(images[i]);
+            ((fixed_point_t*) input_stream)[i] = cast_float_to_fixed(
+                  precision, images[i]);
         }
     }
 
