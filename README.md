@@ -21,17 +21,57 @@ have a lower Ops/Watt compared to conventional using GPUs.
 The supported DFE cards include:
 
 - MAIA
-- (In progress) AWS F1 FPGAs
 
-<!-- TODO: Complete this -->
 The design methodology and parameter optimisation will be uploaded soon,
 along with a guide on how to do some hacking on this.
+
+## Features and Non-Features
+
+These are special features (and non-features) that are worth mentioning,
+that might be foreign to deep-learning practitioners (or even experts
+in the FPGA deep learning aceeleration field).
+
+### What works
+
+- *Automatic Design space exploration (DSE)* - automatically search for
+  good loop unrolling parameters using a theoretical performance model.
+- *Performance Estimation* - estimates the throughput of the design
+  without performing a full-on compilation / simulation.
+- *Compilation relaxation* - in case the compilation fails, the user
+  can relax the resource utilisation to allow the design to fit on the
+  FPGA more easily during the MPPR stage. This can be specified in the
+  [convnet protobuf](protos/fpgaconvnet/protos/parameters.proto)
+- *Simulating maxring connections without reconfiguration* When simulating
+  a multi FPGA design WITHOUT reconfiguration, the maxring connections are
+  mocked as PCIe connections to the CPU. This is useful for correctness
+  verification.
+- *Custom Fixed Point Precision and FPGA Frequency* Instead of using a
+  single setting for all neural networks, the user can specify custom
+  fixed point precisions (so long that it sums up to 16 bits) and FPGA
+  frequencies for each neural network.
+
+### What doesn't Work
+
+- *DSE on pipelined FPGAs with Reconfiguration* - This is currently
+  left as a future work of the project, due to the inherent difficulty
+  in optimisation.
+- *Simulation with reconfiguration* - As the maxcompiler resets the LMem
+  when a new maxfile is loaded, the temporal results that is written to
+  LMem is wipped. This makes it impossible to simulate design with
+  runtime FPGA reconfiguration.
+- *Simulation of extremely large neural networks* While this should
+  theoretically work, large neural networks take a long time to simulate.
+  The time required long exceeds the number maxeler timeout of 30 minutes
+  for even a single image on Alexnet.
+- *Fully connected layers*, neither compilation nor the design space
+  exploration supports fully connected layers.
 
 ## Dependencies
 
 - protoc-3.0.0 compiler (libproto-java.jar is not required)
 - libprotobuf.so (install this in your `LD_LIBRARY_PATH`)
-- maxcompiler 2018-1
+- caffe (for generating test cases)
+- maxcompiler 2015-2
 
 ## Project Structure
 
@@ -153,10 +193,10 @@ make rundfe
 
 ## Examples
 
-- [lenet](projects/lenet_maxring)
-- [alexnet](projects/alexnet_maxring)
-- [vgg\_16](projects/vgg_16_maxring)
-- [vgg\_s](projects/vgg_s_maxring)
+- lenet [multi FPGA](projects/lenet_maxring), [with reconfiguration](projects/lenet_single)
+- cifar10 [multi FPGA](projects/cifar10_maxring), [with reconfiguration](projects/cifar10_single)
+- alexnet [multi FPGA](projects/alexnet_maxring), [with reconfiguration](projects/alexnet_single)
+- vgg16 [multi FPGA](projects/vgg16_maxring), [with reconfiguration](projects/vgg16_single)
 
 ## License
 
