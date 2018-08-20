@@ -129,6 +129,25 @@ public class NetworkManager extends CustomManager {
         throw new RuntimeException("No layer with bitstream id == " + fpgaId);
     }
 
+    private LMemInterface getLmem() {
+        // initialise interface to off-chip memory
+        if (lmem == null) {
+            // begin of VERSION 2018.1
+            // lmem = addLMemInterface(makeLMemConfig().setDataFIFODepth(32));
+            // end of VERSION 2018.1
+
+            // begin of VERSION 2015.2
+            MemoryControllerConfig config = new MemoryControllerConfig();
+            config.setDataFIFODepth(32);
+            config.setDataFifoImplementUsingLUTRAM(true);
+            lmem = addLMemInterface();
+            lmem.setMemoryControllerConfig(config);
+            // end of VERSION 2015.2
+        }
+
+        return lmem;
+    }
+
     private EngineInterface interfaceDefault () {
         EngineInterface ei = new EngineInterface();
 
@@ -150,66 +169,72 @@ public class NetworkManager extends CustomManager {
                 networkParameters.getLayerCount() - 1);
 
         if (fpgaId == 0) {
-            // load from CPU:
-            //   ei.setStream("fromcpu", CPUTypes.FLOAT, N * inputSize * CPUTypes.FLOAT.sizeInBytes());
-            //
+            if (networkParameters.getAllowRuntimeReconfiguration()) {
+                // load from LMem
+                InterfaceParam addressIn = ei.addParam("addressIn", CPUTypes.UINT64);
+                final int numberSize =
+                    bitstreamId == 0
+                    ? CPUTypes.FLOAT.sizeInBytes()
+                    : CPUTypes.UINT16.sizeInBytes();
+                InterfaceParam arrSize =
+                    N * getBitstreamInputSize() * numberSize;
 
-            // load from LMem
-            InterfaceParam addressIn = ei.addParam("addressIn", CPUTypes.UINT64);
-            final int numberSize =
-                bitstreamId == 0
-                ? CPUTypes.FLOAT.sizeInBytes()
-                : CPUTypes.UINT16.sizeInBytes();
-            InterfaceParam arrSize =
-                N * getBitstreamInputSize() * numberSize;
+                System.out.println("Adding LMEM input interface");
+                System.out.println("Number size = " + numberSize + " bytes");
+                System.out.println("Bitstream input size = " + getBitstreamInputSize() + " numerical values");
 
-            System.out.println("Adding LMEM input interface");
-            System.out.println("Number size = " + numberSize + " bytes");
-            System.out.println("Bitstream input size = " + getBitstreamInputSize() + " numerical values");
+                ei.setLMemLinearWrapped(
+                        "fromcpu",           /* streamName  - This name is
+                                                              called as such for
+                                                              legacy reasons */
+                        addressIn,           /* address - base address in off-
+                                                          chip memory. */
+                        arrSize,             /* arrSize - the size in bytes of
+                                                          the array. */
+                        arrSize,             /* rwSize - the actual size to
+                                                         be read/writen. */
+                        ei.addConstant(0l)); /* offset */
+            } else {
+                // load from CPU:
+                final int inputSize = getBitstreamInputSize();
+                ei.setStream("fromcpu", CPUTypes.FLOAT, N * inputSize * CPUTypes.FLOAT.sizeInBytes());
 
-            ei.setLMemLinearWrapped(
-                    "fromcpu",           /* streamName  - This name is
-                                                          called as such for
-                                                          legacy reasons */
-                    addressIn,           /* address - base address in off-
-                                                      chip memory. */
-                    arrSize,             /* arrSize - the size in bytes of
-                                                      the array. */
-                    arrSize,             /* rwSize - the actual size to
-                                                     be read/writen. */
-                    ei.addConstant(0l)); /* offset */
+            }
         }
 
         if (fpgaId == getNumFpgaUsedInBitstream() - 1) {
-            // writeback to cpu
-            // ei.setStream("tocpu", CPUTypes.FLOAT, N * outputSize * CPUTypes.FLOAT.sizeInBytes());
+            if (networkParameters.getAllowRuntimeReconfiguration()) {
+                // load from lmem
+                InterfaceParam addressOut = ei.addParam("addressOut", CPUTypes.UINT64);
+                final int numberSize =
+                    (bitstreamId == getNumBitstream() - 1)
+                    ? CPUTypes.FLOAT.sizeInBytes()
+                    : CPUTypes.UINT16.sizeInBytes();
+                System.out.println("output size per image = " + getBitstreamOutputSize());
+                System.out.println("output numbert size = " + numberSize);
+                InterfaceParam arrSize = N * getBitstreamOutputSize() * numberSize;
 
-            // load from lmem
-            InterfaceParam addressOut = ei.addParam("addressOut", CPUTypes.UINT64);
-            final int numberSize =
-                (bitstreamId == getNumBitstream() - 1)
-                ? CPUTypes.FLOAT.sizeInBytes()
-                : CPUTypes.UINT16.sizeInBytes();
-            System.out.println("output size per image = " + getBitstreamOutputSize());
-            System.out.println("output numbert size = " + numberSize);
-            InterfaceParam arrSize = N * getBitstreamOutputSize() * numberSize;
+                System.out.println("Adding LMEM output interface");
+                System.out.println("Number size = " + numberSize + " bytes");
+                System.out.println("Bitstream output size = " + getBitstreamOutputSize() + " numerical values");
 
-            System.out.println("Adding LMEM output interface");
-            System.out.println("Number size = " + numberSize + " bytes");
-            System.out.println("Bitstream output size = " + getBitstreamOutputSize() + " numerical values");
+                ei.setLMemLinearWrapped(
+                        "tocpu",           /* streamName  - This name is
+                                                              called as such for
+                                                              legacy reasons */
+                        addressOut,           /* address - base address in off-
+                                                          chip memory. */
+                        arrSize,             /* arrSize - the size in bytes of
+                                                          the array. */
+                        arrSize,             /* rwSize - the actual size to
+                                                         be read/writen. */
+                        ei.addConstant(0l)); /* offset */
+            } else {
+                // writeback to cpu
+                final int outputSize = getBitstreamOutputSize();
+                ei.setStream("tocpu", CPUTypes.FLOAT, N * outputSize * CPUTypes.FLOAT.sizeInBytes());
 
-            ei.setLMemLinearWrapped(
-                    "tocpu",           /* streamName  - This name is
-                                                          called as such for
-                                                          legacy reasons */
-                    addressOut,           /* address - base address in off-
-                                                      chip memory. */
-                    arrSize,             /* arrSize - the size in bytes of
-                                                      the array. */
-                    arrSize,             /* rwSize - the actual size to
-                                                     be read/writen. */
-                    ei.addConstant(0l)); /* offset */
-
+            }
         }
 
         if (isSimulation) {
@@ -344,9 +369,13 @@ public class NetworkManager extends CustomManager {
         }
 
         if (fpgaId == 0) {
-            fromLink = lmem.addStreamFromLMem(
-                    "fromcpu",
-                    LMemCommandGroup.MemoryAccessPattern.LINEAR_1D);
+            if (networkParameters.getAllowRuntimeReconfiguration()) {
+                fromLink = getLmem().addStreamFromLMem(
+                        "fromcpu",
+                        LMemCommandGroup.MemoryAccessPattern.LINEAR_1D);
+            } else {
+                fromLink = addStreamFromCPU("fromcpu");
+            }
         } else {
             if (isSimulation) {
                 fromLink = addStreamFromCPU("mock_maxring_in");
@@ -363,8 +392,12 @@ public class NetworkManager extends CustomManager {
         }
 
         if (fpgaId == getNumFpgaUsedInBitstream() - 1) {
-            toLink = lmem.addStreamToLMem(
-                    "tocpu", LMemCommandGroup.MemoryAccessPattern.LINEAR_1D);
+            if (networkParameters.getAllowRuntimeReconfiguration()) {
+                toLink = getLmem().addStreamToLMem(
+                        "tocpu", LMemCommandGroup.MemoryAccessPattern.LINEAR_1D);
+            } else {
+                toLink = addStreamToCPU("tocpu");
+            }
         } else {
             if (isSimulation) {
                 toLink = addStreamToCPU("mock_maxring_out");
@@ -381,26 +414,28 @@ public class NetworkManager extends CustomManager {
 
         // When off-chip memory is used, maxeler requires a connection that
         // goes into LMEM and goes out of LMEM.
-        if (fpgaId == 0 && getNumFpgaUsedInBitstream() > 1) {
-            System.out.println("Create dummy stream to lmem from a null source");
-            DFELink dummy_link = lmem.addStreamToLMem(
-                    "tocpu_null",
-                    LMemCommandGroup.MemoryAccessPattern.LINEAR_1D);
-            NullSourceKernel nullSource = new NullSourceKernel(makeKernelParameters
-                    ("null_source_lmem"));
-            dummy_link <== addKernel(nullSource).getOutput("source");
-            nullSources.add(nullSource);
+        if (networkParameters.getAllowRuntimeReconfiguration()) {
+            if (fpgaId == 0 && getNumFpgaUsedInBitstream() > 1) {
+                System.out.println("Create dummy stream to lmem from a null source");
+                DFELink dummy_link = getLmem().addStreamToLMem(
+                        "tocpu_null",
+                        LMemCommandGroup.MemoryAccessPattern.LINEAR_1D);
+                NullSourceKernel nullSource = new NullSourceKernel(makeKernelParameters
+                        ("null_source_lmem"));
+                dummy_link <== addKernel(nullSource).getOutput("source");
+                nullSources.add(nullSource);
 
-        } else if (fpgaId == getNumFpgaUsedInBitstream() - 1 && fpgaId != 0) {
-            System.out.println("Create dummy stream to a null sink from lmem");
-            DFELink dummy_link = lmem.addStreamFromLMem(
-                    "fromcpu_null",
-                    LMemCommandGroup.MemoryAccessPattern.LINEAR_1D);
-            NullSinkKernel nullSink = new NullSinkKernel(
-                    makeKernelParameters("null_sink_lmem"));
-            addKernel(nullSink).getInput("sink") <== dummy_link;
-            nullSinks.add(nullSink);
+            } else if (fpgaId == getNumFpgaUsedInBitstream() - 1 && fpgaId != 0) {
+                System.out.println("Create dummy stream to a null sink from lmem");
+                DFELink dummy_link = getLmem().addStreamFromLMem(
+                        "fromcpu_null",
+                        LMemCommandGroup.MemoryAccessPattern.LINEAR_1D);
+                NullSinkKernel nullSink = new NullSinkKernel(
+                        makeKernelParameters("null_sink_lmem"));
+                addKernel(nullSink).getInput("sink") <== dummy_link;
+                nullSinks.add(nullSink);
 
+            }
         }
 
         /* Kernel logic transfer */
@@ -423,7 +458,7 @@ public class NetworkManager extends CustomManager {
             }
 
             for (Tuple3<String, DFELink, Integer> link : computationChains[i].getLMemInputs()) {
-                DFELink dataStream = lmem.addStreamFromLMem(
+                DFELink dataStream = getLmem().addStreamFromLMem(
                         link.getFirst(),
                         LMemCommandGroup.MemoryAccessPattern.LINEAR_1D);
                 link.getSecond() <== dataStream;
@@ -456,21 +491,6 @@ public class NetworkManager extends CustomManager {
             System.out.println("Compiling for simulation");
         } else {
             System.out.println("Compiling for actual DFE");
-        }
-
-        // initialise interface to off-chip memory
-        if (lmem == null) {
-            // begin of VERSION 2018.1
-            // lmem = addLMemInterface(makeLMemConfig().setDataFIFODepth(32));
-            // end of VERSION 2018.1
-
-            // begin of VERSION 2015.2
-            MemoryControllerConfig config = new MemoryControllerConfig();
-            config.setDataFIFODepth(32);
-            config.setDataFifoImplementUsingLUTRAM(true);
-            lmem = addLMemInterface();
-            lmem.setMemoryControllerConfig(config);
-            // end of VERSION 2015.2
         }
 
         setupKernels();

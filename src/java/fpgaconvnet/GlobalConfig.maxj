@@ -2,7 +2,7 @@ package fpgaconvnet;
 // package nothing;
 
 import fpgaconvnet.protos.Parameters;
-import fpgaconvnet.protos.Precision;
+import fpgaconvnet.protos.Parameters.Precision;
 
 import com.maxeler.maxcompiler.v2.kernelcompiler.Kernel;
 import com.maxeler.maxcompiler.v2.kernelcompiler.types.base.DFEFix.SignMode;
@@ -22,7 +22,7 @@ public class GlobalConfig {
      * For reason (1), accessor methods for this class should be maintained
      * with extreme care.
      */
-    private final Parameter m_parameter;
+    private final Parameters.Network m_parameter;
     private final DFEType m_dataType;
 
     /* These datatype are independent of the protobuf descriptor. They are
@@ -34,14 +34,14 @@ public class GlobalConfig {
 
     private static GlobalConfig m_global_config = null;
 
-    public GlobalConfig(Parameter parameter) {
+    public GlobalConfig(Parameters.Network parameter) {
         if (parameter == null) {
             throw new RuntimeException(
                 "Parameter object passed to GlobalConfig is null");
         }
 
         m_parameter = parameter;
-        m_dataType = Kernel.dfeFixed(
+        m_dataType = Kernel.dfeFix(
                 m_parameter.getDefaultPrecision().getIntegerBits(),
                 m_parameter.getDefaultPrecision().getFractionalBits(),
                 SignMode.TWOSCOMPLEMENT);
@@ -105,7 +105,7 @@ public class GlobalConfig {
         return m_global_config;
     }
 
-    public static set(GlobalConfig globalConfig) {
+    public static void set(GlobalConfig globalConfig) {
         if (m_global_config != null) {
             throw new RuntimeException(
                 "GlobalConfig has previously been set");

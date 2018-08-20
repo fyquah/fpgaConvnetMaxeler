@@ -458,8 +458,14 @@ public class ParametersTransformer {
             networkBuilder.addLayer(allignIOWidth(prev, cur, next));
         }
 
+        // TODO(fyq14): This feels very error prone. perhaps something like
+        //              MergeFrom in the beginning would be better?
         networkBuilder.setFrequency(networkParameters.getFrequency());
         networkBuilder.setNumFpgaUsed(networkParameters.getNumFpgaUsed());
+        networkBuilder.setDefaultPrecision(
+                networkParameters.getDefaultPrecision());
+        networkBuilder.setAllowRuntimeReconfiguration(
+                networkParameters.getAllowRuntimeReconfiguration());
         return networkBuilder.build();
     }
 }

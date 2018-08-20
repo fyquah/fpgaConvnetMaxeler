@@ -19,6 +19,7 @@ import com.maxeler.maxcompiler.v2.kernelcompiler.types.composite.DFEVector;
 import com.maxeler.maxcompiler.v2.kernelcompiler.stdlib.core.CounterChain;
 
 import fpgaconvnet.protos.Parameters;
+import fpgaconvnet.protos.Parameters.Precision;
 
 
 public class Utils {
@@ -261,12 +262,12 @@ public class Utils {
 
     public static Bits doubleToBits(double arg) {
         double x = Math.abs(arg);
-        Bits ret = Bits.allZeros(GlobalConfig.getNumDataBits());
+        Bits ret = Bits.allZeros(GlobalConfig.get().getNumDataBits());
 
         double top = Math.pow(
-                2, GlobalConfig.getPrecision.getIntegerBits() - 2);
+                2, GlobalConfig.get().getDefaultPrecision().getIntegerBits() - 2);
 
-        for (int i = GlobalConfig.getNumDataBits() - 2 ; i >= 0; i--) {
+        for (int i = GlobalConfig.get().getNumDataBits() - 2 ; i >= 0; i--) {
             if (top < x) {
                 x = x - top;
                 ret.setBit(i, true);
@@ -287,8 +288,8 @@ public class Utils {
         double ret = 0.0;
         double tmp = 0.5;
 
-        final int fracBits = GlobalConfig.get().getPrecision().getFractionalBits();
-        final int intBits = GlobalConfig.get().getPrecision().getIntegerBits();
+        final int fracBits = GlobalConfig.get().getDefaultPrecision().getFractionalBits();
+        final int intBits = GlobalConfig.get().getDefaultPrecision().getIntegerBits();
 
         for (int i = fracBits - 1; i >= 0; i--) {
             if (bits.getBit(i)) {

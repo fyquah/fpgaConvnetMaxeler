@@ -409,6 +409,7 @@ void allign_and_place_cpu_initialized_kernel_weights(
 
 
 void allign_and_place_lmem_initialized_kernel_weights(
+        const protos::Precision & precision,
         const protos::LayerParameter & layer,
         fixed_point_t *dest_base,
         float *src_base
@@ -1040,6 +1041,8 @@ Convnet::max_run_single_bitstream(
         max_set_param_uint64t(actions[num_fpgas - 1], "addressOut", addressOut);
 
     } else {
+        fpgaconvnet::logging::stdout(logging::INFO)
+            << "Configuring I/O using PCIe Streams\n";
         max_queue_input(
                 actions[0], "fromcpu", input,
                 get_input_stream_size_for_bitstream(bitstream_id, N)
@@ -1271,7 +1274,8 @@ std::vector<float> Convnet::max_run_inference_with_single_bitstream(
     } else {
         ret.resize(output_stream_size / 2);
         for (uint64_t i = 0; i < ret.size() ; i++) {
-            ret[i] = cast_fixed_to_float(((fixed_point_t *) output_stream)[i]);
+            ret[i] = cast_fixed_to_float(
+                    precision, ((fixed_point_t *) output_stream)[i]);
         }
     }
 

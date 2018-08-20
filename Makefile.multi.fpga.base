@@ -54,14 +54,14 @@ $(TARGET_SIM_OBJS): $(TARGET_SIM_MAXFILES)
 	     $(MAXCOMPILER_BUILD_DIR)/$(basename $(basename $(notdir $@)))_$(DFEModel)_DFE_SIM/$(basename $(basename $(notdir $@))).max $@
 
 
-fpgaconvnet/target_main_sim.o: main.cpp $(TARGET_SIM_OBJS) targets.h
+target_main_sim.o: main.cpp $(TARGET_SIM_OBJS) targets.h
 	$(CPUCOMPILER) $< $(ALL_FLAGS) \
 		-I$(MAXCOMPILER_BUILD_DIR) \
 		$(foreach name,$(TARGET_SIMMAXDIRS),-I$(name)) \
 		-D__SIM__ -c -o $@
 
 
-target_sim: $(TARGET_SIM_OBJS) $(LMEM_SIM_OBJ) $(FPGACONVNET_SIM_OBJ_FILES) fpgaconvnet/target_main_sim.o $(ADDITIONAL_OBJS) 
+target_sim: $(TARGET_SIM_OBJS) $(LMEM_SIM_OBJ) $(FPGACONVNET_SIM_OBJ_FILES) target_main_sim.o $(ADDITIONAL_OBJS) 
 	$(CPUCOMPILER) -D__SIM__ $(ALL_FLAGS) -o $@ $^ $(LFLAGS)
 
 
