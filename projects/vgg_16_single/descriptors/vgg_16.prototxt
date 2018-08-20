@@ -1,6 +1,10 @@
 num_fpga_available: 1
 frequency: 100
 allow_runtime_reconfiguration: true
+default_precision: {
+    integer_bits: 8
+    fractional_bits: 8
+}
 
 layer {
     input_height: 224
