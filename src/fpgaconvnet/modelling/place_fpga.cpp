@@ -97,29 +97,8 @@ void PositionFpga::search_recur(
       }
       std::reverse(layers.begin(), layers.end());
 
-      std::vector<fpgaconvnet::resource_model::resource_t> resources;
-      resources.push_back(fpgaconvnet::resource_model::project_single_fpga(
-          fpgaconvnet::resource_model::STREAM_MAX_RING,
-          layers,
-          fpgaconvnet::resource_model::STREAM_MAX_RING));
-      resources.push_back(fpgaconvnet::resource_model::project_single_fpga(
-          fpgaconvnet::resource_model::STREAM_PCIE,
-          layers,
-          fpgaconvnet::resource_model::STREAM_MAX_RING));
-      resources.push_back(fpgaconvnet::resource_model::project_single_fpga(
-          fpgaconvnet::resource_model::STREAM_MAX_RING,
-          layers,
-          fpgaconvnet::resource_model::STREAM_PCIE));
-      resources.push_back(fpgaconvnet::resource_model::project_single_fpga(
-          fpgaconvnet::resource_model::STREAM_PCIE,
-          layers,
-          fpgaconvnet::resource_model::STREAM_PCIE));
-
-      for (int i = 0; i < resources.size() ; i++) {
-        if (fpgaconvnet::resource_model::meets_resource_constraints(resources[i])) {
-          search_recur(network, v);
-          break;
-        }
+      if (fpgaconvnet::resource_model::possible_to_fit(layers)) {
+        search_recur(network, v);
       }
     }
     v.pop_back();

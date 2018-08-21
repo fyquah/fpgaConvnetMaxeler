@@ -199,6 +199,8 @@ project_single_fpga(
         } else if (layer.has_lrn()) {
             resource = resource_add(resource, lrn_resource(layer));
 
+        } else {
+            assert(false);
         }
     }
 
@@ -223,6 +225,37 @@ project_single_fpga(
     return resource;
 }
 
+bool
+possible_to_fit(const std::vector<protos::LayerParameter> & layers)
+{
+    assert(layers.size() != 0);
+
+    std::vector<fpgaconvnet::resource_model::resource_t> resources;
+    resources.push_back(project_single_fpga(
+            fpgaconvnet::resource_model::STREAM_MAX_RING,
+            layers,
+            fpgaconvnet::resource_model::STREAM_MAX_RING));
+    resources.push_back(project_single_fpga(
+            fpgaconvnet::resource_model::STREAM_PCIE,
+            layers,
+            fpgaconvnet::resource_model::STREAM_MAX_RING));
+    resources.push_back(project_single_fpga(
+            fpgaconvnet::resource_model::STREAM_MAX_RING,
+            layers,
+            fpgaconvnet::resource_model::STREAM_PCIE));
+    resources.push_back(project_single_fpga(
+            fpgaconvnet::resource_model::STREAM_PCIE,
+            layers,
+            fpgaconvnet::resource_model::STREAM_PCIE));
+
+    for (int i = 0; i < resources.size() ; i++) {
+        if (meets_resource_constraints(resources[i])) {
+            return true;
+        }
+    }
+
+    return false;
+}
 
 std::vector<resource_t>
 project_single_bitstream(const protos::Network & network)

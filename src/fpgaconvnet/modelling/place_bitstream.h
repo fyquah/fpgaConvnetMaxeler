@@ -42,13 +42,14 @@ private:
   unsigned considered_solutions;
   unsigned accepted_solutions;
   std::vector<placement_solution_t> solutions;
-  std::map<std::pair<int, int>, bitstream_solution_t> bitstreams_cache;
+  std::map<std::pair<unsigned, unsigned>, bitstream_solution_t> bitstreams_cache;
   std::mutex m_bitstream_cache_wrt_lock;
 
   void search_recur(std::vector<int>);
   bitstream_solution_t get_local_solution(
           unsigned start_inclusive, unsigned end_inclusive);
   void add_solution_to_collection(std::vector<int> v, double throughput);
+  bool contains_definite_failed_bitstream(std::vector<int> v);
 
 public:
   PlaceBitstream(fpgaconvnet::protos::Network network);

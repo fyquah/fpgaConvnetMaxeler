@@ -81,6 +81,9 @@ PlaceBitstream::get_local_solution(unsigned start_inclusive, unsigned end_inclus
 
     if (!b.search()) {
         ret.success = false;
+        std::lock_guard<std::mutex> lck(m_bitstream_cache_wrt_lock);
+        bitstreams_cache[std::make_pair(start_inclusive, end_inclusive)] = ret;
+
         return ret;
     }
 
@@ -152,6 +155,20 @@ print_vector(std::vector<int> v)
     return ss.str();
 }
 
+bool
+PlaceBitstream::contains_definite_failed_bitstream(std::vector<int> v)
+{
+    const auto range_list = alloc_list_to_range_list(v);
+    for (int i = 0 ; i < range_list.size() ; i++) {
+        auto p = range_list[i];
+        if (bitstreams_cache.count(p) && !bitstreams_cache[p].success) {
+          return true;
+        }
+    }
+
+    return false;
+}
+
 // TODO: Consider using TBB here?
 void PlaceBitstream::search_recur(std::vector<int> v)
 {
@@ -211,15 +228,15 @@ void PlaceBitstream::search_recur(std::vector<int> v)
     }
 
     v.push_back(v.back());
-    if (true) {
-        // TODO(fyq14): check resource constraints here to prune
-        //              search space here.
-        search_recur(v);
+    if (!contains_definite_failed_bitstream(v)) {
+      search_recur(v);
     }
     v.pop_back();
 
     v.push_back(v.back() + 1);
-    search_recur(v);
+    if (!contains_definite_failed_bitstream(v)) {
+      search_recur(v);
+    }
     v.pop_back();
 }
 

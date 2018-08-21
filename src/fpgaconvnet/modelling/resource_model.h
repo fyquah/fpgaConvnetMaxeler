@@ -39,6 +39,9 @@ project_single_fpga(
         const std::vector<protos::LayerParameter> & layers,
         const stream_t output_stream);
 
+bool
+possible_to_fit(const std::vector<protos::LayerParameter> & layers);
+
 /* Assumes that the argumet network is meant for only one bitstream. */
 std::vector<resource_t> project_single_bitstream(
         const protos::Network & network);
