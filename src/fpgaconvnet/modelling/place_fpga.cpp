@@ -78,7 +78,11 @@ void PositionFpga::search_recur(
                 fpgaconvnet::insert_fpga_positions(network, v));
 
         considered_solutions++;
-        if (fpgaconvnet::resource_model::meets_resource_constraints(resource)) {
+        const auto optimiser_options = network.optimizer_options();
+        const bool accepted =
+            fpgaconvnet::resource_model::meets_resource_constraints(
+                  optimiser_options, resource);
+        if (accepted) {
             solutions.push_back(v);
             accepted_solutions++;
         }
@@ -97,7 +101,10 @@ void PositionFpga::search_recur(
       }
       std::reverse(layers.begin(), layers.end());
 
-      if (fpgaconvnet::resource_model::possible_to_fit(layers)) {
+      const bool can_fit =
+        fpgaconvnet::resource_model::possible_to_fit(
+            network.optimizer_options(), layers);
+      if (can_fit) {
         search_recur(network, v);
       }
     }

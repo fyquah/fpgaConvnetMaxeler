@@ -455,8 +455,10 @@ search_design_space_for_bitstream_with_fixed_num_fpga(
 
         std::vector<fpgaconvnet::resource_model::resource_t> resources =
             ::fpgaconvnet::resource_model::project_single_bitstream(local_solution);
+        const auto optimizer_options = network.optimizer_options();
         bool meets_resource_constraints =
-            ::fpgaconvnet::resource_model::meets_resource_constraints(resources)
+            ::fpgaconvnet::resource_model::meets_resource_constraints(
+                optimizer_options, resources)
             && local_solution.num_fpga_used() <= local_solution.num_fpga_available()
             && success;
 

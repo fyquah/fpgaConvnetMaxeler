@@ -26,11 +26,15 @@ const double MAX_FF = 1049600;
 
 
 bool
-meets_resource_constraints(const std::vector<resource_t> & resources);
+meets_resource_constraints(
+    const protos::OptimizerOptions & optimiser_options,
+    const std::vector<resource_t> & resources);
 
 
 bool
-meets_resource_constraints(const resource_t & resource);
+meets_resource_constraints(
+    const protos::OptimizerOptions & optimiser_options,
+    const resource_t & resource);
 
 
 resource_t
@@ -40,7 +44,9 @@ project_single_fpga(
         const stream_t output_stream);
 
 bool
-possible_to_fit(const std::vector<protos::LayerParameter> & layers);
+possible_to_fit(
+    const protos::OptimizerOptions & optimiser_options,
+    const std::vector<protos::LayerParameter> & layers);
 
 /* Assumes that the argumet network is meant for only one bitstream. */
 std::vector<resource_t> project_single_bitstream(

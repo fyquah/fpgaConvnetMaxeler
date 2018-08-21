@@ -226,7 +226,9 @@ project_single_fpga(
 }
 
 bool
-possible_to_fit(const std::vector<protos::LayerParameter> & layers)
+possible_to_fit(
+    const protos::OptimizerOptions & optimizer_options,
+    const std::vector<protos::LayerParameter> & layers)
 {
     assert(layers.size() != 0);
 
@@ -249,7 +251,7 @@ possible_to_fit(const std::vector<protos::LayerParameter> & layers)
             fpgaconvnet::resource_model::STREAM_PCIE));
 
     for (int i = 0; i < resources.size() ; i++) {
-        if (meets_resource_constraints(resources[i])) {
+        if (meets_resource_constraints(optimizer_options, resources[i])) {
             return true;
         }
     }
@@ -289,18 +291,22 @@ project_single_bitstream(const protos::Network & network)
 
 
 bool
-meets_resource_constraints(const resource_t & resource)
+meets_resource_constraints(
+    const protos::OptimizerOptions & optimizer_options,
+    const resource_t & resource)
 {
-    return (resource.dsp < 0.8 * MAX_DSP
-            && resource.bram < 0.9 * MAX_BRAM);
+    return (resource.dsp < optimizer_options.dsp_threshold() * MAX_DSP
+            && resource.bram < optimizer_options.bram_threshold() * MAX_BRAM);
 }
 
 
 bool
-meets_resource_constraints(const std::vector<resource_t> & resources)
+meets_resource_constraints(
+    const protos::OptimizerOptions & optimizer_options,
+    const std::vector<resource_t> & resources)
 {
     for (int i = 0 ; i < resources.size(); i++) {
-        if (!meets_resource_constraints(resources[i])) {
+        if (!meets_resource_constraints(optimizer_options, resources[i])) {
             return false;
         }
     }

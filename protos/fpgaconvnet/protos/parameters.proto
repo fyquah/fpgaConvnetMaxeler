@@ -1,6 +1,19 @@
 syntax = "proto2";
 package fpgaconvnet.protos;
 
+message OptimizerOptions
+{
+    /* The maximium utilisation of resources of designs that the optimiser
+     * considers. A higher value increase compilation time and probability
+     * of compilation failure, but also increases utilisation & performance.
+     *
+     * You should tweak these parameters only when designs are failing to
+     * compile at mapping or MPPR.
+     */
+    optional float dsp_threshold  = 1 [default = 0.8];
+    optional float bram_threshold = 2 [default = 0.9];
+}
+
 message Precision
 {
     optional uint32 integer_bits    = 1 [default = 8];
@@ -39,6 +52,7 @@ message Network
      * must be specified.
      */
     optional Precision default_precision = 6;
+    optional OptimizerOptions optimizer_options = 7;
 
     /* =================================
      *        For internal usage
