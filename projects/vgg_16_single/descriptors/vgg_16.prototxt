@@ -1,6 +1,10 @@
 num_fpga_available: 1
 frequency: 100
 allow_runtime_reconfiguration: true
+optimizer_options: {
+    dsp_threshold:   0.8
+    bram_threshold:  0.8
+}
 default_precision: {
     integer_bits: 8
     fractional_bits: 8
