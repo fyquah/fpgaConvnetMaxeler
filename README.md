@@ -191,12 +191,17 @@ make dfe
 make rundfe
 ```
 
+In the unlikely scenario where your compilation fails (either at MPPR or mapping),
+you ought to relax the compilation resource usage threshold. This can be done by
+by specifying the percentage of resource usage that ought to be considered at
+design space exploration. An example of such specification can be found [here](projects/vgg_16_single/descriptors/vgg_16.prototxt)
+
 ## Examples
 
 - lenet [multi FPGA](projects/lenet_maxring), [with reconfiguration](projects/lenet_single)
 - cifar10 [multi FPGA](projects/cifar10_maxring), [with reconfiguration](projects/cifar10_single)
 - alexnet [multi FPGA](projects/alexnet_maxring), [with reconfiguration](projects/alexnet_single)
-- vgg16 [multi FPGA](projects/vgg_16_maxring), [with reconfiguration](projects/vgg_16_single)
+- vgg16 [multi FPGA](projects/vgg_16_maxring), [with reconfiguration (Not working yet)](projects/vgg_16_single/)
 
 ## License
 
